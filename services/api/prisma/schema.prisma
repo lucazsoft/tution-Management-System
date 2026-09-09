@@ -238,6 +238,7 @@ model Tenant {
   studentScores             StudentScore[]
   admissionLoginDeliveries  AdmissionLoginDelivery[]
   branchPaymentSettings     BranchPaymentSettings[]
+  mediaObjects              MediaObject[]
 }
 
 // 2. Branch / Center
@@ -270,6 +271,7 @@ model Branch {
   expenses           Expense[]
   invoices           Invoice[]
   paymentAttempts    PaymentAttempt[]
+  mediaObjects       MediaObject[]
   payrolls           Payroll[]
 }
 
@@ -1392,4 +1394,29 @@ model BranchPaymentSettings {
   
   @@index([tenantId])
   @@index([branchId, tenantId])
+}
+
+model MediaObject {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branchId    String?
+  branch      Branch?   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  category    String
+  ownerType   String
+  ownerId     String
+  objectKey   String    @unique
+  mimeType    String
+  byteSize    Int
+  sha256      String
+  width       Int?
+  height      Int?
+  status      String    @default("ACTIVE")
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  replacedAt  DateTime?
+  deletedAt   DateTime?
+
+  @@index([tenantId, category, ownerType, ownerId, status])
+  @@index([tenantId, branchId, category])
 }

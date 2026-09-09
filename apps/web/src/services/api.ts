@@ -439,6 +439,15 @@ export const api = {
     getProfile: async (userId: string) => {
       return request<any>(`/users/${userId}/profile`);
     },
+    updateStudentPhoto: async (studentId: string, image: string) => {
+      return request<{ message: string; photoUrl: string }>(`/users/students/${studentId}/photo`, {
+        method: 'PUT',
+        body: JSON.stringify({ image }),
+      });
+    },
+    removeStudentPhoto: async (studentId: string) => {
+      return request<{ message: string }>(`/users/students/${studentId}/photo`, { method: 'DELETE' });
+    },
     resetPassword: async (userId: string) => {
       return request<{ temporaryPassword: string }>(`/users/${userId}/reset-password`, { method: 'POST' });
     },

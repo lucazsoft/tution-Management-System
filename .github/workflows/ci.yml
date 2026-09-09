@@ -72,6 +72,12 @@ jobs:
       - name: Authentication SMS regression tests
         run: npm run test:auth-sms --workspace=@tms/api
 
+      - name: Branch payment regression tests
+        run: npm run test:phase-four-branch-payment --workspace=@tms/api
+
+      - name: Private media regression tests
+        run: npm run test:private-media --workspace=@tms/api
+
       - name: Secret and fixed-identifier scan
         shell: bash
         run: |

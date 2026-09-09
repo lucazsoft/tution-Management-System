@@ -386,7 +386,7 @@ router.get(
         email: student.user.email,
         emergencyPhone: student.emergencyContact,
         barcodeToken: `BARCODE-TMS-${student.id}`,
-        photoUrl: `https://storage.tms.com.np/profiles/student-${student.id}.jpg`,
+        photoUrl: null,
       });
     } catch (error: any) {
       return res.status(500).json({ error: 'Failed to load digital student ID.', details: error.message });

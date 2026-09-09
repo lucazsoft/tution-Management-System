@@ -21,6 +21,8 @@ import { normalizeSchedule } from '../utils/schedule';
 import { parseStrictKeys, parseStrictObject, readFiniteNumber, readTrimmedString } from '../utils/request-validation';
 import { salaryStructureFor, type SupportedContractType } from '../services/payroll-service';
 import { getAdmissionTenure } from '../utils/nepali';
+import { privateImageUrl, storePrivateBytes } from '../services/object-storage';
+import { normalizeStudentPhoto } from '../services/student-photo';
 
 const router = Router();
 
@@ -575,6 +577,63 @@ async function studentFeeSummary(studentId: string) {
   };
 }
 
+async function manageableStudentPhoto(req: TenantRequest, studentId: string) {
+  const scopes = branchAdminScopes(req.user!);
+  if (!isTenantAdmin(req.user!) && !scopes.length) return null;
+  return prisma.student.findFirst({
+    where: {
+      id: studentId,
+      user: { tenantId: req.tenantId! },
+      enrollments: { some: { status: { in: ['ACTIVE', 'BLOCKED'] }, ...(isTenantAdmin(req.user!) ? {} : { class: { branchId: { in: scopes } } }) } },
+    },
+    select: {
+      id: true,
+      userId: true,
+      user: { select: { image: true } },
+      enrollments: {
+        where: { status: { in: ['ACTIVE', 'BLOCKED'] }, ...(isTenantAdmin(req.user!) ? {} : { class: { branchId: { in: scopes } } }) },
+        select: { class: { select: { branchId: true } } },
+        take: 1,
+      },
+    },
+  });
+}
+
+router.put('/students/:studentId/photo', authMiddleware, async (req: TenantRequest, res: Response) => {
+  const shape = parseStrictKeys(req.body, ['image']);
+  if (!shape.success) return res.status(400).json({ error: shape.error });
+  const student = await manageableStudentPhoto(req, req.params.studentId);
+  const branchId = student?.enrollments[0]?.class.branchId;
+  if (!student || !branchId) return res.status(404).json({ error: 'Student not found in an assigned branch.' });
+  try {
+    const normalized = await normalizeStudentPhoto(shape.data.image);
+    const bytes = normalized.bytes;
+    const mediaId = crypto.randomUUID();
+    const reference = await storePrivateBytes({ bytes, contentType: normalized.contentType }, { tenantId: req.tenantId!, branchId, category: 'student-photos', id: student.id });
+    const objectKey = reference.slice(3);
+    await prisma.$transaction([
+      prisma.mediaObject.updateMany({ where: { tenantId: req.tenantId!, category: 'STUDENT_PHOTO', ownerType: 'STUDENT', ownerId: student.id, status: 'ACTIVE' }, data: { status: 'REPLACED', replacedAt: new Date() } }),
+      prisma.mediaObject.create({ data: { id: mediaId, tenantId: req.tenantId!, branchId, category: 'STUDENT_PHOTO', ownerType: 'STUDENT', ownerId: student.id, objectKey, mimeType: normalized.contentType, byteSize: bytes.length, sha256: crypto.createHash('sha256').update(bytes).digest('hex'), width: normalized.width, height: normalized.height, createdBy: req.user!.id } }),
+      prisma.user.update({ where: { id: student.userId }, data: { image: reference } }),
+    ]);
+    return res.json({ message: 'Student photo updated.', photoUrl: await privateImageUrl(reference) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Student photo storage is unavailable.';
+    const invalidImage = /photo|image|buffer/i.test(message);
+    return res.status(invalidImage ? 400 : 503).json({ error: message });
+  }
+});
+
+router.delete('/students/:studentId/photo', authMiddleware, async (req: TenantRequest, res: Response) => {
+  const student = await manageableStudentPhoto(req, req.params.studentId);
+  if (!student) return res.status(404).json({ error: 'Student not found in an assigned branch.' });
+  await prisma.$transaction([
+    prisma.mediaObject.updateMany({ where: { tenantId: req.tenantId!, category: 'STUDENT_PHOTO', ownerType: 'STUDENT', ownerId: student.id, status: 'ACTIVE' }, data: { status: 'DELETED', deletedAt: new Date() } }),
+    prisma.user.update({ where: { id: student.userId }, data: { image: null } }),
+  ]);
+  return res.json({ message: 'Student photo removed.' });
+});
+
 // Authenticated student self-service aggregate. This deliberately resolves the
 // student from the verified session user rather than accepting a student ID.
 router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res: Response) => {
@@ -928,6 +987,7 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
       studentProfile: {
         name: `${student.user.firstName} ${student.user.lastName}`,
         initials: `${student.user.firstName.charAt(0)}${student.user.lastName.charAt(0)}`.toUpperCase(),
+        photoUrl: await privateImageUrl(student.user.image),
         institution: student.user.tenant.name,
         grade: student.grade?.name ?? 'Grade not assigned',
         branch: assignedBranch?.name ?? 'Branch not assigned',
@@ -1019,6 +1079,7 @@ router.get('/:id/profile', authMiddleware, async (req: TenantRequest, res: Respo
       status: user.status,
       createdAt: user.createdAt,
       institutionName: user.tenant.name,
+      photoUrl: await privateImageUrl(user.image),
       roles: user.userRoles.map((ur) => ({ role: ur.role.name, branchName: ur.branch?.name ?? null })),
     };
 
