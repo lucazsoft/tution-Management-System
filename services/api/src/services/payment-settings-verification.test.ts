@@ -4,7 +4,12 @@ import { hashCode } from '../utils/otp';
 import { consumePaymentCode, isUploadedQr, paymentChangeKey, sendPaymentCode } from './payment-settings-verification';
 
 const db = prisma as any;
+db.$transaction = async (callback: any) => callback(db);
 let record: any;
+let phone = '9812345678';
+let trusted: any = null;
+db.user.findFirst = async () => ({ phone });
+db.user.updateMany = async ({ where, data }: any) => { if (where.phone !== phone) return { count: 0 }; trusted = data; return { count: 1 }; };
 db.verificationCode.findFirst = async ({ where }: any) => record && record.id === where.id && record.identifier === where.identifier && !record.consumedAt && record.attempts < 5 && record.expiresAt > new Date() ? { ...record } : null;
 db.verificationCode.updateMany = async ({ where, data }: any) => {
   if (!record || record.consumedAt || record.attempts !== where.attempts || record.expiresAt <= new Date()) return { count: 0 };
@@ -13,7 +18,7 @@ db.verificationCode.updateMany = async ({ where, data }: any) => {
   return { count: 1 };
 };
 const config = { staticQrEnabled: true, accountName: 'Account', staticQrImageUrl: 'image' };
-const reset = () => { record = { id: 'challenge', identifier: paymentChangeKey('tenant', 'admin', 'branch', 'save', config), purpose: 'PAYMENT_SETTINGS', codeHash: hashCode('123456'), expiresAt: new Date(Date.now() + 300000), attempts: 0, consumedAt: null }; };
+const reset = () => { record = { id: 'challenge', identifier: paymentChangeKey('tenant', 'admin', 'branch', 'save', config, phone), purpose: 'PAYMENT_SETTINGS', codeHash: hashCode('123456'), expiresAt: new Date(Date.now() + 300000), attempts: 0, consumedAt: null }; };
 const verify = (code = '123456', tenant = 'tenant', user = 'admin', branch = 'branch', action = 'save', payload: any = config) => consumePaymentCode(tenant, user, branch, action, payload, { challengeId: 'challenge', code });
 async function main() {
   assert.equal(isUploadedQr('https://example.test/qr.png'), false);
@@ -26,7 +31,8 @@ async function main() {
   assert.equal(await verify('123456', 'tenant', 'admin', 'other'), false);
   assert.equal(await verify('123456', 'tenant', 'admin', 'branch', 'reset'), false);
   assert.equal(await verify('123456', 'tenant', 'admin', 'branch', 'save', { ...config, accountName: 'Changed' }), false);
-  assert.equal(await verify(), true); assert.equal(await verify(), false);
+  assert.equal(await verify(), true); assert.equal(trusted.securityMobile, phone); assert.ok(trusted.securityMobileVerifiedAt); assert.equal(await verify(), false);
+  reset(); phone = '9800000000'; trusted = null; assert.equal(await verify(), false); assert.equal(trusted, null); phone = '9812345678';
   reset(); record.expiresAt = new Date(0); assert.equal(await verify(), false);
   reset(); for (let i = 0; i < 5; i++) assert.equal(await verify('000000'), false);
   assert.equal(await verify(), false);

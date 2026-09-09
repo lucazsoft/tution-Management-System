@@ -6,7 +6,8 @@ require.cache[authPath] = { id: authPath, filename: authPath, loaded: true, expo
 const router = require('./users').default;
 const db = prisma as any;
 let updates: any[] = [];
-db.user.findFirst = async ({ where }: any) => where.id === 'admin' && where.tenantId === 'tenant' ? { id: 'admin', phone: '9812345678', userRoles: [], staffRecord: null } : null;
+let mobile: any = {};
+db.user.findFirst = async ({ where }: any) => where.id === 'admin' && where.tenantId === 'tenant' ? { id: 'admin', phone: '9812345678', ...mobile, userRoles: [], staffRecord: null } : null;
 db.user.updateMany = async (args: any) => { updates.push(args); return { count: 1 }; };
 db.userRole.findFirst = async () => ({ roleId: 'tenant-admin' });
 async function invoke(method: string, path = '/me/account', body: any = {}) {
@@ -26,6 +27,12 @@ async function main() {
   }
   actor = { id: 'admin', tenantId: 'tenant', roles: [{ roleName: 'Tenant Admin', branchId: null, permissions: [] }] };
   assert.equal((await invoke('get')).status, 200);
+  assert.equal((await invoke('get')).payload.mobileVerified, false);
+  mobile = { securityMobile: '9812345678', securityMobileVerifiedAt: new Date() };
+  assert.equal((await invoke('get')).payload.mobileVerified, true);
+  mobile.securityMobile = '9800000000';
+  assert.equal((await invoke('get')).payload.mobileVerified, false);
+  assert.equal((await invoke('get')).payload.mobileVerifiedAt, null);
   for (const extra of [{ securityMobile: '9800000000' }, { securityMobileVerifiedAt: new Date().toISOString() }, { phone: '9800000000' }, { email: 'other@example.test' }, { tenantId: 'other' }, { id: 'other' }, { role: 'Super Admin' }]) {
     assert.equal((await invoke('patch', '/me/account', { firstName: 'New', lastName: 'Name', ...extra })).status, 400);
   }

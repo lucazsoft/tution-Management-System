@@ -1,3 +1,4 @@
+import { trustedSecurityMobile } from '../utils/security-mobile';
 import { calendarAccessWhere } from '../services/calendar-access';
 import { Router, Response } from 'express';
 import prisma from '../utils/db';
@@ -210,10 +211,12 @@ router.get('/me/account', authMiddleware, async (req: TenantRequest, res: Respon
   if (!isTenantAdmin(req.user!)) return res.status(403).json({ error: 'Tenant Admin access required.' });
   const account = await prisma.user.findFirst({ where: { id: req.user!.id, tenantId: req.tenantId! }, select: {
     id: true, firstName: true, lastName: true, email: true, emailVerified: true, phone: true, image: true,
-    twoFactorEnabled: true, tenant: { select: { name: true } },
+    securityMobile: true, securityMobileVerifiedAt: true, twoFactorEnabled: true, tenant: { select: { name: true } },
   } });
   if (!account) return res.status(404).json({ error: 'Account not found.' });
-  return res.json(account);
+  const { securityMobile, securityMobileVerifiedAt, ...profile } = account;
+  const mobileVerified = Boolean(trustedSecurityMobile(account));
+  return res.json({ ...profile, mobileVerified, mobileVerifiedAt: mobileVerified ? securityMobileVerifiedAt : null });
   } catch { return res.status(500).json({ error: 'Unable to load or save your account. Please try again.' }); }
 });
 router.patch('/me/account', authMiddleware, async (req: TenantRequest, res: Response) => {

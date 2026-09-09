@@ -4,9 +4,9 @@ import { Link } from 'react-router-dom';
 import { request, errorMessage } from '../services/api/client';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
-import './tenant-account.css';
+import { AccountLayout, AccountSection, AccountStatus } from '../components/AccountLayout';
 
-interface Account { firstName: string; lastName: string; email: string; emailVerified: boolean; phone: string; tenant: { name: string }; twoFactorEnabled: boolean }
+interface Account { firstName: string; lastName: string; email: string; emailVerified: boolean; phone: string; mobileVerified?: boolean; mobileVerifiedAt?: string | null; tenant: { name: string }; twoFactorEnabled: boolean }
 export function TenantAccountPage() {
   const { updateDisplayName } = useAuth();
   const [account, setAccount] = useState<Account | null>(null);
@@ -41,25 +41,26 @@ export function TenantAccountPage() {
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
   };
-  return <main className="tenant-account">
-    <header><p className="account-eyebrow">PERSONAL ACCOUNT</p><h1>My account</h1><p>Manage your personal details and account security.</p></header>
+  return <AccountLayout title="My account" description="Manage your personal details and account security.">
     {error && <div role="alert" className="account-feedback">{error}{!account && <Button onClick={() => setRevision(value => value + 1)}>Retry</Button>}</div>}
     {message && <p role="status">{message}</p>}
     {!account && !error && <div className="account-skeleton" aria-busy="true" aria-label="Loading your account" />}
     {account && <>
-      <section className="account-section" aria-labelledby="personal-details">
-        <div className="account-section-heading"><div><h2 id="personal-details">Personal details</h2><p>Your name appears on your account and administrative records.</p></div>{!editing && <button ref={editButton} className="account-edit" onClick={() => { setDraft({ firstName: account.firstName, lastName: account.lastName }); setEditing(true); setMessage(''); }}>Edit name</button>}</div>
+      <AccountSection title="Personal details" description="Your name appears on your account and administrative records." action={!editing && <button ref={editButton} className="account-edit" onClick={() => { setDraft({ firstName: account.firstName, lastName: account.lastName }); setEditing(true); setMessage(''); }}>Edit name</button>}>
         {editing ? <form onSubmit={save}>
           <div className="account-fields"><label>First name<input autoFocus autoComplete="given-name" required maxLength={100} disabled={busy} value={draft.firstName} onChange={event => setDraft({ ...draft, firstName: event.target.value })} /></label><label>Last name<input autoComplete="family-name" required maxLength={100} disabled={busy} value={draft.lastName} onChange={event => setDraft({ ...draft, lastName: event.target.value })} /></label></div>
-          <div className="account-actions"><Button type="submit" disabled={busy || !dirty} aria-busy={busy}>{busy ? 'Saving…' : 'Save changes'}</Button><Button type="button" variant="outline" disabled={busy} onClick={close}>Cancel</Button></div>
+          <div className="account-actions"><Button type="submit" disabled={busy || !dirty} aria-busy={busy}>{busy ? 'Saving…' : 'Save changes'}</Button><Button type="button" style={{ color: 'var(--text)' }} variant="outline" disabled={busy} onClick={close}>Cancel</Button></div>
         </form> : <dl><div><dt>Name</dt><dd>{account.firstName} {account.lastName}</dd></div><div><dt>Institution</dt><dd>{account.tenant.name}</dd></div><div><dt>Role</dt><dd>Tenant Admin · All branches</dd></div></dl>}
-      </section>
-      <section className="account-section" aria-labelledby="account-security"><h2 id="account-security">Sign-in & security</h2>
-        <dl><div><dt>Login email</dt><dd>{account.email}<small>{account.emailVerified ? 'Verified email' : 'Email verification not recorded'}</small></dd></div><div><dt>Security mobile</dt><dd>{account.phone || 'No mobile number saved'}<small>Used for SMS confirmation of payment setting changes. A saved number is not a verified number.</small></dd></div><div><dt>Two-step verification</dt><dd>{account.twoFactorEnabled ? 'Enabled' : 'Not enabled'}</dd></div></dl>
-        <p>Security mobile changes require your password and verification of both numbers. Email changes will be available once email delivery is configured.</p>
-        {!editing && <><MobileChangeForm /><Link to="/tenant/security">Change password</Link></>}
-      </section>
+      </AccountSection>
+      <AccountSection title="Sign-in & security" description="Your mobile verification and sign-in protection are managed separately.">
+        <dl>
+          <div><dt>Login email</dt><dd><div className="account-value">{account.email}<AccountStatus verified={account.emailVerified}>{account.emailVerified ? 'Verified' : 'Verification not recorded'}</AccountStatus></div></dd></div>
+          <div><dt>Security mobile</dt><dd><div className="account-value">{account.phone || 'No mobile number saved'}<AccountStatus verified={account.mobileVerified === true}>{account.mobileVerified === true ? 'Verified' : account.mobileVerified === false ? 'Verification required' : 'Status unavailable'}</AccountStatus></div><small>{account.mobileVerified ? 'Verified for SMS security checks. Payment changes still require a new confirmation code.' : 'Confirm ownership with an SMS code. Existing branch QR settings do not record mobile verification.'}</small></dd></div>
+          <div><dt>Two-step sign-in</dt><dd><AccountStatus verified={account.twoFactorEnabled}>{account.twoFactorEnabled ? 'Enabled' : 'Not enabled'}</AccountStatus><small>An additional code when signing in. Verifying your mobile or a payment change does not enable this.</small></dd></div>
+        </dl>
+        {!editing && <div className="account-security-actions"><MobileChangeForm allowVerify={account.mobileVerified === false && Boolean(account.phone)} /><Link to="/tenant/security">Change password</Link></div>}
+      </AccountSection>
       {!editing && <aside className="account-institution"><h2>Managing the institution?</h2><p>Institution policies and branch payment accounts have their own settings.</p><div className="account-actions"><Link to="/tenant/settings">Institution settings</Link><Link to="/tenant/payment-settings">Branch payment settings</Link></div></aside>}
     </>}
-  </main>;
+  </AccountLayout>;
 }
