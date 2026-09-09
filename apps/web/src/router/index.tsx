@@ -1,3 +1,4 @@
+import { AccountPage } from '../pages/AccountPage';
 import { TenantAccountPage } from '../pages/TenantAccountPage';
 import { MobileRecoveryPage } from '../pages/auth/MobileRecoveryPage';
 import { PaymentSettingsPage } from '../pages/PaymentSettingsPage';
@@ -310,6 +311,8 @@ const router = createBrowserRouter([
           {
             element: <RequireRole allowedRoles={['BRANCH_ADMIN']} />,
             children: [
+              { path: '/branch/account', element: <AccountPage passwordPath="/branch/security" /> },
+              { path: '/branch/security', element: <Suspense fallback={<FullPageSpinner />}><SecurityPage /></Suspense> },
               { path: '/branch/payment-settings', element: <PaymentSettingsPage /> },
               { path: '/branch/dashboard', element: <Suspense fallback={<FullPageSpinner />}><BranchAdminDashboard /></Suspense> },
               { path: '/branch/staff', element: <Suspense fallback={<FullPageSpinner />}><PeopleDirectory /></Suspense> },

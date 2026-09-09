@@ -52,6 +52,7 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const accountPath = role === 'tenant-admin' ? '/tenant/account' : role === 'branch-admin' ? '/branch/account' : null;
   const navItems = useMemo(() => getDashboardNavigation(role), [role]);
   const groupedNav = useMemo(() => groupNavigation(navItems), [navItems]);
   const roleLabel = useMemo(() => getDashboardRoleLabel(role), [role]);
@@ -401,7 +402,7 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
                     fontWeight: 700,
                   }}
                 >
-                  {role === 'tenant-admin' ? <button type="button" aria-label="Open my account" onClick={() => navigate('/tenant/account')} style={{ color: 'inherit', background: 'transparent', border: 0, minWidth: 44, minHeight: 44, font: 'inherit', cursor: 'pointer' }}>{userInitials}</button> : userInitials}
+                  {accountPath ? <button type="button" aria-label="Open my account" onClick={() => navigate(accountPath)} style={{ color: 'inherit', background: 'transparent', border: 0, minWidth: 44, minHeight: 44, font: 'inherit', cursor: 'pointer' }}>{userInitials}</button> : userInitials}
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ color: 'var(--color-text)', fontSize: '13px', fontWeight: 700, whiteSpace: 'nowrap' }}>{userName}</div>

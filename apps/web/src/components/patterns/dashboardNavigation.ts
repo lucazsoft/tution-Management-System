@@ -75,6 +75,7 @@ export const DASHBOARD_NAVIGATION: Record<DashboardRole, DashboardNavItem[]> = {
     { section: 'Communication', label: 'Messages', icon: 'forum', path: '/branch/messages' },
     { section: 'Communication', label: 'Announcements', icon: 'campaign', path: '/branch/announcements' },
     { section: 'Calendar', label: 'Academic Calendar', icon: 'date_range', path: '/branch/academic-calendar' },
+    { section: 'Settings', label: 'My account', icon: 'account_circle', path: '/branch/account' },
     { section: 'Settings', label: 'Security', icon: 'security', path: '/branch/security' },
   ],
   teacher: [
