@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart' as url_launcher;
 
 import '../data/student_fees_models.dart';
 import '../student_design.dart';
@@ -8,6 +10,14 @@ import '../viewmodels/student_fees_viewmodel.dart';
 import '../widgets/student_scaffold.dart';
 import '../widgets/invoice_payment_settings_sheet.dart';
 import 'package:tms_mobile/core/providers/feature_flags_provider.dart';
+
+/// Injectable gateway launcher so widget tests can substitute a fake
+/// instead of calling url_launcher directly.
+typedef GatewayLauncher = Future<bool> Function(Uri uri);
+
+/// Default launcher: opens [uri] in the external browser.
+Future<bool> defaultGatewayLauncher(Uri uri) => url_launcher.launchUrl(uri,
+    mode: url_launcher.LaunchMode.externalApplication);
 
 class StudentFeesScreen extends ConsumerWidget {
   const StudentFeesScreen({super.key});
@@ -151,6 +161,89 @@ class StudentFeesScreen extends ConsumerWidget {
     );
   }
 
+  static void _showQr(
+    BuildContext context,
+    NepalPayQr qr,
+    ApiStudentInvoice invoice,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => NepalPayQrSheet(qr: qr, invoice: invoice),
+    );
+  }
+}
+
+/// Bottom-sheet content rendering the NepalPay payload as a scannable QR
+/// code, keeping the amount/merchant/reference text and the copy-payload
+/// fallback. An empty payload shows a message instead of a broken code.
+class NepalPayQrSheet extends StatelessWidget {
+  const NepalPayQrSheet({super.key, required this.qr, required this.invoice});
+
+  final NepalPayQr qr;
+  final ApiStudentInvoice invoice;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Nepal Pay', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: StudentSpace.xs),
+          Text('Scan to pay NPR ${qr.amount.toStringAsFixed(0)}'),
+          const SizedBox(height: StudentSpace.lg),
+          Container(
+            width: 220,
+            alignment: Alignment.center,
+            padding: const EdgeInsets.all(StudentSpace.md),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: StudentColors.border),
+              borderRadius: BorderRadius.circular(StudentRadius.card),
+            ),
+            child: qr.qrString.isEmpty
+                ? SelectableText(
+                    'QR payload unavailable',
+                    style: Theme.of(context).textTheme.bodySmall,
+                    textAlign: TextAlign.center,
+                  )
+                : QrImageView(
+                    data: qr.qrString,
+                    version: QrVersions.auto,
+                    size: 200,
+                    semanticsLabel:
+                        'NepalPay QR for NPR ${qr.amount.toStringAsFixed(0)}',
+                  ),
+          ),
+          const SizedBox(height: StudentSpace.md),
+          Text(
+            '${qr.merchantName} · Ref ${invoice.paymentReference ?? invoice.id}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: StudentSpace.xs),
+          Text(
+            'Verify the merchant and amount in your payment app before confirming.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: StudentSpace.md),
+          OutlinedButton.icon(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: qr.qrString));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('QR payload copied.')),
+              );
+            },
+            icon: const Icon(Icons.copy_rounded),
+            label: const Text('Copy payload'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _MessageBody extends StatelessWidget {
