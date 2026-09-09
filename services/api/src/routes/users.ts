@@ -208,20 +208,23 @@ function validateAdmissionDetails(body: unknown) {
 // Personal account endpoints derive identity exclusively from the session.
 router.get('/me/account', authMiddleware, async (req: TenantRequest, res: Response) => {
   try {
-  if (!isTenantAdmin(req.user!)) return res.status(403).json({ error: 'Tenant Admin access required.' });
   const account = await prisma.user.findFirst({ where: { id: req.user!.id, tenantId: req.tenantId! }, select: {
+    userRoles: { select: { id: true, role: { select: { name: true } }, branchId: true, branch: { select: { name: true, tenantId: true } } } },
     id: true, firstName: true, lastName: true, email: true, emailVerified: true, phone: true, image: true,
     securityMobile: true, securityMobileVerifiedAt: true, twoFactorEnabled: true, tenant: { select: { name: true } },
   } });
   if (!account) return res.status(404).json({ error: 'Account not found.' });
-  const { securityMobile, securityMobileVerifiedAt, ...profile } = account;
+  const { securityMobile, securityMobileVerifiedAt, userRoles, ...profile } = account;
   const mobileVerified = Boolean(trustedSecurityMobile(account));
-  return res.json({ ...profile, mobileVerified, mobileVerifiedAt: mobileVerified ? securityMobileVerifiedAt : null });
+  const roles = userRoles.filter(assignment => !assignment.branch || assignment.branch.tenantId === req.tenantId)
+    .map(assignment => ({ id: assignment.id, name: assignment.role.name, branchId: assignment.branchId, branchName: assignment.branch?.name ?? null }));
+  const tenantAdmin = isTenantAdmin(req.user!);
+  return res.json({ ...profile, roles, mobileVerified, mobileVerifiedAt: mobileVerified ? securityMobileVerifiedAt : null,
+    capabilities: { manageInstitution: tenantAdmin, manageSecurityMobile: tenantAdmin } });
   } catch { return res.status(500).json({ error: 'Unable to load or save your account. Please try again.' }); }
 });
 router.patch('/me/account', authMiddleware, async (req: TenantRequest, res: Response) => {
   try {
-  if (!isTenantAdmin(req.user!)) return res.status(403).json({ error: 'Tenant Admin access required.' });
   const shape = parseStrictKeys(req.body, ['firstName', 'lastName']);
   if (!shape.success) return res.status(400).json({ error: shape.error });
   const firstName = readTrimmedString(shape.data, 'firstName', { required: true, maxLength: 100, message: 'Enter a first name of 1-100 characters.' });
