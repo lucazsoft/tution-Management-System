@@ -337,12 +337,16 @@ const router = createBrowserRouter([
           {
             element: <RequireRole allowedRoles={['STUDENT']} />,
             children: [
+              { path: '/student/account', element: <AccountPage passwordPath="/student/security" /> },
+              { path: '/student/security', element: <Suspense fallback={<FullPageSpinner />}><SecurityPage /></Suspense> },
               { path: '/student/*', element: <Suspense fallback={<FullPageSpinner />}><StudentPortal /></Suspense> },
             ],
           },
           {
             element: <RequireRole allowedRoles={['PARENT']} />,
             children: [
+              { path: '/parent/account', element: <AccountPage passwordPath="/parent/security" /> },
+              { path: '/parent/security', element: <Suspense fallback={<FullPageSpinner />}><SecurityPage /></Suspense> },
               { path: '/parent/*', element: <Suspense fallback={<FullPageSpinner />}><ParentStudentPortal /></Suspense> },
             ],
           },

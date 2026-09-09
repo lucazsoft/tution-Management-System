@@ -105,6 +105,7 @@ export const DASHBOARD_NAVIGATION: Record<DashboardRole, DashboardNavItem[]> = {
     { section: 'My Record', label: 'Digital ID', icon: 'badge', path: '/student/digital-id' },
     { section: 'My Record', label: 'Certificates', icon: 'workspace_premium', path: '/student/certificates' },
     { section: 'Calendar', label: 'Academic Calendar', icon: 'date_range', path: '/student/calendar' },
+    { section: 'Settings', label: 'My account', icon: 'account_circle', path: '/student/account' },
     { section: 'Settings', label: 'Security', icon: 'security', path: '/student/security' },
   ],
   parent: [
@@ -119,6 +120,7 @@ export const DASHBOARD_NAVIGATION: Record<DashboardRole, DashboardNavItem[]> = {
     { section: 'Records', label: 'Certificates', icon: 'workspace_premium', path: '/parent/certificates' },
     { section: 'Calendar', label: 'Academic Calendar', icon: 'date_range', path: '/parent/calendar' },
     { section: 'Settings', label: 'Profile', icon: 'person', path: '/parent/profile' },
+    { section: 'Settings', label: 'My account', icon: 'account_circle', path: '/parent/account' },
     { section: 'Settings', label: 'Security', icon: 'security', path: '/parent/security' },
   ],
   receptionist: [

@@ -52,7 +52,7 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const accountPath = role === 'tenant-admin' ? '/tenant/account' : role === 'branch-admin' ? '/branch/account' : role === 'teacher' ? '/teacher/account' : null;
+  const accountPath = role === 'tenant-admin' ? '/tenant/account' : role === 'branch-admin' ? '/branch/account' : role === 'teacher' ? '/teacher/account' : role === 'parent' ? '/parent/account' : role === 'student' ? '/student/account' : null;
   const navItems = useMemo(() => getDashboardNavigation(role), [role]);
   const groupedNav = useMemo(() => groupNavigation(navItems), [navItems]);
   const roleLabel = useMemo(() => getDashboardRoleLabel(role), [role]);
