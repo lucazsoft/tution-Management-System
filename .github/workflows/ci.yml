@@ -60,6 +60,24 @@ jobs:
       - name: Phase 3 workflow regression tests
         run: npm run test:phase-three-workflows --workspace=@tms/api
 
+      - name: Account contact security regression tests
+        run: npm run test:account-contact --workspace=@tms/api
+
+      - name: User management authorization regression tests
+        run: npm run test:user-management-access --workspace=@tms/api
+
+      - name: Mobile recovery regression tests
+        run: npm run test:mobile-recovery --workspace=@tms/api
+
+      - name: Authentication SMS regression tests
+        run: npm run test:auth-sms --workspace=@tms/api
+
+      - name: Branch payment regression tests
+        run: npm run test:phase-four-branch-payment --workspace=@tms/api
+
+      - name: Private media regression tests
+        run: npm run test:private-media --workspace=@tms/api
+
       - name: Secret and fixed-identifier scan
         shell: bash
         run: |

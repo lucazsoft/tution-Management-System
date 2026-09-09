@@ -2,7 +2,8 @@ import { Router, Response } from 'express';
 import prisma from '../utils/db';
 import bcrypt from 'bcryptjs';
 import { TenantRequest } from '../middleware/tenant';
-import { sendVerificationCode } from '../utils/delivery';
+import { authenticationSmsConfigured, sendVerificationCode } from '../utils/delivery';
+import { trustedSecurityMobile } from '../utils/security-mobile';
 import {
   MAX_CODE_ATTEMPTS,
   OTP_TTL_MS,
@@ -18,7 +19,20 @@ import { authInputSchemas, parseStrictObject } from '../utils/request-validation
 const router = Router();
 
 function rateKey(req: TenantRequest, scope: string, email: string): string {
-  return `${scope}:${email}:${req.ip ?? 'unknown'}`;
+  return `${scope}:${hashCode(email)}:${hashCode(req.ip ?? 'unknown')}`;
+}
+
+async function resetBinding(email: string) {
+  const user = await prisma.user.findUnique({ where: { email } });
+  const phone = user?.status === 'ACTIVE' ? trustedSecurityMobile(user) : null;
+  const credential = user && await prisma.account.findFirst({ where: { userId: user.id, providerId: 'credential' } });
+  if (!user || !phone || !credential?.password) return null;
+  return {
+    user,
+    phone,
+    identifier: JSON.stringify({ email, userId: user.id, tenantId: user.tenantId, phone,
+      verifiedAt: user.securityMobileVerifiedAt?.toISOString(), credential: hashCode(credential.password) }),
+  };
 }
 
 // Password policy mirrored from the web client (apps/web/src/features/auth/utils.ts).
@@ -114,6 +128,10 @@ router.post('/forgot-password', async (req: TenantRequest, res: Response) => {
   if (!input.success) return res.status(400).json({ error: input.error });
   const { email } = input.data;
 
+  if (!authenticationSmsConfigured()) {
+    return res.status(503).json({ error: 'SMS authentication is temporarily unavailable.' });
+  }
+
   const limit = await consumePersistentRateLimit(rateKey(req, 'forgot', email), 15 * 60 * 1000, 5);
   if (!limit.allowed) {
     return res
@@ -123,19 +141,29 @@ router.post('/forgot-password', async (req: TenantRequest, res: Response) => {
   }
 
   try {
-    const user = await prisma.user.findUnique({ where: { email } });
+    const target = await resetBinding(email);
 
     // Only issue a code for real, active accounts — but always answer success
     // so the endpoint cannot be used to enumerate registered emails.
-    if (user && user.status === 'ACTIVE') {
+    if (target) {
       const code = generateOtpCode();
-      await issueCode(email, 'PASSWORD_RESET', code, OTP_TTL_MS);
-      await sendVerificationCode(email, code, 'PASSWORD_RESET');
+      await prisma.verificationCode.updateMany({
+        where: { identifier: target.identifier, purpose: 'PASSWORD_RESET', consumedAt: null },
+        data: { consumedAt: new Date() },
+      });
+      try {
+        await sendVerificationCode(email, code, 'PASSWORD_RESET', target.phone);
+        if ((await resetBinding(email))?.identifier === target.identifier) {
+          await issueCode(target.identifier, 'PASSWORD_RESET', code, OTP_TTL_MS);
+        }
+      } catch {
+        // Preserve the same response for unknown, unverified and failed recipients.
+      }
     }
 
     return res.json({ success: true });
   } catch (error: any) {
-    console.error('Forgot-password error:', error);
+    console.error('Forgot-password operation failed.');
     return res.status(500).json({ error: 'Internal server error.' });
   }
 });
@@ -154,7 +182,8 @@ router.post('/verify-reset-otp', async (req: TenantRequest, res: Response) => {
   }
 
   try {
-    const result = await consumeCode(email, 'PASSWORD_RESET', otp);
+    const target = await resetBinding(email);
+    const result = target ? await consumeCode(target.identifier, 'PASSWORD_RESET', otp) : 'invalid';
 
     if (result === 'expired') {
       return res.status(410).json({ error: 'This OTP has expired. Please request a new code.' });
@@ -167,11 +196,11 @@ router.post('/verify-reset-otp', async (req: TenantRequest, res: Response) => {
     }
 
     const resetToken = generateResetToken();
-    await issueCode(email, 'RESET_TOKEN', resetToken, RESET_TOKEN_TTL_MS);
+    await issueCode(target!.identifier, 'RESET_TOKEN', resetToken, RESET_TOKEN_TTL_MS);
 
     return res.json({ resetToken });
   } catch (error: any) {
-    console.error('Verify-reset-otp error:', error);
+    console.error('Verify-reset-otp operation failed.');
     return res.status(500).json({ error: 'Internal server error.' });
   }
 });
@@ -198,8 +227,10 @@ router.post('/reset-password', async (req: TenantRequest, res: Response) => {
       return res.status(410).json({ error: 'This reset link is invalid or has expired.' });
     }
 
-    const user = await prisma.user.findUnique({ where: { email: record.identifier } });
-    if (!user || user.status !== 'ACTIVE') {
+    let email = '';
+    try { email = JSON.parse(record.identifier).email; } catch { /* Reject legacy tokens. */ }
+    const target = email ? await resetBinding(email) : null;
+    if (!target || target.identifier !== record.identifier) {
       return res.status(410).json({ error: 'This reset link is invalid or has expired.' });
     }
 
@@ -215,20 +246,21 @@ router.post('/reset-password', async (req: TenantRequest, res: Response) => {
       });
       if (consumed.count !== 1) return false;
       await tx.user.update({
-        where: { id: user.id },
+        where: { id: target.user.id },
         data: { passwordHash: nextPasswordHash },
       });
       await tx.account.upsert({
-        where: { providerId_accountId: { providerId: 'credential', accountId: user.id } },
+        where: { providerId_accountId: { providerId: 'credential', accountId: target.user.id } },
         update: { password: nextPasswordHash },
-        create: { accountId: user.id, providerId: 'credential', userId: user.id, password: nextPasswordHash },
+        create: { accountId: target.user.id, providerId: 'credential', userId: target.user.id, password: nextPasswordHash },
       });
       // Invalidate anything else outstanding for this account.
       await tx.verificationCode.updateMany({
         where: { identifier: record.identifier, id: { not: record.id }, consumedAt: null },
         data: { consumedAt: new Date() },
       });
-      await tx.session.deleteMany({ where: { userId: user.id } });
+      await tx.session.deleteMany({ where: { userId: target.user.id } });
+      await tx.verification.deleteMany({ where: { value: target.user.id } });
       return true;
     });
     if (!changed) {
@@ -237,7 +269,7 @@ router.post('/reset-password', async (req: TenantRequest, res: Response) => {
 
     return res.json({ success: true });
   } catch (error: any) {
-    console.error('Reset-password error:', error);
+    console.error('Reset-password operation failed.');
     return res.status(500).json({ error: 'Internal server error.' });
   }
 });

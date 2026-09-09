@@ -1,0 +1,64 @@
+import assert from 'node:assert/strict';
+import prisma from '../utils/db';
+import { hashCode } from '../utils/otp';
+import { consumePaymentCode, isUploadedQr, paymentChangeKey, sendPaymentCode } from './payment-settings-verification';
+
+const db = prisma as any;
+db.$transaction = async (callback: any) => callback(db);
+let record: any;
+let phone = '9812345678';
+let trusted: any = null;
+db.user.findFirst = async () => ({ phone });
+db.user.updateMany = async ({ where, data }: any) => { if (where.phone !== phone) return { count: 0 }; trusted = data; return { count: 1 }; };
+db.verificationCode.findFirst = async ({ where }: any) => record && record.id === where.id && record.identifier === where.identifier && !record.consumedAt && record.attempts < 5 && record.expiresAt > new Date() ? { ...record } : null;
+db.verificationCode.updateMany = async ({ where, data }: any) => {
+  if (!record || record.consumedAt || record.attempts !== where.attempts || record.expiresAt <= new Date()) return { count: 0 };
+  if (data.consumedAt) record.consumedAt = data.consumedAt;
+  else record.attempts++;
+  return { count: 1 };
+};
+const config = { staticQrEnabled: true, accountName: 'Account', staticQrImageUrl: 'image' };
+const reset = () => { record = { id: 'challenge', identifier: paymentChangeKey('tenant', 'admin', 'branch', 'save', config, phone), purpose: 'PAYMENT_SETTINGS', codeHash: hashCode('123456'), expiresAt: new Date(Date.now() + 300000), attempts: 0, consumedAt: null }; };
+const verify = (code = '123456', tenant = 'tenant', user = 'admin', branch = 'branch', action = 'save', payload: any = config) => consumePaymentCode(tenant, user, branch, action, payload, { challengeId: 'challenge', code });
+async function main() {
+  assert.equal(isUploadedQr('https://example.test/qr.png'), false);
+  assert.equal(isUploadedQr('data:image/png;base64,' + Buffer.from('not really an image').toString('base64')), false);
+  assert.equal(isUploadedQr('data:image/svg+xml;base64,PHN2Zz4='), false);
+  assert.equal(isUploadedQr('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII='), true);
+  reset(); assert.equal(await verify('000000'), false); assert.equal(record.attempts, 1);
+  assert.equal(await verify('123456', 'foreign'), false);
+  assert.equal(await verify('123456', 'tenant', 'other'), false);
+  assert.equal(await verify('123456', 'tenant', 'admin', 'other'), false);
+  assert.equal(await verify('123456', 'tenant', 'admin', 'branch', 'reset'), false);
+  assert.equal(await verify('123456', 'tenant', 'admin', 'branch', 'save', { ...config, accountName: 'Changed' }), false);
+  assert.equal(await verify(), true); assert.equal(trusted.securityMobile, phone); assert.ok(trusted.securityMobileVerifiedAt); assert.equal(await verify(), false);
+  reset(); phone = '9800000000'; trusted = null; assert.equal(await verify(), false); assert.equal(trusted, null); phone = '9812345678';
+  reset(); record.expiresAt = new Date(0); assert.equal(await verify(), false);
+  reset(); for (let i = 0; i < 5; i++) assert.equal(await verify('000000'), false);
+  assert.equal(await verify(), false);
+  reset(); const results = await Promise.all([verify(), verify()]); assert.equal(results.filter(Boolean).length, 1);
+  let rateAllowed = true;
+  let deliverySuccess = true;
+  let sentTo = '';
+  let sentMessage = '';
+  require('../utils/persistent-rate-limit').consumePersistentRateLimit = async () => ({ allowed: rateAllowed });
+  require('../utils/sms').getSmsSender = () => ({ sendSms: async (phone: string, message: string) => { sentTo = phone; sentMessage = message; return { success: deliverySuccess }; } });
+  db.user.findFirst = async () => ({ phone: '+9779812345678' });
+  db.verificationCode.create = async ({ data }: any) => { record = { id: 'issued', attempts: 0, consumedAt: null, ...data }; return record; };
+  process.env.SMS_PROVIDER = 'MOCK';
+  await assert.rejects(sendPaymentCode('tenant', 'admin', 'branch', 'save', config), /not configured/);
+  process.env.SMS_PROVIDER = 'AAKASH'; process.env.AAKASH_SMS_AUTH_TOKEN = 'test-only';
+  const issued = await sendPaymentCode('tenant', 'admin', 'branch', 'save', config);
+  assert.equal(issued.destination, '******5678'); assert.equal(issued.expiresIn, 300);
+  assert.equal(sentTo, '9812345678'); assert.match(sentMessage, /\d{6}/);
+  assert.equal(record.codeHash, hashCode(sentMessage.match(/\d{6}/)![0]));
+  rateAllowed = false;
+  await assert.rejects(sendPaymentCode('tenant', 'admin', 'branch', 'save', config), /Too many/);
+  rateAllowed = true; deliverySuccess = false;
+  // Delivery failure invalidates the new record.
+  db.verificationCode.updateMany = async ({ data }: any) => { Object.assign(record, data); return { count: 1 }; };
+  await assert.rejects(sendPaymentCode('tenant', 'admin', 'branch', 'save', config), /Could not deliver/);
+  assert.ok(record.consumedAt);
+  console.log('PASS uploaded-image validation and SMS binding, expiry, attempt limit, single-use, concurrent replay');
+}
+main().catch(error => { console.error(error); process.exitCode = 1; });

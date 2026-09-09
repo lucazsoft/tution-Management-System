@@ -401,7 +401,7 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
                     fontWeight: 700,
                   }}
                 >
-                  {userInitials}
+                  {role === 'tenant-admin' ? <button type="button" aria-label="Open my account" onClick={() => navigate('/tenant/account')} style={{ color: 'inherit', background: 'transparent', border: 0, minWidth: 44, minHeight: 44, font: 'inherit', cursor: 'pointer' }}>{userInitials}</button> : userInitials}
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ color: 'var(--color-text)', fontSize: '13px', fontWeight: 700, whiteSpace: 'nowrap' }}>{userName}</div>

@@ -131,6 +131,7 @@ export interface StudentNotification {
 export interface StudentProfile {
   name: string;
   initials: string;
+  photoUrl?: string | null;
   institution: string;
   grade: string;
   branch: string;

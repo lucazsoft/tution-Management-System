@@ -34,6 +34,7 @@ export function TenantPaymentsPage() {
   const [query, setQuery] = useState('');
   const [reviewing, setReviewing] = useState('');
   const [remarks, setRemarks] = useState<Record<string, string>>({});
+  const [proof, setProof] = useState<PaymentAttempt | null>(null);
 
   const load = async (quiet = false) => {
     quiet ? setRefreshing(true) : setLoading(true); setError('');
@@ -52,6 +53,8 @@ export function TenantPaymentsPage() {
           confirmedAt: item.status === 'SUCCESS' ? item.reviewedAt : null,
           failedAt: item.status === 'FAILED' ? item.reviewedAt : null,
           invoiceStatus: item.status === 'SUCCESS' ? 'PAID' : 'UNPAID',
+          branchId: '',
+          branchName: 'Unknown branch',
         })));
       }
     }
@@ -70,6 +73,12 @@ export function TenantPaymentsPage() {
       document.removeEventListener('visibilitychange', refresh);
     };
   }, []);
+  useEffect(() => {
+    if (!proof) return;
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setProof(null); };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, [proof]);
 
   const decide = async (id: string, decision: 'APPROVE' | 'REJECT') => {
     setReviewing(id); setError(''); setNotice('');
@@ -109,10 +118,11 @@ export function TenantPaymentsPage() {
     <section className="payments-card payments-activity">
       <div className="payments-activity-head"><div><h2>Payment activity</h2><p>One view for online confirmations and manually verified QR payments.</p></div><span>{attempts.length} records</span></div>
       <div className="payments-toolbar"><label className="payments-search"><span className="material-symbols-outlined" aria-hidden="true">search</span><input type="search" aria-label="Search payments" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search student, reference, or invoice" /></label><div className="payments-filters" aria-label="Filter payments">{filters.map((item) => <button key={item.value} type="button" className={filter === item.value ? 'is-active' : ''} aria-pressed={filter === item.value} onClick={() => setFilter(item.value)}>{item.label}</button>)}</div></div>
-      {visible.length ? <div className="payments-table-scroll"><table className="payments-table"><thead><tr><th>Payer / invoice</th><th>Method</th><th>Reference</th><th>Amount</th><th>Submitted</th><th>Status</th><th>Review</th></tr></thead><tbody>{visible.map((item) => {
+      {visible.length ? <div className="payments-table-scroll"><table className="payments-table"><thead><tr><th>Payer / invoice</th><th>Branch</th><th>Method</th><th>Reference</th><th>Amount</th><th>Submitted</th><th>Status</th><th>Review</th></tr></thead><tbody>{visible.map((item) => {
         const needsReview = item.provider === 'BANK' && item.status === 'PENDING';
-        return <tr key={item.id}><td><strong>{item.studentName}</strong><small>Invoice {item.invoiceId.slice(0, 8).toUpperCase()}</small></td><td><span className="payments-method"><span className="material-symbols-outlined" aria-hidden="true">{item.provider === 'CONNECTIPS' ? 'bolt' : 'qr_code_2'}</span>{item.provider === 'CONNECTIPS' ? 'connectIPS' : 'Manual QR'}</span></td><td><code>{item.referenceId}</code>{item.gatewayMessage ? <small>{item.gatewayMessage}</small> : null}</td><td className="payments-amount">NPR {item.amount.toLocaleString('en-NP')}</td><td>{new Date(item.createdAt).toLocaleString('en-NP')}</td><td><StatusBadge variant={statusVariant(item)}>{displayStatus(item)}</StatusBadge></td><td>{item.provider === 'BANK' ? <div className="payments-row-review">{item.receiptProof ? <a href={item.receiptProof} target="_blank" rel="noreferrer">View receipt</a> : null}{needsReview ? <><input aria-label={`Review note for ${item.studentName}`} value={remarks[item.id] || ''} maxLength={500} placeholder="Review note" onChange={(event) => setRemarks((current) => ({ ...current, [item.id]: event.target.value }))} /><div><Button type="button" disabled={reviewing === item.id} onClick={() => void decide(item.id, 'APPROVE')}>Approve</Button><Button type="button" variant="danger" disabled={reviewing === item.id || !(remarks[item.id] || '').trim()} onClick={() => void decide(item.id, 'REJECT')}>Reject</Button></div></> : item.reviewRemarks ? <small>{item.reviewRemarks}</small> : null}</div> : <small>Automatic verification</small>}</td></tr>;
+        return <tr key={item.id}><td><strong>{item.studentName}</strong><small>Invoice {item.invoiceId.slice(0, 8).toUpperCase()}</small></td><td><strong>{item.branchName}</strong><small>{item.branchId ? item.branchId.slice(0, 8).toUpperCase() : 'Legacy record'}</small></td><td><span className="payments-method"><span className="material-symbols-outlined" aria-hidden="true">{item.provider === 'CONNECTIPS' ? 'bolt' : 'qr_code_2'}</span>{item.provider === 'CONNECTIPS' ? 'connectIPS' : 'Manual QR'}</span></td><td><code>{item.referenceId}</code>{item.gatewayMessage ? <small>{item.gatewayMessage}</small> : null}</td><td className="payments-amount">NPR {item.amount.toLocaleString('en-NP')}</td><td>{new Date(item.createdAt).toLocaleString('en-NP')}</td><td><StatusBadge variant={statusVariant(item)}>{displayStatus(item)}</StatusBadge></td><td>{item.provider === 'BANK' ? <div className="payments-row-review">{item.receiptProof ? <button type="button" className="payments-proof-button" onClick={() => setProof(item)}>View payment proof</button> : null}{needsReview ? <><input aria-label={`Review note for ${item.studentName}`} value={remarks[item.id] || ''} maxLength={500} placeholder="Review note" onChange={(event) => setRemarks((current) => ({ ...current, [item.id]: event.target.value }))} /><div><Button type="button" disabled={reviewing === item.id} onClick={() => void decide(item.id, 'APPROVE')}>Approve</Button><Button type="button" variant="danger" disabled={reviewing === item.id || !(remarks[item.id] || '').trim()} onClick={() => void decide(item.id, 'REJECT')}>Reject</Button></div></> : item.reviewRemarks ? <small>{item.reviewRemarks}</small> : null}</div> : <small>Automatic verification</small>}</td></tr>;
       })}</tbody></table></div> : <div className="payments-review-empty" role="status"><span className="material-symbols-outlined" aria-hidden="true">payments</span><strong>No matching payments</strong><p>{attempts.length ? 'Try another search or filter.' : 'Payment attempts will appear here as families start paying.'}</p></div>}
     </section>
+    {proof?.receiptProof ? <div className="payments-proof-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProof(null); }}><section className="payments-proof-dialog" role="dialog" aria-modal="true" aria-labelledby="payment-proof-title" onKeyDown={(event) => { if (event.key === 'Escape') setProof(null); }}><header><div><span className="payments-eyebrow">PAYMENT PROOF</span><h2 id="payment-proof-title">{proof.studentName}</h2><p>{proof.branchName} · Reference {proof.referenceId}</p></div><button type="button" aria-label="Close payment proof" onClick={() => setProof(null)}><span className="material-symbols-outlined" aria-hidden="true">close</span></button></header><div className="payments-proof-image"><img src={proof.receiptProof} alt={`Payment proof submitted by ${proof.studentName}`} /></div><footer><span>NPR {proof.amount.toLocaleString('en-NP')}</span><small>Submitted {new Date(proof.createdAt).toLocaleString('en-NP')}</small></footer></section></div> : null}
   </main>;
 }

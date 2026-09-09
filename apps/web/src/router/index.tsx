@@ -1,3 +1,6 @@
+import { TenantAccountPage } from '../pages/TenantAccountPage';
+import { MobileRecoveryPage } from '../pages/auth/MobileRecoveryPage';
+import { PaymentSettingsPage } from '../pages/PaymentSettingsPage';
 import { lazy, Suspense } from 'react';
 import {
   createBrowserRouter,
@@ -218,6 +221,9 @@ function RoleWorkspacePlaceholder({ role }: { role: DashboardRole }) {
 }
 
 const router = createBrowserRouter([
+  // Available while signed in as well as when locked out; the private recovery
+  // token and approved-destination SMS authenticate this flow.
+  { path: '/recover-mobile', element: <PublicAuthLayout />, children: [{ index: true, element: <MobileRecoveryPage /> }], errorElement: <RouteFailurePage /> },
   {
     errorElement: <RouteFailurePage />,
     element: <RedirectIfAuth />,
@@ -273,7 +279,9 @@ const router = createBrowserRouter([
           {
             element: <RequireRole allowedRoles={['TENANT_ADMIN']} />,
             children: [
+              { path: '/tenant/account', element: <TenantAccountPage /> },
               { path: '/tenant/dashboard', element: <Suspense fallback={<FullPageSpinner />}><TenantAdminDashboard /></Suspense> },
+              { path: '/tenant/payment-settings', element: <PaymentSettingsPage /> },
               { path: '/tenant/branches', element: <Suspense fallback={<FullPageSpinner />}><TenantBranches /></Suspense> },
               { path: '/tenant/people', element: <Suspense fallback={<FullPageSpinner />}><PeopleDirectory /></Suspense> },
               { path: '/tenant/admissions', element: <Suspense fallback={<FullPageSpinner />}><TenantAdmissionsPage /></Suspense> },
@@ -302,6 +310,7 @@ const router = createBrowserRouter([
           {
             element: <RequireRole allowedRoles={['BRANCH_ADMIN']} />,
             children: [
+              { path: '/branch/payment-settings', element: <PaymentSettingsPage /> },
               { path: '/branch/dashboard', element: <Suspense fallback={<FullPageSpinner />}><BranchAdminDashboard /></Suspense> },
               { path: '/branch/staff', element: <Suspense fallback={<FullPageSpinner />}><PeopleDirectory /></Suspense> },
               { path: '/branch/admissions', element: <Suspense fallback={<FullPageSpinner />}><TenantAdmissionsPage /></Suspense> },

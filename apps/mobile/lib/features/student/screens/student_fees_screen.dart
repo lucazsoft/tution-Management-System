@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -9,6 +8,7 @@ import '../data/student_fees_models.dart';
 import '../student_design.dart';
 import '../viewmodels/student_fees_viewmodel.dart';
 import '../widgets/student_scaffold.dart';
+import '../widgets/invoice_payment_settings_sheet.dart';
 import 'package:tms_mobile/core/providers/feature_flags_provider.dart';
 
 /// Injectable gateway launcher so widget tests can substitute a fake
@@ -144,10 +144,16 @@ class StudentFeesScreen extends ConsumerWidget {
       current: current,
       onSelect: viewModel.selectInvoice,
       onRefresh: viewModel.refresh,
-      onShowQr: () async {
-        await viewModel.loadQr();
-        final qr = ref.read(studentFeesViewModelProvider).qr;
-        if (qr != null && context.mounted) _showQr(context, qr, current);
+      onShowQr: () {
+        showModalBottomSheet<void>(
+          context: context,
+          showDragHandle: true,
+          isScrollControlled: true,
+          builder: (context) => InvoicePaymentSettingsSheet(
+            invoiceId: current.id,
+            onConnectIps: viewModel.startPayment,
+          ),
+        );
       },
       onStartPayment: viewModel.startPayment,
       onConfirmReturn: viewModel.confirmReturn,
@@ -155,6 +161,7 @@ class StudentFeesScreen extends ConsumerWidget {
     );
   }
 
+<<<<<<< HEAD
   static void _showQr(
     BuildContext context,
     NepalPayQr qr,
@@ -238,6 +245,8 @@ class NepalPayQrSheet extends StatelessWidget {
       ),
     );
   }
+=======
+>>>>>>> 098eb48f17beed38cc61a89d5bb59465519d5988
 }
 
 class _MessageBody extends StatelessWidget {
@@ -524,7 +533,7 @@ class _StudentFeesContent extends StatelessWidget {
                               )
                             : const Icon(Icons.qr_code_2_rounded),
                         label: Text(current.qrAvailable
-                            ? 'Show Nepal Pay QR'
+                            ? 'Show payment instructions'
                             : 'Already paid'),
                       ),
                     ),

@@ -1,6 +1,7 @@
 // API Client Service for Tuition Management System (TMS)
 // Tenant scope is authoritative from the signed session on the API.
 import { request } from './api/client';
+import { paymentSettingsApi } from './payment-settings';
 
 export interface BillingInvoice {
   id: string; invoiceType: 'ADMISSION' | 'TUITION' | 'SUBJECT' | 'ACTIVITY'; amount: number; discount: number; fine: number;
@@ -199,10 +200,10 @@ export const api = {
 
   // Finances
   finances: {
-    getPaymentSettings: async () => request<{ connectIpsEnabled: boolean; staticQrEnabled: boolean; staticQrImageUrl: string; accountName: string; accountNumber: string; bankName: string; instructions: string }>('/finances/payment-settings'),
+    ...paymentSettingsApi,
     submitManualPayment: async (invoiceId: string, payload: { referenceId: string; receiptProof: string }) => request<{ txnId: string; status: string; message: string }>(`/finances/manual-payment/${encodeURIComponent(invoiceId)}`, { method: 'POST', body: JSON.stringify(payload) }),
     getManualPayments: async () => request<{ attempts: Array<{ id: string; txnId: string; referenceId: string; amount: number; status: string; receiptProof: string; createdAt: string; reviewedAt: string | null; reviewRemarks: string | null; invoiceId: string; studentName: string }> }>('/finances/manual-payments'),
-    getPaymentAttempts: async () => request<{ attempts: Array<{ id: string; txnId: string; provider: 'CONNECTIPS' | 'BANK'; referenceId: string; amount: number; status: string; gatewayStatus: string | null; gatewayMessage: string | null; receiptProof: string | null; createdAt: string; confirmedAt: string | null; failedAt: string | null; reviewedAt: string | null; reviewRemarks: string | null; invoiceId: string; invoiceStatus: string; studentName: string }> }>('/finances/payment-attempts'),
+    getPaymentAttempts: async () => request<{ attempts: Array<{ id: string; txnId: string; provider: 'CONNECTIPS' | 'BANK'; referenceId: string; amount: number; status: string; gatewayStatus: string | null; gatewayMessage: string | null; receiptProof: string | null; createdAt: string; confirmedAt: string | null; failedAt: string | null; reviewedAt: string | null; reviewRemarks: string | null; invoiceId: string; invoiceStatus: string; branchId: string; branchName: string; studentName: string }> }>('/finances/payment-attempts'),
     decideManualPayment: async (id: string, decision: 'APPROVE' | 'REJECT', remarks: string) => request<{ message: string }>(`/finances/manual-payments/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify({ decision, remarks }) }),
     getAccountantWorkspace: async () => request<AccountantWorkspace>('/finances/accountant-workspace'),
     getBillingLedger: async () => request<BillingLedger>('/finances/billing-ledger'),
@@ -437,6 +438,15 @@ export const api = {
     },
     getProfile: async (userId: string) => {
       return request<any>(`/users/${userId}/profile`);
+    },
+    updateStudentPhoto: async (studentId: string, image: string) => {
+      return request<{ message: string; photoUrl: string }>(`/users/students/${studentId}/photo`, {
+        method: 'PUT',
+        body: JSON.stringify({ image }),
+      });
+    },
+    removeStudentPhoto: async (studentId: string) => {
+      return request<{ message: string }>(`/users/students/${studentId}/photo`, { method: 'DELETE' });
     },
     resetPassword: async (userId: string) => {
       return request<{ temporaryPassword: string }>(`/users/${userId}/reset-password`, { method: 'POST' });

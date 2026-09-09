@@ -119,7 +119,7 @@ class _TwoFactorScreenState extends ConsumerState<TwoFactorScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            widget.email,
+            'Your verified security mobile',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: kColorText.withValues(alpha: 0.68),

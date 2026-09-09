@@ -13,10 +13,16 @@
     "prisma:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "test:petty-cash": "ts-node src/routes/petty-cash.test.ts",
+    "test:account-contact": "ts-node src/routes/account-contact.test.ts",
+    "test:account-profile": "ts-node src/routes/account-profile.test.ts",
+    "test:user-management-access": "ts-node src/routes/user-management-access.test.ts",
+    "recovery:mobile": "ts-node src/scripts/mobile-recovery.ts",
+    "test:mobile-recovery": "ts-node src/services/mobile-recovery.test.ts && ts-node src/routes/mobile-recovery.test.ts",
     "test:access": "ts-node src/utils/access-control.test.ts",
     "test:calendar": "ts-node src/services/calendar-access.test.ts && ts-node src/routes/calendar-permissions.test.ts",
     "test:billing": "ts-node src/utils/billing-rules.test.ts",
     "test:sms": "ts-node src/utils/sms.test.ts",
+    "test:auth-sms": "ts-node src/utils/delivery.test.ts && ts-node src/routes/auth-sms.test.ts",
     "test:connectips": "ts-node src/utils/connectips.test.ts",
     "test:connectips-reconciliation": "ts-node src/utils/connectips-reconciliation.test.ts",
     "connectips:reconcile": "npm run build && node dist/scripts/reconcile-connectips.js",
@@ -32,6 +38,8 @@
     "test:phase-one-security": "ts-node src/routes/phase-one-security.test.ts",
     "test:phase-two-billing": "ts-node src/routes/phase-two-billing.test.ts",
     "test:phase-three-workflows": "ts-node src/routes/phase-three-workflows.test.ts",
+    "test:phase-four-branch-payment": "ts-node src/services/branch-payment-settings.test.ts && ts-node src/routes/branch-payment-settings.test.ts && ts-node src/routes/payment-settings-access.test.ts && ts-node src/services/payment-settings-verification.test.ts && ts-node src/services/object-storage.test.ts",
+    "test:private-media": "ts-node src/services/object-storage.test.ts && ts-node src/services/student-photo.test.ts",
     "admissions:recover": "ts-node src/scripts/recover-admission-deliveries.ts",
     "test:tenant-admin:integration": "ts-node src/integration/tenant-admin.integration.test.ts"
   },
@@ -46,6 +54,8 @@
     "ext": "ts,json,env"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1128.0",
+    "@aws-sdk/s3-request-presigner": "^3.1128.0",
     "@prisma/client": "^5.0.0",
     "@tms/types": "*",
     "bcryptjs": "^2.4.3",
@@ -55,7 +65,8 @@
     "express": "^4.18.2",
     "nepali-date-library": "^1.1.11",
     "node-forge": "^1.4.0",
-    "pdfkit": "^0.19.1"
+    "pdfkit": "^0.19.1",
+    "sharp": "^0.35.4"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.2",

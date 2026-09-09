@@ -1,3 +1,4 @@
+import { sendPaymentCode, consumePaymentCode, isUploadedQr } from '../services/payment-settings-verification';
 import { branchAllowance, pettyCashPeriod } from '../services/petty-cash';
 import { Router, Response } from 'express';
 import { LateFeeMode, Prisma, RefundPolicy } from '@prisma/client';
@@ -16,6 +17,7 @@ import { reconcileBranchBillingAccess } from '../services/billing-access';
 import { buildFinancialIntelligence } from '../utils/financial-intelligence';
 import { invoiceTypeLabel } from '../utils/invoice-document';
 import { getTenantPaymentSettings, getBranchPaymentSettings, upsertBranchPaymentSettings, deleteBranchPaymentSettings, getTenantBranchPaymentSettings } from '../services/branch-payment-settings';
+import { privateImageUrl, storePrivateImage } from '../services/object-storage';
 import {
   compensationStructure,
   createPayrollRecords,
@@ -38,7 +40,13 @@ async function deliverPaidAdmission(invoice: { invoiceType: string; tenantId: st
 // GET /payment-settings - Fetch payment settings for tenant or specific branch
 router.get('/payment-settings', authMiddleware, async (req: TenantRequest, res: Response) => {
   try {
-    const branchId = req.query.branchId as string | undefined;
+    const branchId = req.query.branchId;
+    if (branchId !== undefined && (typeof branchId !== 'string' || !branchId.trim())) {
+      return res.status(400).json({ error: 'Branch ID must be a non-empty string' });
+    }
+    if (!isTenantAdmin(req.user!) && (!branchId || !managedBranchIds(req.user!).includes(branchId))) {
+      return res.status(403).json({ error: 'Insufficient permissions to view branch payment settings' });
+    }
     
     // If no branch specified, return tenant defaults
     if (!branchId) {
@@ -63,7 +71,17 @@ router.get('/payment-settings', authMiddleware, async (req: TenantRequest, res: 
   }
 });
 
-// PUT /branches/:branchId/payment-settings - Update branch-specific payment settings
+router.post('/branches/:branchId/payment-settings/verification', authMiddleware, async (req: TenantRequest, res: Response) => {
+  if (!isTenantAdmin(req.user!)) return res.status(403).json({ error: 'Tenant Admin access required' });
+  const branch = await prisma.branch.findFirst({ where: { id: req.params.branchId, tenantId: req.tenantId! } });
+  if (!branch) return res.status(404).json({ error: 'Branch not found' });
+  if (!['save', 'reset'].includes(req.body?.action)) return res.status(400).json({ error: 'Invalid verification action' });
+  if (req.body.action === 'save' && req.body.config?.staticQrEnabled && !isUploadedQr(req.body.config.staticQrImageUrl)) return res.status(400).json({ error: 'Upload a valid QR image before requesting verification.' });
+  try { return res.json(await sendPaymentCode(req.tenantId!, req.user!.id, req.params.branchId, req.body.action, req.body.config)); }
+  catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Unable to send verification SMS.' }); }
+});
+
+// PUT /branches/:branchId/payment-settings - Update branch-specific payment settings (tenant admin only)
 router.put('/branches/:branchId/payment-settings', authMiddleware, async (req: TenantRequest, res: Response) => {
   try {
     const { branchId } = req.params as { branchId: string };
@@ -72,9 +90,9 @@ router.put('/branches/:branchId/payment-settings', authMiddleware, async (req: T
       return res.status(400).json({ error: 'Branch ID is required' });
     }
     
-    // Verify access: tenant admin or branch admin for this branch
-    if (!canAccessBranch(req.user, branchId)) {
-      return res.status(403).json({ error: 'Insufficient permissions for this branch' });
+    // Verify access: tenant admin only (branch admins can view but not edit)
+    if (!isTenantAdmin(req.user)) {
+      return res.status(403).json({ error: 'Tenant Admin access required to manage payment settings' });
     }
     
     // Verify branch exists
@@ -87,12 +105,26 @@ router.put('/branches/:branchId/payment-settings', authMiddleware, async (req: T
     }
     
     // Parse and validate input
-    const { staticQrEnabled, staticQrImageUrl, accountName, accountNumber, bankName, instructions } = req.body;
+    const { staticQrEnabled, staticQrImageUrl, accountName, accountNumber, bankName, instructions } = req.body ?? {};
     
     if (typeof staticQrEnabled !== 'boolean') {
       return res.status(400).json({ error: 'staticQrEnabled must be boolean' });
     }
     
+    for (const [field, value, min, max] of [
+      ['staticQrImageUrl', staticQrImageUrl, 1, 1_400_000],
+      ['accountName', accountName, 1, 100],
+      ['accountNumber', accountNumber, 5, 20],
+      ['bankName', bankName, 1, 100],
+      ['instructions', instructions, 0, 500],
+    ] as const) {
+      if (value != null && typeof value !== 'string') return res.status(400).json({ error: `${field} must be text` });
+      if ((value?.trim().length ?? 0) > max || (staticQrEnabled && (value?.trim().length ?? 0) < min)) {
+        return res.status(400).json({ error: `${field} must contain ${min}-${max} characters` });
+      }
+    }
+    if (staticQrEnabled && !isUploadedQr(staticQrImageUrl)) return res.status(400).json({ error: 'Upload a PNG, JPEG, or WebP QR image under 1 MB. External URLs are not accepted.' });
+
     if (staticQrEnabled) {
       if (!staticQrImageUrl?.toString().trim()) return res.status(400).json({ error: 'QR image URL is required when static QR is enabled' });
       if (!accountName?.toString().trim()) return res.status(400).json({ error: 'Account name is required when static QR is enabled' });
@@ -100,6 +132,7 @@ router.put('/branches/:branchId/payment-settings', authMiddleware, async (req: T
       if (!bankName?.toString().trim()) return res.status(400).json({ error: 'Bank name is required when static QR is enabled' });
     }
     
+    if (!await consumePaymentCode(req.tenantId!, req.user!.id, branchId, 'save', req.body, req.body?.verification)) return res.status(403).json({ error: 'SMS verification is invalid, expired, or does not match these changes.' });
     // Upsert branch settings
     const settings = await upsertBranchPaymentSettings(req.tenantId!, branchId, {
       staticQrEnabled,
@@ -119,7 +152,7 @@ router.put('/branches/:branchId/payment-settings', authMiddleware, async (req: T
   }
 });
 
-// DELETE /branches/:branchId/payment-settings - Reset branch settings to tenant defaults
+// DELETE /branches/:branchId/payment-settings - Reset branch settings to tenant defaults (tenant admin only)
 router.delete('/branches/:branchId/payment-settings', authMiddleware, async (req: TenantRequest, res: Response) => {
   try {
     const { branchId } = req.params as { branchId: string };
@@ -128,9 +161,9 @@ router.delete('/branches/:branchId/payment-settings', authMiddleware, async (req
       return res.status(400).json({ error: 'Branch ID is required' });
     }
     
-    // Verify access
-    if (!canAccessBranch(req.user, branchId)) {
-      return res.status(403).json({ error: 'Insufficient permissions for this branch' });
+    // Verify access: tenant admin only
+    if (!isTenantAdmin(req.user)) {
+      return res.status(403).json({ error: 'Tenant Admin access required to manage payment settings' });
     }
     
     // Verify branch exists
@@ -142,6 +175,7 @@ router.delete('/branches/:branchId/payment-settings', authMiddleware, async (req
       return res.status(404).json({ error: 'Branch not found' });
     }
     
+    if (!await consumePaymentCode(req.tenantId!, req.user!.id, branchId, 'reset', null, req.body?.verification)) return res.status(403).json({ error: 'SMS verification is invalid or expired.' });
     // Delete branch-specific settings
     await deleteBranchPaymentSettings(req.tenantId!, branchId);
     
@@ -255,6 +289,17 @@ async function loadStudentBillingAccess(req: TenantRequest, studentId: string) {
   return allowed ? student : null;
 }
 
+// Checkout resolves the branch from an authorized invoice, never a client-selected branch.
+router.get('/invoices/:invoiceId/payment-settings', authMiddleware, async (req: TenantRequest, res: Response) => {
+  try {
+    const invoice = await loadInvoicePaymentAccess(req, req.params.invoiceId);
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found or unavailable to this account.' });
+    return res.json(await getBranchPaymentSettings(req.tenantId!, invoice.branchId));
+  } catch {
+    return res.status(500).json({ error: 'Failed to fetch payment instructions' });
+  }
+});
+
 router.post('/connectips/initiate/:invoiceId', authMiddleware, async (req: TenantRequest, res: Response) => {
   try {
     const settings = getTenantPaymentSettings();
@@ -363,7 +408,9 @@ router.post('/manual-payment/:invoiceId', authMiddleware, async (req: TenantRequ
   const duplicate = await prisma.paymentAttempt.findFirst({ where: { tenantId: req.tenantId!, provider: 'BANK', referenceId: referenceId.data } });
   if (duplicate) return res.status(409).json({ error: 'This payment reference was already submitted.' });
   const txnId = `qr_${crypto.randomBytes(8).toString('hex')}`;
-  const attempt = await prisma.paymentAttempt.create({ data: { tenantId: req.tenantId!, branchId: invoice.branchId, invoiceId: invoice.id, provider: 'BANK', status: 'PENDING', txnId, referenceId: referenceId.data, amountPaisa: BigInt(Math.round(Number(invoice.netPayable) * 100)), receiptProof: receiptProof.data, receiptMimeType: receiptProof.data.slice(5, receiptProof.data.indexOf(';')), gatewayStatus: 'AWAITING_REVIEW', createdBy: req.user!.id } });
+  const attemptId = crypto.randomUUID();
+  const storedProof = await storePrivateImage(receiptProof.data, { tenantId: req.tenantId!, branchId: invoice.branchId, category: 'payment-proofs', id: attemptId });
+  const attempt = await prisma.paymentAttempt.create({ data: { id: attemptId, tenantId: req.tenantId!, branchId: invoice.branchId, invoiceId: invoice.id, provider: 'BANK', status: 'PENDING', txnId, referenceId: referenceId.data, amountPaisa: BigInt(Math.round(Number(invoice.netPayable) * 100)), receiptProof: storedProof, receiptMimeType: receiptProof.data.slice(5, receiptProof.data.indexOf(';')), gatewayStatus: 'AWAITING_REVIEW', createdBy: req.user!.id } });
   return res.status(201).json({ id: attempt.id, txnId, status: attempt.status, message: 'Receipt submitted for verification.' });
 });
 
@@ -371,7 +418,7 @@ router.get('/manual-payments', authMiddleware, async (req: TenantRequest, res: R
   const access = billingBranchScopes(req.user);
   if (!access.isTenantAdmin && access.scopes.length === 0) return res.status(403).json({ error: 'You do not have access to payment receipts.' });
   const attempts = await prisma.paymentAttempt.findMany({ where: { tenantId: req.tenantId!, provider: 'BANK', status: { in: ['PENDING', 'SUCCESS', 'FAILED'] }, ...(access.isTenantAdmin ? {} : { branchId: { in: access.scopes } }) }, include: { invoice: { include: { student: { include: { user: true } } } } }, orderBy: { createdAt: 'desc' }, take: 100 });
-  return res.json({ attempts: attempts.map((attempt) => ({ id: attempt.id, txnId: attempt.txnId, referenceId: attempt.referenceId, amount: Number(attempt.amountPaisa) / 100, status: attempt.status, receiptProof: attempt.receiptProof, createdAt: attempt.createdAt, reviewedAt: attempt.reviewedAt, reviewRemarks: attempt.reviewRemarks, invoiceId: attempt.invoiceId, studentName: `${attempt.invoice.student.user.firstName} ${attempt.invoice.student.user.lastName}`.trim() })) });
+  return res.json({ attempts: await Promise.all(attempts.map(async (attempt) => ({ id: attempt.id, txnId: attempt.txnId, referenceId: attempt.referenceId, amount: Number(attempt.amountPaisa) / 100, status: attempt.status, receiptProof: await privateImageUrl(attempt.receiptProof), createdAt: attempt.createdAt, reviewedAt: attempt.reviewedAt, reviewRemarks: attempt.reviewRemarks, invoiceId: attempt.invoiceId, studentName: `${attempt.invoice.student.user.firstName} ${attempt.invoice.student.user.lastName}`.trim() }))) });
 });
 
 router.get('/payment-attempts', authMiddleware, async (req: TenantRequest, res: Response) => {
@@ -379,11 +426,11 @@ router.get('/payment-attempts', authMiddleware, async (req: TenantRequest, res: 
   if (!access.isTenantAdmin && access.scopes.length === 0) return res.status(403).json({ error: 'You do not have access to payment activity.' });
   const attempts = await prisma.paymentAttempt.findMany({
     where: { tenantId: req.tenantId!, provider: { in: ['CONNECTIPS', 'BANK'] }, ...(access.isTenantAdmin ? {} : { branchId: { in: access.scopes } }) },
-    include: { invoice: { include: { student: { include: { user: true } } } } },
+    include: { branch: { select: { id: true, name: true } }, invoice: { include: { student: { include: { user: true } } } } },
     orderBy: { createdAt: 'desc' },
     take: 200,
   });
-  return res.json({ attempts: attempts.map((attempt) => ({
+  return res.json({ attempts: await Promise.all(attempts.map(async (attempt) => ({
     id: attempt.id,
     txnId: attempt.txnId,
     provider: attempt.provider,
@@ -392,7 +439,7 @@ router.get('/payment-attempts', authMiddleware, async (req: TenantRequest, res: 
     status: attempt.status,
     gatewayStatus: attempt.gatewayStatus,
     gatewayMessage: attempt.gatewayMessage,
-    receiptProof: attempt.receiptProof,
+    receiptProof: await privateImageUrl(attempt.receiptProof),
     createdAt: attempt.createdAt,
     confirmedAt: attempt.confirmedAt,
     failedAt: attempt.failedAt,
@@ -400,8 +447,10 @@ router.get('/payment-attempts', authMiddleware, async (req: TenantRequest, res: 
     reviewRemarks: attempt.reviewRemarks,
     invoiceId: attempt.invoiceId,
     invoiceStatus: attempt.invoice.status,
+    branchId: attempt.branch.id,
+    branchName: attempt.branch.name,
     studentName: `${attempt.invoice.student.user.firstName} ${attempt.invoice.student.user.lastName}`.trim(),
-  })) });
+  }))) });
 });
 
 router.post('/manual-payments/:id/decision', authMiddleware, async (req: TenantRequest, res: Response) => {

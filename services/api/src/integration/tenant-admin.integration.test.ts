@@ -287,13 +287,13 @@ async function main(): Promise<void> {
     );
     await prisma.user.update({
       where: { id: twoFactorUser.id },
-      data: { twoFactorEnabled: true },
+      data: { twoFactorEnabled: true, securityMobile: twoFactorUser.phone, securityMobileVerifiedAt: new Date() },
     });
     await prisma.twoFactor.create({
       data: {
-        id: `email-otp-${twoFactorUser.id}`,
+        id: `sms-otp-${twoFactorUser.id}`,
         userId: twoFactorUser.id,
-        secret: 'integration-email-otp-placeholder',
+        secret: 'integration-sms-otp-placeholder',
         backupCodes: '[]',
       },
     });

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -326,6 +327,7 @@ export function TenantBranches() {
                   <span className="material-symbols-outlined" style={{ fontSize: '16px', marginRight: '6px' }}>edit</span>
                   Edit Branch
                 </Button>
+                <Link to={`/tenant/payment-settings?branchId=${encodeURIComponent(branch.id)}`}>Payment settings</Link>
               </div>
             </Card>
           ))

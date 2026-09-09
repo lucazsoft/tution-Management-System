@@ -2041,10 +2041,22 @@ h1, h2, h3, h4 {
 .payments-method { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
 .payments-method .material-symbols-outlined { color: var(--color-primary); font-size: 19px; }
 .payments-row-review { display: grid; min-width: 220px; gap: 8px; }
-.payments-row-review > a { color: var(--color-primary); font-weight: 700; }
+.payments-proof-button { width: fit-content; padding: 0; border: 0; color: var(--color-primary); background: transparent; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .payments-row-review input { min-height: 38px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 9px; color: var(--text); background: var(--bg-background); }
 .payments-row-review > div { display: flex; gap: 7px; }
 .payments-row-review button { min-height: 36px; padding: 7px 11px; }
+.payments-proof-backdrop { position: fixed; inset: 0; z-index: 13000; display: grid; place-items: center; padding: 20px; background: color-mix(in srgb, var(--text) 62%, transparent); }
+.payments-proof-dialog { width: min(620px, 100%); max-height: calc(100vh - 40px); overflow: auto; border-radius: var(--radius-lg); background: var(--bg-card); box-shadow: var(--shadow-xl); }
+.payments-proof-dialog header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 20px; border-bottom: 1px solid var(--border); }
+.payments-proof-dialog h2 { margin: 4px 0; font-size: 22px; }
+.payments-proof-dialog header p { margin: 0; color: var(--text-muted); }
+.payments-proof-dialog header button { display: grid; width: 40px; height: 40px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 10px; color: var(--text); background: var(--bg-subtle); cursor: pointer; }
+.payments-proof-image { display: grid; min-height: 280px; padding: 20px; place-items: center; background: var(--bg-subtle); }
+.payments-proof-image img { display: block; max-width: 100%; max-height: 60vh; border-radius: 10px; object-fit: contain; box-shadow: var(--shadow-sm); }
+.payments-proof-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; }
+.payments-proof-dialog footer span { font-weight: 800; }
+.payments-proof-dialog footer small { color: var(--text-muted); }
+.payments-proof-button:focus-visible, .payments-proof-dialog button:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; }
 @media (max-width: 900px) { .payments-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .payments-toolbar { grid-template-columns: 1fr; } .payments-filters { justify-content: flex-start; } }
 @media (max-width: 520px) { .payments-stats { grid-template-columns: 1fr; } .payments-activity-head { flex-direction: column; } }
 @media (max-width: 700px) { .payments-page { padding: 20px 14px; } .payments-header, .payments-actions { align-items: stretch; flex-direction: column; } .payments-card-head { grid-template-columns: 44px minmax(0, 1fr); } .payments-switch { grid-column: 1 / -1; } .payments-endpoints, .payments-form-grid { grid-template-columns: 1fr; } .payments-endpoints small, .payments-form-grid .is-wide { grid-column: auto; } .payments-actions button { width: 100%; } }
@@ -2316,6 +2328,24 @@ h1, h2, h3, h4 {
   flex-shrink: 0;
   letter-spacing: 0.02em;
 }
+.people-avatar--photo { overflow: hidden; background: var(--color-bg); }
+.people-avatar--photo img { width: 100%; height: 100%; object-fit: cover; }
+.student-photo-editor { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 14px; margin-bottom: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--color-bg); }
+.student-photo-preview { width: 56px; aspect-ratio: 4 / 5; display: grid; place-items: center; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: var(--primary-gradient); color: #fff; font-size: 14px; font-weight: 800; }
+.student-photo-preview.has-photo { background: var(--color-surface); }
+.student-photo-preview img { width: 100%; height: 100%; object-fit: cover; }
+.student-photo-editor__copy { display: grid; min-width: 0; gap: 3px; }
+.student-photo-editor strong { font-size: 13px; }
+.student-photo-editor span { color: var(--text-muted); font-size: 12px; }
+.student-photo-editor__copy p { margin-top: 3px; color: var(--color-error); font-size: 12px; }
+.student-photo-editor__actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.student-photo-upload { display: inline-flex; min-height: 36px; align-items: center; padding: 0 14px; border-radius: var(--radius-sm); background: var(--color-primary); color: #fff; cursor: pointer; font-size: 13px; font-weight: 700; }
+.student-photo-upload:focus-within { outline: 3px solid var(--color-primary); outline-offset: 2px; }
+.student-photo-upload:has(input:disabled) { cursor: wait; opacity: .65; }
+.student-photo-upload input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.student-photo-confirm { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.student-photo-confirm > div { display: flex; gap: 8px; }
+@media (max-width: 560px) { .student-photo-editor { grid-template-columns: 56px minmax(0, 1fr); align-items: start; } .student-photo-editor__actions { grid-column: 1 / -1; } .student-photo-confirm { align-items: flex-start; flex-direction: column; } }
 .people-person-name { font-size: 14px; font-weight: 600; color: var(--text); }
 .people-person-email { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
 

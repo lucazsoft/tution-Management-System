@@ -1,3 +1,4 @@
+import { trustedSecurityMobile } from '../utils/security-mobile';
 import { calendarAccessWhere } from '../services/calendar-access';
 import { Router, Response } from 'express';
 import prisma from '../utils/db';
@@ -21,6 +22,8 @@ import { normalizeSchedule } from '../utils/schedule';
 import { parseStrictKeys, parseStrictObject, readFiniteNumber, readTrimmedString } from '../utils/request-validation';
 import { salaryStructureFor, type SupportedContractType } from '../services/payroll-service';
 import { getAdmissionTenure } from '../utils/nepali';
+import { privateImageUrl, storePrivateBytes } from '../services/object-storage';
+import { normalizeStudentPhoto } from '../services/student-photo';
 
 const router = Router();
 
@@ -202,6 +205,37 @@ function validateAdmissionDetails(body: unknown) {
 }
 
 // --- Caller capabilities: drives what the People UI can do ---
+// Personal account endpoints derive identity exclusively from the session.
+router.get('/me/account', authMiddleware, async (req: TenantRequest, res: Response) => {
+  try {
+  if (!isTenantAdmin(req.user!)) return res.status(403).json({ error: 'Tenant Admin access required.' });
+  const account = await prisma.user.findFirst({ where: { id: req.user!.id, tenantId: req.tenantId! }, select: {
+    id: true, firstName: true, lastName: true, email: true, emailVerified: true, phone: true, image: true,
+    securityMobile: true, securityMobileVerifiedAt: true, twoFactorEnabled: true, tenant: { select: { name: true } },
+  } });
+  if (!account) return res.status(404).json({ error: 'Account not found.' });
+  const { securityMobile, securityMobileVerifiedAt, ...profile } = account;
+  const mobileVerified = Boolean(trustedSecurityMobile(account));
+  return res.json({ ...profile, mobileVerified, mobileVerifiedAt: mobileVerified ? securityMobileVerifiedAt : null });
+  } catch { return res.status(500).json({ error: 'Unable to load or save your account. Please try again.' }); }
+});
+router.patch('/me/account', authMiddleware, async (req: TenantRequest, res: Response) => {
+  try {
+  if (!isTenantAdmin(req.user!)) return res.status(403).json({ error: 'Tenant Admin access required.' });
+  const shape = parseStrictKeys(req.body, ['firstName', 'lastName']);
+  if (!shape.success) return res.status(400).json({ error: shape.error });
+  const firstName = readTrimmedString(shape.data, 'firstName', { required: true, maxLength: 100, message: 'Enter a first name of 1-100 characters.' });
+  const lastName = readTrimmedString(shape.data, 'lastName', { required: true, maxLength: 100, message: 'Enter a last name of 1-100 characters.' });
+  if (!firstName.success) return res.status(400).json({ error: firstName.error });
+  if (!lastName.success) return res.status(400).json({ error: lastName.error });
+  const changed = await prisma.user.updateMany({ where: { id: req.user!.id, tenantId: req.tenantId! }, data: {
+    firstName: firstName.data, lastName: lastName.data, name: `${firstName.data} ${lastName.data}`,
+  } });
+  if (!changed.count) return res.status(404).json({ error: 'Account not found.' });
+  return res.json({ firstName: firstName.data, lastName: lastName.data, name: `${firstName.data} ${lastName.data}` });
+  } catch { return res.status(500).json({ error: 'Unable to load or save your account. Please try again.' }); }
+});
+
 router.get('/me', authMiddleware, async (req: TenantRequest, res: Response) => {
   const user = req.user as UserPayload;
   const tenantAdmin = isTenantAdmin(user);
@@ -545,6 +579,63 @@ async function studentFeeSummary(studentId: string) {
     })),
   };
 }
+
+async function manageableStudentPhoto(req: TenantRequest, studentId: string) {
+  const scopes = branchAdminScopes(req.user!);
+  if (!isTenantAdmin(req.user!) && !scopes.length) return null;
+  return prisma.student.findFirst({
+    where: {
+      id: studentId,
+      user: { tenantId: req.tenantId! },
+      enrollments: { some: { status: { in: ['ACTIVE', 'BLOCKED'] }, ...(isTenantAdmin(req.user!) ? {} : { class: { branchId: { in: scopes } } }) } },
+    },
+    select: {
+      id: true,
+      userId: true,
+      user: { select: { image: true } },
+      enrollments: {
+        where: { status: { in: ['ACTIVE', 'BLOCKED'] }, ...(isTenantAdmin(req.user!) ? {} : { class: { branchId: { in: scopes } } }) },
+        select: { class: { select: { branchId: true } } },
+        take: 1,
+      },
+    },
+  });
+}
+
+router.put('/students/:studentId/photo', authMiddleware, async (req: TenantRequest, res: Response) => {
+  const shape = parseStrictKeys(req.body, ['image']);
+  if (!shape.success) return res.status(400).json({ error: shape.error });
+  const student = await manageableStudentPhoto(req, req.params.studentId);
+  const branchId = student?.enrollments[0]?.class.branchId;
+  if (!student || !branchId) return res.status(404).json({ error: 'Student not found in an assigned branch.' });
+  try {
+    const normalized = await normalizeStudentPhoto(shape.data.image);
+    const bytes = normalized.bytes;
+    const mediaId = crypto.randomUUID();
+    const reference = await storePrivateBytes({ bytes, contentType: normalized.contentType }, { tenantId: req.tenantId!, branchId, category: 'student-photos', id: student.id });
+    const objectKey = reference.slice(3);
+    await prisma.$transaction([
+      prisma.mediaObject.updateMany({ where: { tenantId: req.tenantId!, category: 'STUDENT_PHOTO', ownerType: 'STUDENT', ownerId: student.id, status: 'ACTIVE' }, data: { status: 'REPLACED', replacedAt: new Date() } }),
+      prisma.mediaObject.create({ data: { id: mediaId, tenantId: req.tenantId!, branchId, category: 'STUDENT_PHOTO', ownerType: 'STUDENT', ownerId: student.id, objectKey, mimeType: normalized.contentType, byteSize: bytes.length, sha256: crypto.createHash('sha256').update(bytes).digest('hex'), width: normalized.width, height: normalized.height, createdBy: req.user!.id } }),
+      prisma.user.update({ where: { id: student.userId }, data: { image: reference } }),
+    ]);
+    return res.json({ message: 'Student photo updated.', photoUrl: await privateImageUrl(reference) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Student photo storage is unavailable.';
+    const invalidImage = /photo|image|buffer/i.test(message);
+    return res.status(invalidImage ? 400 : 503).json({ error: message });
+  }
+});
+
+router.delete('/students/:studentId/photo', authMiddleware, async (req: TenantRequest, res: Response) => {
+  const student = await manageableStudentPhoto(req, req.params.studentId);
+  if (!student) return res.status(404).json({ error: 'Student not found in an assigned branch.' });
+  await prisma.$transaction([
+    prisma.mediaObject.updateMany({ where: { tenantId: req.tenantId!, category: 'STUDENT_PHOTO', ownerType: 'STUDENT', ownerId: student.id, status: 'ACTIVE' }, data: { status: 'DELETED', deletedAt: new Date() } }),
+    prisma.user.update({ where: { id: student.userId }, data: { image: null } }),
+  ]);
+  return res.json({ message: 'Student photo removed.' });
+});
 
 // Authenticated student self-service aggregate. This deliberately resolves the
 // student from the verified session user rather than accepting a student ID.
@@ -899,6 +990,7 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
       studentProfile: {
         name: `${student.user.firstName} ${student.user.lastName}`,
         initials: `${student.user.firstName.charAt(0)}${student.user.lastName.charAt(0)}`.toUpperCase(),
+        photoUrl: await privateImageUrl(student.user.image),
         institution: student.user.tenant.name,
         grade: student.grade?.name ?? 'Grade not assigned',
         branch: assignedBranch?.name ?? 'Branch not assigned',
@@ -990,6 +1082,7 @@ router.get('/:id/profile', authMiddleware, async (req: TenantRequest, res: Respo
       status: user.status,
       createdAt: user.createdAt,
       institutionName: user.tenant.name,
+      photoUrl: await privateImageUrl(user.image),
       roles: user.userRoles.map((ur) => ({ role: ur.role.name, branchName: ur.branch?.name ?? null })),
     };
 
@@ -1744,11 +1837,15 @@ async function loadManageableUser(req: TenantRequest, id: string) {
 
   const user = await prisma.user.findFirst({
     where: { id, tenantId: req.tenantId! },
-    include: { userRoles: true, student: true, staffRecord: true },
+    include: { userRoles: { include: { role: { select: { name: true } } } }, student: true, staffRecord: true },
   });
   if (!user) return { error: 404 as const };
 
   if (!tenantAdmin) {
+    // Protect the whole admin account, even when another role matches this branch.
+    const adminTarget = user.userRoles.some((ur) =>
+      ['Branch Admin', 'Tenant Admin', 'Super Admin'].includes(ur.role.name));
+    if (adminTarget) return { error: 403 as const };
     const inScope = user.userRoles.some((ur) => ur.branchId && scopes.includes(ur.branchId));
     if (!inScope) return { error: 403 as const };
   }
@@ -1761,6 +1858,10 @@ router.put('/:id', authMiddleware, async (req: TenantRequest, res: Response) => 
     return res.status(loaded.error).json({ error: loaded.error === 404 ? 'User not found in your institution.' : 'You cannot manage this user.' });
   }
   const { user } = loaded;
+  if (typeof req.body?.phone === 'string' && req.body.phone.trim() !== user.phone) {
+    const protectedRole = await prisma.userRole.findFirst({ where: { userId: user.id, role: { name: 'Tenant Admin' } } });
+    if (protectedRole) return res.status(403).json({ error: 'Tenant admin security numbers cannot be changed through people management. Use verified account recovery.' });
+  }
 
   const data: Record<string, unknown> = {};
   if (typeof req.body?.firstName === 'string' && req.body.firstName.trim()) data.firstName = req.body.firstName.trim();

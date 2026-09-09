@@ -157,7 +157,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ),
           const SizedBox(height: 10),
           Text(
-            'Enter your email address and we’ll send a one-time code to continue.',
+            'Enter your login email. We’ll send a reset code by SMS to your verified security mobile.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: kColorText.withValues(alpha: 0.72),
@@ -209,7 +209,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
         const SizedBox(height: 10),
         Text(
-          'Code sent to ${maskEmail(_emailController.text.trim())}',
+          'If eligible, a code was sent to your verified security mobile.',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodyMedium,
         ),

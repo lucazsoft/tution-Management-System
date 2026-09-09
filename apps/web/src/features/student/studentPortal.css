@@ -496,22 +496,41 @@
 .student-modal .student-primary-button { width: 100%; margin-top: 20px; }
 
 .student-digital-id { overflow: hidden; border: 1px solid var(--student-border); border-radius: 18px; background: var(--color-surface); box-shadow: 0 18px 40px -28px rgba(0,45,114,.45); }
-.student-digital-id header { display: flex; align-items: center; gap: 12px; padding: 18px 22px; background: linear-gradient(130deg, var(--student-navy), var(--student-blue)); color: #fff; }
-.student-digital-id header > .material-symbols-outlined { font-size: 30px; }
-.student-digital-id header > div { flex: 1; }
-.student-digital-id header strong, .student-digital-id header span { display: block; }
-.student-digital-id header span { margin-top: 2px; color: rgba(255,255,255,.72); font-size: 11px; }
-.student-id-body { display: grid; grid-template-columns: 130px 1fr; align-items: center; gap: 24px; padding: 28px; }
-.student-id-avatar { width: 120px; height: 140px; display: grid; place-items: center; border-radius: 12px; background: rgba(21,96,189,.09); color: var(--student-blue); font-family: Fraunces, var(--font-display); font-size: 36px; font-weight: 700; }
-.student-id-body h2 { margin: 4px 0; color: var(--student-navy); font-family: Fraunces, var(--font-display); font-size: 26px; }
-.student-id-body p { color: var(--student-muted); font-size: 13px; }
-.student-id-body dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px; }
-.student-id-body dt { color: var(--student-muted); font-size: 10px; text-transform: uppercase; }
-.student-id-body dd { margin-top: 3px; font-size: 12px; font-weight: 800; }
-.student-digital-id footer { display: flex; align-items: center; gap: 18px; padding: 16px 22px; border-top: 1px solid var(--student-border); background: var(--student-surface); }
-.student-barcode { width: 160px; height: 34px; background: repeating-linear-gradient(90deg, var(--student-text) 0 2px, transparent 2px 5px, var(--student-text) 5px 6px, transparent 6px 10px); }
-.student-digital-id footer span { color: var(--student-muted); font-size: 11px; }
-.student-id-help .student-warning-note { margin-top: 18px; }
+.student-id-header { display: flex; align-items: center; gap: 12px; padding: 18px 22px; background: linear-gradient(130deg, #002d72, #1560bd); color: #fff; }
+.student-id-mark { width: 42px; height: 42px; display: grid; flex: 0 0 42px; place-items: center; border: 1px solid rgba(255,255,255,.28); border-radius: 11px; background: rgba(255,255,255,.1); }
+.student-id-mark .material-symbols-outlined { font-size: 25px; }
+.student-id-header > div { min-width: 0; flex: 1; }
+.student-id-header strong, .student-id-header > div > span { display: block; }
+.student-id-header strong { overflow: hidden; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.student-id-header > div > span { margin-top: 3px; color: rgba(255,255,255,.78); font-size: 12px; }
+.student-id-body { display: grid; grid-template-columns: 136px minmax(0, 1fr); align-items: center; gap: 28px; padding: 28px; }
+.student-id-avatar { width: 136px; aspect-ratio: 4 / 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; overflow: hidden; border: 1px solid var(--student-border); border-radius: 12px; background: rgba(21,96,189,.07); color: var(--student-blue); font-family: Fraunces, var(--font-display); }
+.student-id-avatar strong { font-size: 36px; }
+.student-id-avatar small { font-family: var(--font-ui); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.student-id-avatar.has-photo { overflow: hidden; background: var(--student-surface); }
+.student-id-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.student-id-body h2 { margin: 4px 0 3px; color: var(--student-navy); font-family: Fraunces, var(--font-display); font-size: clamp(24px, 3vw, 30px); line-height: 1.15; }
+.student-id-branch { display: flex; align-items: center; gap: 5px; color: var(--student-muted); font-size: 12px; }
+.student-id-branch .material-symbols-outlined { flex: 0 0 auto; font-size: 16px; }
+.student-id-body dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 20px; margin-top: 22px; }
+.student-id-body dl > div { min-width: 0; }
+.student-id-body dt { color: var(--student-muted); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.student-id-body dd { overflow-wrap: anywhere; margin-top: 4px; color: var(--student-text); font-size: 13px; font-weight: 800; }
+.student-digital-id footer { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 15px 22px; border-top: 1px solid var(--student-border); background: var(--student-surface); }
+.student-digital-id footer > div { min-width: 0; }
+.student-digital-id footer span { display: block; color: var(--student-muted); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.student-digital-id footer strong { display: block; overflow: hidden; margin-top: 3px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.student-digital-id footer p { display: flex; align-items: center; gap: 6px; color: var(--student-muted); font-size: 11px; text-align: right; }
+.student-digital-id footer p .material-symbols-outlined { color: var(--student-success); font-size: 17px; }
+.student-id-help { align-self: stretch; }
+.student-id-help > .student-icon-box { margin-bottom: 14px; }
+.student-id-help h2 { margin: 0 0 7px; }
+.student-id-help ul { display: grid; gap: 12px; margin: 20px 0 0; padding: 18px 0 0; border-top: 1px solid var(--student-border); list-style: none; }
+.student-id-help li { display: flex; align-items: flex-start; gap: 9px; color: var(--student-text); font-size: 12px; line-height: 1.45; }
+.student-id-help li .material-symbols-outlined { margin-top: -1px; color: var(--student-blue); font-size: 18px; }
+.student-id-photo-note { display: flex; align-items: flex-start; gap: 8px; margin-top: 18px; padding: 12px; border-radius: 9px; background: rgba(21,96,189,.07); color: var(--student-blue); font-size: 12px; font-weight: 700; }
+.student-id-photo-note .material-symbols-outlined { font-size: 18px; }
+.student-id-help .student-warning-note { margin-top: 12px; }
 
 .student-certificate-list article > div { flex: 1; }
 .student-certificate-list small { display: block; margin-top: 6px; color: var(--student-blue); font-weight: 700; }
@@ -660,10 +679,14 @@
   .student-ring { width: 76px; height: 76px; }
   .student-attendance-legend { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; }
   .student-fee-hero > button { width: 100%; }
-  .student-id-body { grid-template-columns: 1fr; padding: 22px; }
-  .student-id-avatar { width: 100%; height: 110px; }
-  .student-id-body dl { grid-template-columns: 1fr; }
-  .student-digital-id footer { align-items: flex-start; flex-direction: column; }
+  .student-id-header { align-items: flex-start; flex-wrap: wrap; padding: 16px; }
+  .student-id-header .student-status { margin-left: 54px; }
+  .student-id-body { grid-template-columns: 104px minmax(0, 1fr); align-items: start; gap: 16px; padding: 20px 16px; }
+  .student-id-avatar { width: 104px; }
+  .student-id-body dl { grid-template-columns: 1fr; gap: 10px; margin-top: 16px; }
+  .student-digital-id footer { align-items: flex-start; flex-direction: column; padding: 14px 16px; }
+  .student-digital-id footer strong { max-width: 100%; }
+  .student-digital-id footer p { text-align: left; }
   .student-calendar-list article { align-items: flex-start; }
   .student-calendar-list time { display: none; }
   .student-digital-calendar > header { align-items: flex-start; flex-direction: column; }
@@ -681,6 +704,12 @@
   .student-syllabus-list .student-status { grid-column: 2; }
   .student-result-file { align-items: stretch; flex-direction: column; }
   .student-result-file > a { width: 100%; justify-content: center; }
+}
+
+@media (max-width: 440px) {
+  .student-id-body { grid-template-columns: 1fr; }
+  .student-id-avatar { width: 104px; }
+  .student-id-body dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) {

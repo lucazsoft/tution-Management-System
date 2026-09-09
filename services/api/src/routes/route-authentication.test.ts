@@ -10,6 +10,8 @@ const routeMethods = new Set(['get', 'post', 'put', 'patch', 'delete']);
 // establish authentication, are static assets, or authenticate a provider by
 // a signed callback payload instead of an application session.
 const publicRoutes = new Set([
+  'mobile-recovery.ts:POST /send',
+  'mobile-recovery.ts:POST /confirm',
   'auth.ts:POST /forgot-password',
   'auth.ts:POST /verify-reset-otp',
   'auth.ts:POST /reset-password',

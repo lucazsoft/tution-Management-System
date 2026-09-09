@@ -14,6 +14,7 @@ export interface AuthUser {
   email: string;
   name: string;
   role: UserRole;
+  roles?: { roleName: string; branchId: string | null }[];
   avatar?: string;
   firstLogin?: boolean;
   requiresTwoFactor?: boolean;

@@ -61,8 +61,7 @@ export const auth = betterAuth({
   },
   plugins: [
     twoFactor({
-      // TMS currently supports the existing email-delivered OTP flow. The
-      // plugin discards the password-created session until that OTP is proven.
+      // Email identifies the account; the OTP is delivered to its verified mobile.
       totpOptions: { disable: true },
       otpOptions: {
         period: 5,

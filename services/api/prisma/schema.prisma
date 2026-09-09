@@ -144,6 +144,43 @@ enum AdmissionLoginRecipient {
 }
 
 // Client tenant onboarding request flow (Super Admin reviews, then manually provisions)
+model MobileRecovery {
+  id                String   @id @default(uuid())
+  userId            String
+  tenantId          String
+  tokenHash         String   @unique
+  newPhone          String
+  oldPhone          String
+  accountUpdatedAt  DateTime
+  credentialHash    String
+  reviewer          String
+  reviewReference   String
+  approvedAt        DateTime @default(now())
+  expiresAt         DateTime
+  consumedAt        DateTime?
+  revokedAt         DateTime?
+  codeHash          String?
+  codeExpiresAt     DateTime?
+  attempts          Int      @default(0)
+  sends             Int      @default(0)
+  lastSentAt        DateTime?
+
+  @@index([userId, consumedAt])
+}
+
+model RecoverySmsNotice {
+  id         String   @id @default(uuid())
+  recoveryId String
+  recipient  String
+  message    String
+  acceptedAt DateTime?
+  leaseUntil DateTime?
+  attempts   Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@unique([recoveryId, recipient])
+}
+
 model TenantRequest {
   id        String   @id @default(uuid())
   name      String
@@ -201,6 +238,7 @@ model Tenant {
   studentScores             StudentScore[]
   admissionLoginDeliveries  AdmissionLoginDelivery[]
   branchPaymentSettings     BranchPaymentSettings[]
+  mediaObjects              MediaObject[]
 }
 
 // 2. Branch / Center
@@ -233,6 +271,7 @@ model Branch {
   expenses           Expense[]
   invoices           Invoice[]
   paymentAttempts    PaymentAttempt[]
+  mediaObjects       MediaObject[]
   payrolls           Payroll[]
 }
 
@@ -258,6 +297,8 @@ model User {
   firstName                String
   lastName                 String
   phone                    String
+  securityMobile           String?
+  securityMobileVerifiedAt DateTime?
   status                   UserStatus               @default(ACTIVE)
   createdAt                DateTime                 @default(now())
   updatedAt                DateTime                 @updatedAt
@@ -1353,4 +1394,29 @@ model BranchPaymentSettings {
   
   @@index([tenantId])
   @@index([branchId, tenantId])
+}
+
+model MediaObject {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branchId    String?
+  branch      Branch?   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  category    String
+  ownerType   String
+  ownerId     String
+  objectKey   String    @unique
+  mimeType    String
+  byteSize    Int
+  sha256      String
+  width       Int?
+  height      Int?
+  status      String    @default("ACTIVE")
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  replacedAt  DateTime?
+  deletedAt   DateTime?
+
+  @@index([tenantId, category, ownerType, ownerId, status])
+  @@index([tenantId, branchId, category])
 }

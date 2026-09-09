@@ -30,6 +30,27 @@ class StudentFeesRepository {
 
   final Dio _dio;
 
+  /// Payment instructions are scoped by the authorized invoice's branch.
+  Future<Map<String, dynamic>> fetchPaymentSettings(String invoiceId) async {
+    for (var attempt = 0; ; attempt++) {
+      try {
+        final response = await _dio.get<Map<String, dynamic>>(
+          '/api/finances/invoices/${Uri.encodeComponent(invoiceId)}/payment-settings',
+        );
+        return response.data ?? const {};
+      } on DioException catch (error) {
+        if (attempt >= 2 || ![
+          DioExceptionType.connectionError,
+          DioExceptionType.connectionTimeout,
+          DioExceptionType.receiveTimeout,
+        ].contains(error.type)) {
+          throw ApiException.from(error);
+        }
+        await Future<void>.delayed(Duration(milliseconds: 300 * (1 << attempt)));
+      }
+    }
+  }
+
   List<ApiStudentInvoice> _cache = const [];
   String? _enrollmentId;
 

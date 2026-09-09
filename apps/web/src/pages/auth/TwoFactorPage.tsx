@@ -9,7 +9,6 @@ import {
   resendTwoFactorChallenge,
   verifyTwoFactorChallenge,
 } from '../../features/auth/service';
-import { maskEmail } from '../../features/auth/utils';
 
 const TWO_FACTOR_DURATION_SECONDS = 5 * 60;
 
@@ -24,7 +23,7 @@ export function TwoFactorPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
 
-  const destinationHint = user ? maskEmail(user.email) : 'your registered contact';
+  const destinationHint = 'your verified security mobile';
   const isOtpFilled = otp.every((digit) => digit.length === 1);
 
   const handleVerify = async (otpValue: string) => {
@@ -90,7 +89,7 @@ export function TwoFactorPage() {
         <div className="auth-step-shell">
           <div className="auth-form-heading">
             <h1 className="auth-form-title">Two-Factor Authentication</h1>
-            <p className="auth-form-subtitle">A verification code has been sent to your phone/email.</p>
+            <p className="auth-form-subtitle">A verification code has been sent by SMS.</p>
           </div>
 
           <div className="auth-otp-message">Delivery target: {destinationHint}</div>

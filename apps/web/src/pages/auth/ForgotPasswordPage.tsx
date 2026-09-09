@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CountdownTimer } from '../../components/ui/CountdownTimer';
 import { OTPInput } from '../../components/ui/OTPInput';
@@ -9,7 +9,7 @@ import {
   resendPasswordResetOtp,
   verifyPasswordResetOtp,
 } from '../../features/auth/service';
-import { isValidEmailAddress, maskEmail } from '../../features/auth/utils';
+import { isValidEmailAddress } from '../../features/auth/utils';
 
 type ForgotPasswordStep = 'email' | 'otp';
 
@@ -40,7 +40,6 @@ export function ForgotPasswordPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [timerKey, setTimerKey] = useState(0);
 
-  const maskedEmail = useMemo(() => maskEmail(email), [email]);
   const isOtpFilled = otp.every((digit) => digit.length === 1);
 
   const handleEmailBlur = () => {
@@ -68,7 +67,7 @@ export function ForgotPasswordPage() {
       setOtpExpired(false);
       setTimerKey((current) => current + 1);
       setStep('otp');
-      showToast('We sent a 6-digit OTP to your registered email.', 'success');
+      showToast('If the account can use SMS recovery, a 6-digit code was sent to its verified security mobile.', 'success');
     } catch (error) {
       const message =
         error instanceof AuthFlowError ? error.message : 'Unable to send the OTP right now. Please try again.';
@@ -129,12 +128,13 @@ export function ForgotPasswordPage() {
           </span>
           Back to Sign In
         </Link>
+        <p><Link to="/recover-mobile">Lost access to your security mobile?</Link></p>
 
         {step === 'email' ? (
           <div className="auth-step-shell" data-step="email">
             <div className="auth-form-heading">
               <h1 className="auth-form-title">Forgot Password?</h1>
-              <p className="auth-form-subtitle">Enter your registered email and we&apos;ll send you an OTP.</p>
+              <p className="auth-form-subtitle">Enter your login email. The reset code is sent by SMS to your verified security mobile.</p>
             </div>
 
             <form className="auth-form" onSubmit={handleSendOtp} noValidate>
@@ -181,7 +181,7 @@ export function ForgotPasswordPage() {
           <div className="auth-step-shell" data-step="otp">
             <div className="auth-form-heading">
               <h1 className="auth-form-title">Verify OTP</h1>
-              <p className="auth-form-subtitle">We sent a 6-digit code to {maskedEmail}.</p>
+              <p className="auth-form-subtitle">If eligible, we sent a 6-digit SMS code to the account&apos;s verified security mobile.</p>
             </div>
 
             <div className="auth-otp-message">

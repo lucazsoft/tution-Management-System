@@ -5,6 +5,8 @@ import type { AuthUser } from '../features/auth/types';
 import { authClient } from '../features/auth/auth-client';
 
 interface AuthContextValue {
+  updateDisplayName: (name: string) => void;
+  isTenantAdmin: () => boolean;
   user: AuthUser | null;
   // Kept as a compatibility field for consumers; Better Auth uses an httpOnly cookie.
   token: string | null;
@@ -33,6 +35,7 @@ function mapSessionUser(sessionUser: any): AuthUser {
 
   return {
     id: sessionUser.id,
+    roles: roles.map((entry: any) => ({ roleName: entry.roleName, branchId: entry.branchId })),
     email: sessionUser.email,
     name: sessionUser.name || sessionUser.email,
     role: roleName.toUpperCase().replace(/\s+/g, '_') as AuthUser['role'],
@@ -194,6 +197,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(() => ({
+    updateDisplayName: (name: string) => setUser(current => { const next = current ? { ...current, name } : null; cacheUser(next); return next; }),
+    isTenantAdmin: () => Boolean(user?.roles?.some(role => role.roleName === 'Tenant Admin' && role.branchId === null)),
     user,
     token: null,
     isLoading,

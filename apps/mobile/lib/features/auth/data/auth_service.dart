@@ -147,7 +147,7 @@ class AuthService {
     }
   }
 
-  /// Request a password-reset OTP to be sent to [email].
+  /// Use [email] to locate the account; delivery goes to its verified mobile.
   static Future<void> sendPasswordOtp(String email) async {
     final normalized = email.trim().toLowerCase();
     if (MockAuthService.demoUsers.containsKey(normalized)) {
@@ -172,9 +172,7 @@ class AuthService {
     required String otp,
   }) async {
     final normalized = email.trim().toLowerCase();
-    if (MockAuthService.demoUsers.containsKey(normalized) ||
-        otp == MockAuthService.forgotPasswordOtp ||
-        otp == '123456') {
+    if (MockAuthService.demoUsers.containsKey(normalized)) {
       await MockAuthService.verifyPasswordOtp(otp);
       return 'mock-reset-token-${DateTime.now().millisecondsSinceEpoch}';
     }
@@ -243,7 +241,7 @@ class AuthService {
     }
   }
 
-  /// Request a 2FA verification code for [email].
+  /// Request a 2FA code sent to the account's verified security mobile.
   static Future<void> sendTwoFactorCode(String email) async {
     final normalized = email.trim().toLowerCase();
     if (MockAuthService.demoUsers.containsKey(normalized)) {
@@ -253,8 +251,8 @@ class AuthService {
 
     try {
       await _dio.post(
-        '/api/auth/2fa/request',
-        data: {'email': normalized},
+        '/api/auth/two-factor/send-otp',
+        data: const {},
       );
     } on DioException catch (e) {
       throw AuthFailure(
@@ -268,18 +266,15 @@ class AuthService {
     required String code,
   }) async {
     final normalized = email.trim().toLowerCase();
-    if (MockAuthService.demoUsers.containsKey(normalized) ||
-        code == MockAuthService.twoFactorOtp ||
-        code == '123456') {
+    if (MockAuthService.demoUsers.containsKey(normalized)) {
       await MockAuthService.verifyTwoFactorCode(code);
       return;
     }
 
     try {
       await _dio.post(
-        '/api/auth/2fa/verify',
+          '/api/auth/two-factor/verify-otp',
         data: {
-          'email': normalized,
           'code': code.trim(),
         },
       );

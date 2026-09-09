@@ -9,7 +9,7 @@ import {
   type StudentPortalDataset,
   type SubjectInsight,
 } from '../features/student/studentPortalData';
-import { loadNepalPayPayload, loadStudentPortal, studentFileUrl } from '../features/student/studentPortalService';
+import { loadStudentPortal, studentFileUrl } from '../features/student/studentPortalService';
 import { errorMessage } from '../services/api/client';
 import { ChangePasswordForm } from '../components/ChangePasswordForm';
 import { toDualDateLabel } from '../utils/nepaliDate';
@@ -311,7 +311,7 @@ function FeesView() {
         <section className="student-card"><SectionHeader title={`${current.cycle} invoice`} description="Current billing-cycle breakdown." /><div className="student-invoice-lines">{current.lines.map((line) => <div key={line.label}><span>{line.label}</span><strong className={line.amount < 0 ? 'is-discount' : ''}>{line.amount < 0 ? '−' : ''}{money(line.amount)}</strong></div>)}<div className="student-invoice-total"><span>Net payable</span><strong>{money(total)}</strong></div></div></section>
         <aside className="student-card student-payment-help">{icon('verified_user')}<h3>Before you pay</h3><p>Confirm the merchant name, invoice reference, and exact amount in your payment app.</p><dl><div><dt>Invoice reference</dt><dd>{current.paymentReference ?? current.id}</dd></div><div><dt>Due date</dt><dd>{toDualDateLabel(current.dueDate)}</dd></div><div><dt>Amount</dt><dd>{money(total)}</dd></div></dl></aside>
       </div>
-      {showQr ? <PaymentCheckoutDialog invoiceId={current.id} payerName={studentProfile.name} description={`${current.cycle} · ${current.paymentReference ?? current.id}`} amount={total} loadDynamicQr={() => loadNepalPayPayload(current.id)} onClose={() => setShowQr(false)} /> : null}
+      {showQr ? <PaymentCheckoutDialog invoiceId={current.id} payerName={studentProfile.name} description={`${current.cycle} · ${current.paymentReference ?? current.id}`} amount={total} onClose={() => setShowQr(false)} /> : null}
       {bill ? <InvoiceDocumentDialog data={bill.document} onClose={() => setBill(null)} onPay={bill.state === 'Paid' ? undefined : () => { setBill(null); setShowQr(true); }} /> : null}
     </div>
   );
@@ -319,16 +319,39 @@ function FeesView() {
 
 function DigitalIdView() {
   const { studentProfile } = useStudentData();
+  const statusLabel = studentProfile.blocked ? 'Access restricted' : 'Active enrollment';
   return (
     <div className="student-view student-id-layout">
       <section className="student-digital-id" aria-label="Digital student identification card">
-        <header>{icon('school')}<div><strong>{studentProfile.institution}</strong><span>{studentProfile.branch}{studentProfile.branchAddress ? ` · ${studentProfile.branchAddress}` : ''}</span></div><StatusPill label={studentProfile.blocked ? 'Blocked' : 'Active'} iconName={studentProfile.blocked ? 'lock' : 'verified'} tone={studentProfile.blocked ? 'error' : 'success'} /></header>
-        <div className="student-id-body"><div className="student-id-avatar">{studentProfile.initials}</div><div><span className="student-eyebrow">STUDENT</span><h2>{studentProfile.name}</h2><p>{studentProfile.grade} · Roll no. {studentProfile.rollNumber}</p><dl><div><dt>Enrollment ID</dt><dd>{studentProfile.enrollmentId}</dd></div><div><dt>Academic year</dt><dd>{studentProfile.academicYear}</dd></div><div><dt>Valid until</dt><dd>{studentProfile.validUntil}</dd></div></dl></div></div>
-        <footer><div className="student-barcode" aria-hidden="true" /><span>Present this ID for identification at your branch.</span></footer>
+        <header className="student-id-header">
+          <span className="student-id-mark" aria-hidden="true">{icon('school')}</span>
+          <div><strong>{studentProfile.institution}</strong><span>Official student identification</span></div>
+          <StatusPill label={statusLabel} iconName={studentProfile.blocked ? 'lock' : 'verified'} tone={studentProfile.blocked ? 'error' : 'success'} />
+        </header>
+        <div className="student-id-body">
+          <div className={`student-id-avatar${studentProfile.photoUrl ? ' has-photo' : ''}`}>{studentProfile.photoUrl ? <img src={studentProfile.photoUrl} alt={`${studentProfile.name} profile`} /> : <><strong>{studentProfile.initials}</strong><small>Photo pending</small></>}</div>
+          <div className="student-id-identity">
+            <span className="student-eyebrow">STUDENT</span>
+            <h2>{studentProfile.name}</h2>
+            <p className="student-id-branch">{icon('location_on')}<span>{studentProfile.branch}{studentProfile.branchAddress ? ` · ${studentProfile.branchAddress}` : ''}</span></p>
+            <dl>
+              <div><dt>Grade</dt><dd>{studentProfile.grade}</dd></div>
+              <div><dt>Roll number</dt><dd>{studentProfile.rollNumber}</dd></div>
+              <div><dt>Academic year</dt><dd>{studentProfile.academicYear}</dd></div>
+              <div><dt>Valid until</dt><dd>{studentProfile.validUntil}</dd></div>
+            </dl>
+          </div>
+        </div>
+        <footer><div><span>Enrollment ID</span><strong>{studentProfile.enrollmentId}</strong></div><p>{icon('verified_user')}Verified from the institution’s live enrollment record</p></footer>
       </section>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <aside className="student-card student-id-help">{icon('badge')}<h2>Branch identification</h2><p>This digital ID confirms your current enrollment. It is read-only and cannot be edited from the student portal.</p>{studentProfile.blocked ? <div className="student-warning-note">{icon('lock')}Fee dues have blocked the account. Identification remains visible.</div> : null}</aside>
-      </div>
+      <aside className="student-card student-id-help">
+        <span className="student-icon-box student-icon-box--info" aria-hidden="true">{icon('badge')}</span>
+        <h2>Using your Digital ID</h2>
+        <p>Show this card when your branch asks for student identification. Its details update from your current enrollment.</p>
+        <ul><li>{icon('visibility')}View only—students cannot edit this card.</li><li>{icon('sync')}Reopen this section to load current details.</li><li>{icon('shield_lock')}Your photo is stored privately.</li></ul>
+        {!studentProfile.photoUrl ? <div className="student-id-photo-note">{icon('person')}Your branch can add an official student photo.</div> : null}
+        {studentProfile.blocked ? <div className="student-warning-note">{icon('lock')}Account access is restricted. The ID remains visible for identification.</div> : null}
+      </aside>
     </div>
   );
 }
