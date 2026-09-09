@@ -449,6 +449,7 @@ With the assumptions above, a credible **Teacher/Student/Parent MVP is 7–8 wee
 - [ ] **Task P4.2: Automated Social Media Publishing**
   - [ ] Sub-task P4.2.1: Connect Meta (Facebook/Instagram), TikTok, and LinkedIn API webhooks.
   - [ ] Sub-task P4.2.2: Auto-publish approved social posts on configured schedule times.
+  - **Implemented foundation:** Tenant Admins can schedule an existing `APPROVED` post with `POST /api/social/posts/:id/schedule`; `POST /api/cron/trigger` with `taskName: "social-publishing"` atomically claims due tenant-scoped posts and persists attempts. The current explicit Meta, TikTok, and LinkedIn adapters block with an audited `BLOCKED` status because credentialed provider clients are not configured; they never report fabricated publication.
   - **Verification:** Schedule post and verify automated broadcast to connected Meta test page.
 
 ---
