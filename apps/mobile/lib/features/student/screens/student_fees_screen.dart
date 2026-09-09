@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -161,7 +162,6 @@ class StudentFeesScreen extends ConsumerWidget {
     );
   }
 
-<<<<<<< HEAD
   static void _showQr(
     BuildContext context,
     NepalPayQr qr,
@@ -245,8 +245,6 @@ class NepalPayQrSheet extends StatelessWidget {
       ),
     );
   }
-=======
->>>>>>> 098eb48f17beed38cc61a89d5bb59465519d5988
 }
 
 class _MessageBody extends StatelessWidget {
