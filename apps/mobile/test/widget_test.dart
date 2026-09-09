@@ -8,10 +8,14 @@ void main() {
   GoogleFonts.config.allowRuntimeFetching = false;
 
   testWidgets('shows login screen by default', (tester) async {
-      await tester.pumpWidget(const ProviderScope(child: TMSApp()));
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(const ProviderScope(child: TMSApp()));
+    await tester.pumpAndSettle();
 
-      expect(find.text('Tuition Management System'), findsOneWidget);
-      expect(find.text('Sign In'), findsOneWidget);
-    });
+    expect(find.text('Welcome Back'), findsOneWidget);
+    expect(
+      find.text('Sign in to your Tuition Management account'),
+      findsOneWidget,
+    );
+    expect(find.text('Sign In'), findsOneWidget);
+  });
 }
