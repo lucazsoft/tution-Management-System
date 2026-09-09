@@ -88,6 +88,7 @@ export const DASHBOARD_NAVIGATION: Record<DashboardRole, DashboardNavItem[]> = {
     { section: 'Classroom', label: 'Daily Update Log', icon: 'note_alt', path: '/teacher/daily-update-log' },
     { section: 'Classroom', label: 'Homework', icon: 'assignment', path: '/teacher/homework' },
     { section: 'Classroom', label: 'Results', icon: 'task', path: '/teacher/results' },
+    { section: 'Personal', label: 'My account', icon: 'account_circle', path: '/teacher/account' },
     { section: 'Personal', label: 'My Profile', icon: 'person', path: '/teacher/profile' },
     { section: 'Personal', label: 'Leave Requests', icon: 'time_to_leave', path: '/teacher/leave-requests' },
     { section: 'Personal', label: 'Salary Slips', icon: 'receipt_long', path: '/teacher/salary-slips' },

@@ -9,6 +9,8 @@ export interface NavItem {
 }
 
 export interface PageShellProps {
+  accountPath?: string;
+  securityPath?: string;
   title: string;
   subtitle?: string;
   userRole: string;
@@ -21,6 +23,8 @@ export interface PageShellProps {
 }
 
 export function PageShell({
+  accountPath,
+  securityPath,
   title,
   subtitle,
   userRole,
@@ -233,13 +237,13 @@ export function PageShell({
                   <p className="dropdown-user-role">{userRole.replace('_', ' ')}</p>
                 </div>
                 <div className="dropdown-divider" />
-                <button className="dropdown-item-btn" onClick={() => { handleNavClick('/profile'); setShowUserMenu(false); }}>
+                <button className="dropdown-item-btn" onClick={() => { handleNavClick(accountPath ?? '/profile'); setShowUserMenu(false); }}>
                   <span className="material-symbols-outlined">person</span>
-                  My Profile
+                  {accountPath ? 'My account' : 'My Profile'}
                 </button>
-                <button className="dropdown-item-btn" onClick={() => { handleNavClick('/settings'); setShowUserMenu(false); }}>
+                <button className="dropdown-item-btn" onClick={() => { handleNavClick(securityPath ?? '/settings'); setShowUserMenu(false); }}>
                   <span className="material-symbols-outlined">settings</span>
-                  Settings
+                  {securityPath ? 'Security' : 'Settings'}
                 </button>
                 <div className="dropdown-divider" />
                 <button className="dropdown-item-btn text-danger" onClick={onLogout}>

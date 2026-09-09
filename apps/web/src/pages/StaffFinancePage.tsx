@@ -1,3 +1,4 @@
+import { accountantNavItems } from '../components/patterns/accountantNavigation';
 import { AcademicCalendarView } from '../components/calendar/AcademicCalendarView';
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -25,16 +26,7 @@ const createCashLine = (item?: PettyCash['items'][number]): CashLine => ({
   unitAmount: item ? String(item.unitAmount) : '',
 });
 
-const accountantNavItems = [
-  { section: 'FINANCE' as const, label: 'Academic calendar', icon: 'calendar_month', path: '/staff/finance#calendar' },
-  { section: 'FINANCE' as const, label: 'Overview', icon: 'space_dashboard', path: '/staff/finance#overview' },
-  { section: 'FINANCE' as const, label: 'Petty cash', icon: 'account_balance_wallet', path: '/staff/finance#petty-cash' },
-  { section: 'FINANCE' as const, label: 'Fee & billing', icon: 'payments', path: '/staff/finance#billing' },
-  { section: 'FINANCE' as const, label: 'Payroll', icon: 'receipt_long', path: '/staff/finance#payroll' },
-  { section: 'FINANCE' as const, label: 'Payment requests', icon: 'fact_check', path: '/staff/finance#payments' },
-  { section: 'FINANCE' as const, label: 'Reports', icon: 'analytics', path: '/staff/finance#reports' },
-  { section: 'SETTINGS' as const, label: 'Security', icon: 'security', path: '/staff/finance#security' },
-];
+
 
 const money = (value: number) => `NPR ${Number(value || 0).toLocaleString('en-NP')}`;
 const dateLabel = (value: string) => new Intl.DateTimeFormat('en-NP', { dateStyle: 'medium' }).format(new Date(value));
@@ -251,7 +243,7 @@ export function StaffFinancePage() {
       {tab === 'security' && <><section className="accountant-section-head"><div><span className="accountant-eyebrow">Account</span><h2>Security Settings</h2><p>Manage your account password and security settings.</p></div></section><ChangePasswordForm className="accountant-panel" /></>}
     </>;
 
-  return <PageShell title="Accountant Workspace" subtitle="Branch finance, billing and controlled petty cash." userRole={user?.role ?? 'ACCOUNTANT'} userName={user?.name ?? 'Signed-in user'} onLogout={logout} navItems={accountantNavItems} defaultSidebarCollapsed><div className="accountant-page">{body}</div>
+  return <PageShell accountPath="/staff/account" securityPath="/staff/security" title="Accountant Workspace" subtitle="Branch finance, billing and controlled petty cash." userRole={user?.role ?? 'ACCOUNTANT'} userName={user?.name ?? 'Signed-in user'} onLogout={logout} navItems={accountantNavItems} defaultSidebarCollapsed><div className="accountant-page">{body}</div>
     {cashDialog && <Modal title={cashDialog === 'new' ? 'New petty cash request' : `Revise ${cashDialog.id.slice(0, 8)}`} description="List each required item. The calculated total is sent through the two-level approval record." onClose={() => setCashDialog(null)}>
       <form className="accountant-form" onSubmit={submitCash} noValidate>
         <label htmlFor="cash-branch">Branch <span aria-hidden="true">*</span>
