@@ -1,10 +1,11 @@
-import { Selector } from 'testcafe';
+import { ClientFunction, Selector } from 'testcafe';
 
 fixture `TMS Student Live Portal`
   .page `http://localhost:5173/login`;
 
 const studentEmail = process.env.TMS_STUDENT_EMAIL;
 const studentPassword = process.env.TMS_STUDENT_PASSWORD;
+const hasHorizontalOverflow = ClientFunction(() => document.documentElement.scrollWidth > window.innerWidth);
 
 test('Student portal is account-scoped, live, responsive, and theme-aware', async t => {
   if (!studentEmail || !studentPassword) {
@@ -38,5 +39,14 @@ test('Student portal is account-scoped, live, responsive, and theme-aware', asyn
     .resizeWindow(375, 812)
     .navigateTo('http://localhost:5173/student/digital-id')
     .expect(Selector('.student-digital-id').withText('Anisha Poudel').exists).ok()
-    .expect(Selector('.student-digital-id').withText('Pinnacle Demo Academy').exists).ok();
+    .expect(Selector('.student-digital-id').withText('Pinnacle Demo Academy').exists).ok()
+    .expect(Selector('.student-digital-id').withText('Official student identification').exists).ok()
+    .expect(Selector('.student-digital-id').withText('Enrollment ID').exists).ok()
+    .expect(hasHorizontalOverflow()).notOk();
+
+  await t
+    .resizeWindow(768, 900)
+    .expect(hasHorizontalOverflow()).notOk()
+    .resizeWindow(1280, 900)
+    .expect(hasHorizontalOverflow()).notOk();
 });

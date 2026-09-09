@@ -101,6 +101,8 @@ export function UserProfileDrawer({ userId, onClose, onChanged }: UserProfileDra
   const [tempPassword, setTempPassword] = useState('');
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceDocumentData | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState('');
+  const [confirmPhotoRemoval, setConfirmPhotoRemoval] = useState(false);
 
   const openEnroll = async () => {
     setEnrollOpen(true);
@@ -214,9 +216,10 @@ export function UserProfileDrawer({ userId, onClose, onChanged }: UserProfileDra
     const studentId = profile?.detail.student?.studentId;
     if (!studentId) return;
     if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 5_000_000) {
-      showToast('Choose a PNG, JPEG, or WebP photo under 5 MB.', 'error');
+      setPhotoError('Choose a PNG, JPEG, or WebP photo under 5 MB.');
       return;
     }
+    setPhotoError('');
     setPhotoBusy(true);
     try {
       const image = await new Promise<string>((resolve, reject) => {
@@ -230,7 +233,9 @@ export function UserProfileDrawer({ userId, onClose, onChanged }: UserProfileDra
       showToast('Student photo updated.', 'success');
       onChanged?.();
     } catch (error: unknown) {
-      showToast(error instanceof Error ? error.message : 'Failed to update the student photo.', 'error');
+      const message = error instanceof Error ? error.message : 'Failed to update the student photo.';
+      setPhotoError(message);
+      showToast(message, 'error');
     } finally {
       setPhotoBusy(false);
     }
@@ -238,15 +243,19 @@ export function UserProfileDrawer({ userId, onClose, onChanged }: UserProfileDra
 
   const removeStudentPhoto = async () => {
     const studentId = profile?.detail.student?.studentId;
-    if (!studentId || !window.confirm('Remove this student photo from the profile and Digital ID?')) return;
+    if (!studentId) return;
     setPhotoBusy(true);
+    setPhotoError('');
     try {
       await api.people.removeStudentPhoto(studentId);
       setProfile((current) => current ? { ...current, photoUrl: null } : current);
+      setConfirmPhotoRemoval(false);
       showToast('Student photo removed.', 'success');
       onChanged?.();
     } catch (error: unknown) {
-      showToast(error instanceof Error ? error.message : 'Failed to remove the student photo.', 'error');
+      const message = error instanceof Error ? error.message : 'Failed to remove the student photo.';
+      setPhotoError(message);
+      showToast(message, 'error');
     } finally {
       setPhotoBusy(false);
     }
@@ -321,16 +330,18 @@ export function UserProfileDrawer({ userId, onClose, onChanged }: UserProfileDra
           ) : profile ? (
             <>
             {profile.detail.student ? (
-              <div className="student-photo-editor" aria-busy={photoBusy}>
-                <div><strong>Student photo</strong><span>Used on the student profile and Digital ID.</span></div>
+              <section className="student-photo-editor" aria-busy={photoBusy} aria-labelledby="student-photo-title">
+                <div className={`student-photo-preview${profile.photoUrl ? ' has-photo' : ''}`} aria-hidden="true">{profile.photoUrl ? <img src={profile.photoUrl} alt="" /> : initials(profile.name)}</div>
+                <div className="student-photo-editor__copy"><strong id="student-photo-title">Official student photo</strong><span>Shown on the profile and Digital ID. PNG, JPEG, or WebP · 5 MB maximum.</span>{photoError ? <p role="alert">{photoError}</p> : null}</div>
                 <div className="student-photo-editor__actions">
                   <label className="student-photo-upload">
                     {photoBusy ? 'Uploading…' : profile.photoUrl ? 'Replace photo' : 'Add photo'}
                     <input type="file" accept="image/png,image/jpeg,image/webp" disabled={photoBusy} onChange={(event) => { const file = event.target.files?.[0]; if (file) void updateStudentPhoto(file); event.currentTarget.value = ''; }} />
                   </label>
-                  {profile.photoUrl ? <Button variant="outline" disabled={photoBusy} onClick={() => void removeStudentPhoto()}>Remove</Button> : null}
+                  {profile.photoUrl ? <Button variant="outline" disabled={photoBusy} onClick={() => setConfirmPhotoRemoval(true)}>Remove</Button> : null}
                 </div>
-              </div>
+                {confirmPhotoRemoval ? <div className="student-photo-confirm" role="alert"><span>Remove this photo from the profile and Digital ID?</span><div><Button variant="danger" disabled={photoBusy} onClick={() => void removeStudentPhoto()}>Remove photo</Button><Button variant="outline" disabled={photoBusy} onClick={() => setConfirmPhotoRemoval(false)}>Keep photo</Button></div></div> : null}
+              </section>
             ) : null}
             {hasStudentDetail(profile) ? (
               <StudentProfileDrawerContent

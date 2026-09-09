@@ -319,16 +319,39 @@ function FeesView() {
 
 function DigitalIdView() {
   const { studentProfile } = useStudentData();
+  const statusLabel = studentProfile.blocked ? 'Access restricted' : 'Active enrollment';
   return (
     <div className="student-view student-id-layout">
       <section className="student-digital-id" aria-label="Digital student identification card">
-        <header>{icon('school')}<div><strong>{studentProfile.institution}</strong><span>{studentProfile.branch}{studentProfile.branchAddress ? ` · ${studentProfile.branchAddress}` : ''}</span></div><StatusPill label={studentProfile.blocked ? 'Blocked' : 'Active'} iconName={studentProfile.blocked ? 'lock' : 'verified'} tone={studentProfile.blocked ? 'error' : 'success'} /></header>
-        <div className="student-id-body"><div className={`student-id-avatar${studentProfile.photoUrl ? ' has-photo' : ''}`}>{studentProfile.photoUrl ? <img src={studentProfile.photoUrl} alt={`${studentProfile.name} student ID`} /> : studentProfile.initials}</div><div><span className="student-eyebrow">STUDENT</span><h2>{studentProfile.name}</h2><p>{studentProfile.grade} · Roll no. {studentProfile.rollNumber}</p><dl><div><dt>Enrollment ID</dt><dd>{studentProfile.enrollmentId}</dd></div><div><dt>Academic year</dt><dd>{studentProfile.academicYear}</dd></div><div><dt>Valid until</dt><dd>{studentProfile.validUntil}</dd></div></dl></div></div>
-        <footer><div className="student-barcode" aria-hidden="true" /><span>Present this ID for identification at your branch.</span></footer>
+        <header className="student-id-header">
+          <span className="student-id-mark" aria-hidden="true">{icon('school')}</span>
+          <div><strong>{studentProfile.institution}</strong><span>Official student identification</span></div>
+          <StatusPill label={statusLabel} iconName={studentProfile.blocked ? 'lock' : 'verified'} tone={studentProfile.blocked ? 'error' : 'success'} />
+        </header>
+        <div className="student-id-body">
+          <div className={`student-id-avatar${studentProfile.photoUrl ? ' has-photo' : ''}`}>{studentProfile.photoUrl ? <img src={studentProfile.photoUrl} alt={`${studentProfile.name} profile`} /> : <><strong>{studentProfile.initials}</strong><small>Photo pending</small></>}</div>
+          <div className="student-id-identity">
+            <span className="student-eyebrow">STUDENT</span>
+            <h2>{studentProfile.name}</h2>
+            <p className="student-id-branch">{icon('location_on')}<span>{studentProfile.branch}{studentProfile.branchAddress ? ` · ${studentProfile.branchAddress}` : ''}</span></p>
+            <dl>
+              <div><dt>Grade</dt><dd>{studentProfile.grade}</dd></div>
+              <div><dt>Roll number</dt><dd>{studentProfile.rollNumber}</dd></div>
+              <div><dt>Academic year</dt><dd>{studentProfile.academicYear}</dd></div>
+              <div><dt>Valid until</dt><dd>{studentProfile.validUntil}</dd></div>
+            </dl>
+          </div>
+        </div>
+        <footer><div><span>Enrollment ID</span><strong>{studentProfile.enrollmentId}</strong></div><p>{icon('verified_user')}Verified from the institution’s live enrollment record</p></footer>
       </section>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <aside className="student-card student-id-help">{icon('badge')}<h2>Branch identification</h2><p>This digital ID confirms your current enrollment. It is read-only and cannot be edited from the student portal.</p>{studentProfile.blocked ? <div className="student-warning-note">{icon('lock')}Fee dues have blocked the account. Identification remains visible.</div> : null}</aside>
-      </div>
+      <aside className="student-card student-id-help">
+        <span className="student-icon-box student-icon-box--info" aria-hidden="true">{icon('badge')}</span>
+        <h2>Using your Digital ID</h2>
+        <p>Show this card when your branch asks for student identification. Its details update from your current enrollment.</p>
+        <ul><li>{icon('visibility')}View only—students cannot edit this card.</li><li>{icon('sync')}Reopen this section to load current details.</li><li>{icon('shield_lock')}Your photo is stored privately.</li></ul>
+        {!studentProfile.photoUrl ? <div className="student-id-photo-note">{icon('person')}Your branch can add an official student photo.</div> : null}
+        {studentProfile.blocked ? <div className="student-warning-note">{icon('lock')}Account access is restricted. The ID remains visible for identification.</div> : null}
+      </aside>
     </div>
   );
 }

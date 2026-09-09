@@ -2330,15 +2330,22 @@ h1, h2, h3, h4 {
 }
 .people-avatar--photo { overflow: hidden; background: var(--color-bg); }
 .people-avatar--photo img { width: 100%; height: 100%; object-fit: cover; }
-.student-photo-editor { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; margin-bottom: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--color-bg); }
-.student-photo-editor > div:first-child { display: grid; gap: 3px; }
+.student-photo-editor { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 14px; margin-bottom: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--color-bg); }
+.student-photo-preview { width: 56px; aspect-ratio: 4 / 5; display: grid; place-items: center; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: var(--primary-gradient); color: #fff; font-size: 14px; font-weight: 800; }
+.student-photo-preview.has-photo { background: var(--color-surface); }
+.student-photo-preview img { width: 100%; height: 100%; object-fit: cover; }
+.student-photo-editor__copy { display: grid; min-width: 0; gap: 3px; }
 .student-photo-editor strong { font-size: 13px; }
 .student-photo-editor span { color: var(--text-muted); font-size: 12px; }
+.student-photo-editor__copy p { margin-top: 3px; color: var(--color-error); font-size: 12px; }
 .student-photo-editor__actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .student-photo-upload { display: inline-flex; min-height: 36px; align-items: center; padding: 0 14px; border-radius: var(--radius-sm); background: var(--color-primary); color: #fff; cursor: pointer; font-size: 13px; font-weight: 700; }
+.student-photo-upload:focus-within { outline: 3px solid var(--color-primary); outline-offset: 2px; }
 .student-photo-upload:has(input:disabled) { cursor: wait; opacity: .65; }
 .student-photo-upload input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-@media (max-width: 560px) { .student-photo-editor { align-items: flex-start; flex-direction: column; } }
+.student-photo-confirm { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.student-photo-confirm > div { display: flex; gap: 8px; }
+@media (max-width: 560px) { .student-photo-editor { grid-template-columns: 56px minmax(0, 1fr); align-items: start; } .student-photo-editor__actions { grid-column: 1 / -1; } .student-photo-confirm { align-items: flex-start; flex-direction: column; } }
 .people-person-name { font-size: 14px; font-weight: 600; color: var(--text); }
 .people-person-email { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
 
