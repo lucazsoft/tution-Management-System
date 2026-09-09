@@ -33,12 +33,12 @@ class ApiClient {
   /// The debug default targets the Android emulator. Release builds must
   /// provide an HTTPS endpoint explicitly; a package must never be released
   /// with an emulator URL or clear-text API traffic.
-  static const String _configuredBaseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: kDebugMode ? 'http://10.0.2.2:3001' : '',
-  );
-
-  static String get baseUrl => _configuredBaseUrl;
+  static String get baseUrl {
+    const fromEnv = String.fromEnvironment('API_BASE_URL');
+    if (fromEnv.isNotEmpty) return fromEnv;
+    if (kIsWeb) return 'http://localhost:3001';
+    return 'http://10.0.2.2:3001';
+  }
 
   static const String userKey = 'tms_auth_user';
   static const String tenantKey = 'tms_tenant_id';
@@ -55,7 +55,8 @@ class ApiClient {
   Future<void> init() async {
     if (_initialized) return;
 
-    final endpoint = Uri.tryParse(_configuredBaseUrl);
+    final currentBaseUrl = baseUrl;
+    final endpoint = Uri.tryParse(currentBaseUrl);
     if (endpoint == null || !endpoint.hasScheme || !endpoint.hasAuthority) {
       throw StateError(
         'API_BASE_URL must be an absolute URL. Provide it with --dart-define.',
@@ -65,7 +66,7 @@ class ApiClient {
       throw StateError('Release builds require an HTTPS API_BASE_URL.');
     }
 
-    dio = buildDio(baseUrl: _configuredBaseUrl);
+    dio = buildDio(baseUrl: currentBaseUrl);
 
     if (!kIsWeb) {
       // MOB-004: persist session cookies across restarts so the Better Auth

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -444,16 +445,14 @@ class _StudentFeesContent extends StatelessWidget {
                           color: _stateColor(invoice.state),
                           width: selected ? 2 : 1,
                         ),
-                        borderRadius:
-                            BorderRadius.circular(StudentRadius.card),
+                        borderRadius: BorderRadius.circular(StudentRadius.card),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(invoice.cycle,
-                              style:
-                                  Theme.of(context).textTheme.titleMedium),
+                              style: Theme.of(context).textTheme.titleMedium),
                           StudentStatusPill(
                             label: _stateLabel(invoice.state),
                             icon: _stateIcon(invoice.state),
@@ -496,17 +495,14 @@ class _StudentFeesContent extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text('Net payable',
-                              style:
-                                  Theme.of(context).textTheme.titleMedium),
+                              style: Theme.of(context).textTheme.titleMedium),
                         ),
                         Text(
                           'NPR ${current.netPayable.toStringAsFixed(0)}',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(
-                                color: StudentColors.primaryDark,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: StudentColors.primaryDark,
+                                  ),
                         ),
                       ],
                     ),
@@ -530,8 +526,8 @@ class _StudentFeesContent extends StatelessWidget {
                             ? const SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
                             : const Icon(Icons.qr_code_2_rounded),
                         label: Text(current.qrAvailable
@@ -551,8 +547,8 @@ class _StudentFeesContent extends StatelessWidget {
                             ? const SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
                             : const Icon(Icons.account_balance_rounded),
                         label: const Text('Pay with connectIPS'),
@@ -564,7 +560,7 @@ class _StudentFeesContent extends StatelessWidget {
             ),
             if (state.handoff != null) ...[
               const SizedBox(height: StudentSpace.sm),
-              _HandoffCard(
+              ConnectIpsHandoffCard(
                 handoff: state.handoff!,
                 isVerifying: state.isVerifying,
                 paymentOutcome: state.paymentOutcome,
@@ -599,24 +595,27 @@ class _StudentFeesContent extends StatelessWidget {
   }
 }
 
-class _HandoffCard extends StatefulWidget {
-  const _HandoffCard({
+class ConnectIpsHandoffCard extends StatefulWidget {
+  const ConnectIpsHandoffCard({
+    super.key,
     required this.handoff,
     required this.isVerifying,
     required this.paymentOutcome,
     required this.onConfirmReturn,
+    this.launchUrl = defaultGatewayLauncher,
   });
 
   final ConnectIpsHandoff handoff;
   final bool isVerifying;
   final PaymentOutcome paymentOutcome;
   final ValueChanged<String> onConfirmReturn;
+  final GatewayLauncher launchUrl;
 
   @override
-  State<_HandoffCard> createState() => _HandoffCardState();
+  State<ConnectIpsHandoffCard> createState() => ConnectIpsHandoffCardState();
 }
 
-class _HandoffCardState extends State<_HandoffCard> {
+class ConnectIpsHandoffCardState extends State<ConnectIpsHandoffCard> {
   late final TextEditingController _txnController;
 
   @override
@@ -626,7 +625,7 @@ class _HandoffCardState extends State<_HandoffCard> {
   }
 
   @override
-  void didUpdateWidget(covariant _HandoffCard oldWidget) {
+  void didUpdateWidget(covariant ConnectIpsHandoffCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.handoff.txnId != widget.handoff.txnId) {
       _txnController.text = widget.handoff.txnId;
@@ -637,6 +636,32 @@ class _HandoffCardState extends State<_HandoffCard> {
   void dispose() {
     _txnController.dispose();
     super.dispose();
+  }
+
+  Future<void> _openInBrowser(BuildContext context) async {
+    final uri = Uri.tryParse(widget.handoff.gatewayUrl);
+    if (uri == null || !uri.hasScheme) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not open the payment page. Copy the gateway URL instead.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    final launched = await widget.launchUrl(uri);
+    if (!launched && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not open the browser. Copy the gateway URL below.',
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -658,6 +683,15 @@ class _HandoffCardState extends State<_HandoffCard> {
             SelectableText('Gateway: ${widget.handoff.gatewayUrl}'),
             SelectableText('TXNID: ${widget.handoff.txnId}'),
             const SizedBox(height: StudentSpace.sm),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _openInBrowser(context),
+                icon: const Icon(Icons.open_in_browser_rounded),
+                label: const Text('Open in browser'),
+              ),
+            ),
+            const SizedBox(height: StudentSpace.sm),
             TextField(
               controller: _txnController,
               decoration: const InputDecoration(
@@ -671,25 +705,20 @@ class _HandoffCardState extends State<_HandoffCard> {
               child: FilledButton.icon(
                 onPressed: widget.isVerifying
                     ? null
-                    : () => widget
-                        .onConfirmReturn(_txnController.text.trim()),
+                    : () => widget.onConfirmReturn(_txnController.text.trim()),
                 icon: widget.isVerifying
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child:
-                            CircularProgressIndicator(strokeWidth: 2),
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.verified_rounded),
                 label: Text(
                   switch (widget.paymentOutcome) {
                     PaymentOutcome.success => 'Verified — paid',
-                    PaymentOutcome.failed =>
-                      'Re-check status',
-                    PaymentOutcome.unknown =>
-                      'Retry verification',
-                    PaymentOutcome.pending =>
-                      'I completed payment — verify',
+                    PaymentOutcome.failed => 'Re-check status',
+                    PaymentOutcome.unknown => 'Retry verification',
+                    PaymentOutcome.pending => 'I completed payment — verify',
                   },
                 ),
               ),

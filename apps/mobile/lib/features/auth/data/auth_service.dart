@@ -303,7 +303,10 @@ class AuthService {
         return AuthUser.fromJson(parsed);
       }
 
-      final session = await _dio.get('/api/auth/get-session');
+      final session = await _dio.get(
+        '/api/auth/get-session',
+        options: Options(receiveTimeout: const Duration(seconds: 3)),
+      ).timeout(const Duration(seconds: 3));
       if (session.data is! Map<String, dynamic> ||
           (session.data as Map)['user'] == null) {
         return null;
