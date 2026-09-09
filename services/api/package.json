@@ -31,7 +31,7 @@
     "test:schedule": "ts-node src/utils/schedule.test.ts",
     "test:nepali": "ts-node src/utils/nepali.test.ts",
     "test:timetable": "ts-node src/services/timetable-service.test.ts",
-    "test:financial-intelligence": "ts-node src/utils/financial-intelligence.test.ts",
+    "test:financial-intelligence": "ts-node src/utils/financial-intelligence.test.ts && ts-node src/services/financial-anomaly-alerts.test.ts && ts-node src/routes/financial-anomaly-cron.test.ts",
     "test:payroll": "ts-node src/services/payroll-service.test.ts",
     "test:route-auth": "ts-node src/routes/route-authentication.test.ts",
     "test:attendance": "ts-node src/routes/attendance.test.ts",

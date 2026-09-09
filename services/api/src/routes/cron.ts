@@ -9,6 +9,7 @@ import { reconcilePendingConnectIps } from '../utils/connectips';
 import { generateDailyTeacherSessions } from '../services/timetable-service';
 import { markOverdueInvoices } from '../services/billing-access';
 import { recoverAdmissionDeliveries } from '../services/admission-delivery';
+import { runBranchExpenseAnomalyAlerts } from '../services/financial-anomaly-alerts';
 
 const router = Router();
 
@@ -28,6 +29,7 @@ router.post(
 
     try {
       const logs = [];
+      let financialAnomalyAlerts: Awaited<ReturnType<typeof runBranchExpenseAnomalyAlerts>> | undefined;
       const smsSender = new MockSmsSender();
 
       if (taskName === 'monthly-due-verification') {
@@ -91,6 +93,14 @@ router.post(
       } else if (taskName === 'daily-teacher-sessions') {
         const result = await generateDailyTeacherSessions({ tenantId: req.tenantId! });
         logs.push(`Generated ${result.created} teacher session(s) for ${result.day}; ${result.eligible} scheduled class(es) were eligible.`);
+      } else if (taskName === 'financial-anomaly-alerts') {
+        financialAnomalyAlerts = await runBranchExpenseAnomalyAlerts({ tenantId: req.tenantId! });
+        const anomalyLabel = financialAnomalyAlerts.anomalies.length === 1 ? 'anomaly' : 'anomalies';
+        const notificationLabel = financialAnomalyAlerts.attemptedDeliveries === 1 ? 'notification' : 'notifications';
+        logs.push(
+          `Detected ${financialAnomalyAlerts.anomalies.length} branch expense ${anomalyLabel}; ` +
+          `delivered ${financialAnomalyAlerts.delivered} of ${financialAnomalyAlerts.attemptedDeliveries} alert ${notificationLabel}.`,
+        );
       } else {
         return res.status(400).json({ error: `Unknown taskName: ${taskName}.` });
       }
@@ -98,6 +108,7 @@ router.post(
       return res.status(200).json({
         message: `Cron automation '${taskName}' executed successfully.`,
         executionLogs: logs,
+        ...(financialAnomalyAlerts ? { financialAnomalyAlerts } : {}),
       });
     } catch (error: any) {
       return res.status(500).json({ error: 'Failed to run cron automation task.', details: error.message });

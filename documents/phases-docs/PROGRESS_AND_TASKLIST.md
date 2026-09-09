@@ -148,7 +148,7 @@ With the assumptions above, a credible **Teacher/Student/Parent MVP is 7–8 wee
   - [x] Sub-task 2.4.1: Render monthly consolidated and per-branch Profit & Loss (P&L) statements.
   - [ ] Sub-task 2.4.2: Implement double-entry ledger CSV/PDF export for external accounting.
   - [ ] Sub-task 2.4.3: Integrate AI-driven fee revenue estimation vs actuals comparison.
-  - [ ] Sub-task 2.4.4: Trigger automated expense anomaly alerts on salary or expenditure spikes.
+  - [x] Sub-task 2.4.4: Trigger automated expense anomaly alerts on salary or expenditure spikes.
   - **Verification:** Execute `GET /api/v1/finances/pnl` and check mathematical balance of income vs expense totals.
 
 - [x] **Task 2.5: HR Oversight & Staff Exit Clearance**
@@ -443,8 +443,8 @@ With the assumptions above, a credible **Teacher/Student/Parent MVP is 7–8 wee
 
 - [ ] **Task P4.1: AI Financial Estimation & Anomaly Alerts**
   - [ ] Sub-task P4.1.1: Implement revenue forecasting model predicting fee collections vs actuals.
-  - [ ] Sub-task P4.1.2: Trigger automated anomaly alerts on unexpected branch expenditure spikes.
-  - **Verification:** Inject artificial expense spike and verify automated Slack/Email alert dispatch.
+  - [x] Sub-task P4.1.2: Trigger automated anomaly alerts on unexpected branch expenditure spikes.
+  - **Verification:** `npm run test:financial-intelligence` verifies deterministic per-branch spike detection, authenticated tenant scope, cron dispatch through the existing push-notification abstraction, and fail-open delivery. Slack/email delivery is not configured in this repository.
 
 - [ ] **Task P4.2: Automated Social Media Publishing**
   - [ ] Sub-task P4.2.1: Connect Meta (Facebook/Instagram), TikTok, and LinkedIn API webhooks.
