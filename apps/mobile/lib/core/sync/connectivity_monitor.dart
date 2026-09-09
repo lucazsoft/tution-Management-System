@@ -1,17 +1,12 @@
 import 'dart:async';
-import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'connectivity_check.dart';
 import 'sync_models.dart';
 
 /// Socket-check connectivity monitor, exposed as a Riverpod provider.
-///
-/// Choice justification: a TCP connect to the API host proves *usable*
-/// connectivity, whereas `connectivity_plus` only reports the network
-/// interface type (Wi-Fi icon ≠ working internet, captive portals lie) and
-/// needs native plugin implementations per platform. This monitor has zero
-/// native dependencies and is faked in tests via [connectivityCheckOverride].
 class ConnectivityMonitor extends StateNotifier<ConnectivityState> {
   final Future<bool> Function() _check;
   final Duration interval;
@@ -27,23 +22,17 @@ class ConnectivityMonitor extends StateNotifier<ConnectivityState> {
     if (autostart) start();
   }
 
-  /// Default check: TCP connect to the API host, 3s timeout.
+  /// Default check: TCP connect to the API host on native platforms, 3s timeout.
   static Future<bool> _defaultCheck() async {
+    if (kIsWeb) return true;
     const host = String.fromEnvironment('API_BASE_URL',
-        defaultValue: 'http://10.0.2.2:3001');
+        defaultValue: 'http://127.0.0.1:3001');
     final uri = Uri.tryParse(host);
     final target = (uri != null && uri.hasAuthority) ? uri.host : host;
     final port = (uri != null && uri.hasAuthority)
         ? (uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 80))
         : 3001;
-    try {
-      final socket =
-          await Socket.connect(target, port, timeout: const Duration(seconds: 3));
-      socket.destroy();
-      return true;
-    } catch (_) {
-      return false;
-    }
+    return checkTcpSocket(target, port);
   }
 
   void start() {
@@ -70,12 +59,15 @@ class ConnectivityMonitor extends StateNotifier<ConnectivityState> {
   }
 }
 
-/// Override the check function in tests / demos.
-final connectivityCheckOverrideProvider =
+/// Test hook to stub socket checks without mocking sockets.
+final connectivityCheckOverride =
     Provider<Future<bool> Function()?>((ref) => null);
 
 final connectivityMonitorProvider =
     StateNotifierProvider<ConnectivityMonitor, ConnectivityState>((ref) {
-  final override = ref.watch(connectivityCheckOverrideProvider);
-  return ConnectivityMonitor(check: override);
+  final check = ref.watch(connectivityCheckOverride);
+  final monitor = ConnectivityMonitor(check: check);
+  ref.onDispose(monitor.dispose);
+  return monitor;
 });
+
