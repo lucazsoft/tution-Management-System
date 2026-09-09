@@ -15,8 +15,8 @@ Public bucket access remains disabled. Certificate verification may be public, b
 | Tenant-default QR | Deployment environment variables | Persist one tenant-level record, editable only by Tenant Admin with SMS verification |
 | Student photo | Private R2 upload and normalized WebP portrait are implemented; Digital ID falls back to initials | Add parent-facing reads only when the parent portal needs the photo |
 | Digital ID card | Rendered from live student data; onboarding exposes a placeholder storage URL | Continue rendering on demand; do not store a screenshot of the whole card |
-| Certificate template file | File data URL embedded in `CertificateTemplate.layoutConfig` | Store template binary in R2 and retain structured layout metadata in PostgreSQL |
-| Issued certificate | `pdfUrl` contains a placeholder URL; authenticated PDF is generated on demand | Keep an immutable issuance snapshot in PostgreSQL; optionally cache the PDF in R2 by certificate and template version |
+| Certificate template | New templates use validated structured design metadata; legacy HTML or file records remain readable | Version structured designs; store a future optional background binary in R2 rather than JSON |
+| Issued certificate | Immutable issuance snapshot, revocation state, authenticated PDF generation, and public metadata verification are implemented | Optionally cache the generated PDF in R2 by certificate and template version |
 | Staff document and petty-cash receipt | External URL fields | Migrate later after payment and student identity flows are stable |
 
 ## Object keys
@@ -88,8 +88,8 @@ Issuance stores an immutable snapshot of student name, branch, grade or course, 
 2. **MediaObject foundation:** deploy the schema and shared private object adapter; add scheduled cleanup after retention requirements are approved.
 3. **Student photos:** deploy the completed admin upload/replace flow, authorized portal reads, and Digital ID rendering.
 4. **Tenant and branch QR:** persist tenant defaults, migrate QR binaries, and bind SMS challenges to checksum plus media ID.
-5. **Certificate templates:** move file templates out of JSON and version them.
-6. **Issued certificates:** store immutable snapshots, add revocation, and optionally cache generated PDFs.
+5. **Certificate templates:** structured versioned designs are implemented for new templates; migrate or archive remaining legacy file and HTML templates.
+6. **Issued certificates:** immutable snapshots, revocation, generated PDFs, and public metadata verification are implemented; optionally cache generated PDFs in R2.
 7. **Remaining documents:** migrate staff documents and petty-cash receipts from arbitrary external links.
 
 Every phase keeps existing records readable until a measured backfill finishes. Delete legacy blobs only after reference counts, checksums, authorized reads, backups, and restore checks pass.

@@ -78,6 +78,9 @@ jobs:
       - name: Private media regression tests
         run: npm run test:private-media --workspace=@tms/api
 
+      - name: Certificate rendering tests
+        run: npm run test:certificates --workspace=@tms/api
+
       - name: Secret and fixed-identifier scan
         shell: bash
         run: |

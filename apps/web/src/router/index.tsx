@@ -60,6 +60,7 @@ const SuperAdminDashboard = lazy(() => import('../pages/SuperAdminDashboard').th
 const SuperAdminTenants = lazy(() => import('../pages/SuperAdminTenants').then((module) => ({ default: module.SuperAdminTenants })));
 const SecurityPage = lazy(() => import('../pages/SecurityPage').then((module) => ({ default: module.SecurityPage })));
 const PaymentResultPage = lazy(() => import('../pages/PaymentResultPage').then((module) => ({ default: module.PaymentResultPage })));
+const CertificateVerificationPage = lazy(() => import('../pages/CertificateVerificationPage').then((module) => ({ default: module.CertificateVerificationPage })));
 
 function RequireAuth() {
   const { isAuthenticated, isLoading, isTwoFactorPending, sessionIssue } = useAuth();
@@ -222,6 +223,7 @@ function RoleWorkspacePlaceholder({ role }: { role: DashboardRole }) {
 }
 
 const router = createBrowserRouter([
+  { path: '/verify/certificate/:certificateId', element: <Suspense fallback={<FullPageSpinner />}><CertificateVerificationPage /></Suspense>, errorElement: <RouteFailurePage /> },
   // Available while signed in as well as when locked out; the private recovery
   // token and approved-destination SMS authenticate this flow.
   { path: '/recover-mobile', element: <PublicAuthLayout />, children: [{ index: true, element: <MobileRecoveryPage /> }], errorElement: <RouteFailurePage /> },

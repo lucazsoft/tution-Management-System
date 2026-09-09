@@ -373,10 +373,11 @@ export function TenantCertificatesPage() {
   type CertificateOptions = Awaited<ReturnType<typeof api.branchAdmin.getCertificateOptions>>;
   const [templates, setTemplates] = useState<Array<CertificateOptions['templates'][number] & { status: string }>>([]);
   const [students, setStudents] = useState<CertificateOptions['students']>([]);
-  const [form, setForm] = useState({ name: '', type: 'COMPLETION' });
-  const [sourceMode, setSourceMode] = useState<'FILE' | 'HTML'>('FILE');
-  const [file, setFile] = useState<File | null>(null);
-  const [html, setHtml] = useState('<!doctype html>\n<html lang="en">\n<head>\n  <meta charset="utf-8">\n  <style>\n    body { margin: 0; font-family: Georgia, serif; color: #17345c; }\n    .certificate { min-height: 680px; display: grid; place-items: center; padding: 56px; border: 16px double #1d5d9b; text-align: center; box-sizing: border-box; }\n    h1 { font-size: 44px; margin: 0 0 32px; }\n    .student { font-size: 38px; color: #b27b13; margin: 16px 0; }\n  </style>\n</head>\n<body><main class="certificate"><div><p>{{branchName}}</p><h1>{{templateName}}</h1><p>This certificate is proudly presented to</p><div class="student">{{studentName}}</div><p>{{gradeName}}</p><p>Issued {{issuedDate}} · Verification ID {{certificateId}}</p></div></main></body>\n</html>');
+  const [form, setForm] = useState({ name: '', type: 'COMPLETION', theme: 'CLASSIC', title: 'Certificate of Completion', presentationLine: 'This certificate is proudly presented to', achievementLine: 'For successfully completing the learning program', signatoryName: '', signatoryTitle: 'Institution representative' });
+  const [activeTab, setActiveTab] = useState<'ISSUE' | 'TEMPLATES' | 'ISSUED'>('ISSUE');
+  const [issued, setIssued] = useState<Awaited<ReturnType<typeof api.branchAdmin.getIssuedCertificates>>['certificates']>([]);
+  const [revokeId, setRevokeId] = useState('');
+  const [revokeReason, setRevokeReason] = useState('');
   const [studentKey, setStudentKey] = useState('');
   const [templateId, setTemplateId] = useState('');
   const [issuedId, setIssuedId] = useState('');
@@ -387,7 +388,7 @@ export function TenantCertificatesPage() {
 
   const loadTemplates = useCallback(async () => {
     setLoading(true); setLoadError('');
-    try { const result = await api.branchAdmin.getCertificateOptions(); setTemplates(result.templates.map((template) => ({ ...template, status: 'ACTIVE' }))); setStudents(result.students); }
+    try { const [result, history] = await Promise.all([api.branchAdmin.getCertificateOptions(), api.branchAdmin.getIssuedCertificates()]); setTemplates(result.templates); setStudents(result.students); setIssued(history.certificates); }
     catch (next) { const message = errorMessage(next); setLoadError(message); showToast(message, 'error'); }
     finally { setLoading(false); }
   }, [showToast]);
@@ -395,15 +396,13 @@ export function TenantCertificatesPage() {
 
   const addTemplate = async (e: FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim() || (sourceMode === 'FILE' ? !file : !html.trim())) return;
+    if (!form.name.trim() || !form.title.trim() || !form.achievementLine.trim() || !form.signatoryName.trim()) return;
     setBusy(true);
     try {
-      const layoutConfig = sourceMode === 'HTML'
-        ? { renderMode: 'HTML', html }
-        : await new Promise<{ renderMode: 'FILE'; sourceFile: { name: string; mimeType: string; dataUrl: string } }>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve({ renderMode: 'FILE', sourceFile: { name: file!.name, mimeType: file!.type, dataUrl: String(reader.result) } }); reader.onerror = () => reject(new Error('Certificate file could not be read.')); reader.readAsDataURL(file!); });
+      const layoutConfig = { renderMode: 'DESIGN', theme: form.theme, title: form.title.trim(), presentationLine: form.presentationLine.trim(), achievementLine: form.achievementLine.trim(), signatoryName: form.signatoryName.trim(), signatoryTitle: form.signatoryTitle.trim() };
       await request('/certificates/templates', { method: 'POST', body: JSON.stringify({ name: form.name.trim(), type: form.type, layoutConfig }) });
-      setForm({ name: '', type: 'COMPLETION' }); setFile(null); const inputElement = document.getElementById('certificate-file') as HTMLInputElement | null; if (inputElement) inputElement.value = '';
-      await loadTemplates(); showToast(sourceMode === 'HTML' ? 'HTML certificate template saved.' : 'Certificate template uploaded and saved.', 'success');
+      setForm((current) => ({ ...current, name: '' }));
+      await loadTemplates(); setActiveTab('TEMPLATES'); showToast('Certificate template created.', 'success');
     } catch (next) { showToast(errorMessage(next), 'error'); }
     finally { setBusy(false); }
   };
@@ -415,44 +414,53 @@ export function TenantCertificatesPage() {
     setIssuing(true); setIssuedId('');
     try {
       const result = await api.branchAdmin.issueCertificate({ studentId: student.studentId, templateId, branchId: student.branchId });
-      setIssuedId(result.certificate.certificateId); showToast(`Certificate allotted to ${student.studentName}.`, 'success');
+      setIssuedId(result.certificate.certificateId); showToast(`Certificate issued to ${student.studentName}.`, 'success');
     } catch (next) { showToast(errorMessage(next), 'error'); }
     finally { setIssuing(false); }
   };
 
-  const previewHtml = html
-    .replaceAll('{{studentName}}', 'Sample Student')
-    .replaceAll('{{gradeName}}', 'Grade 10')
-    .replaceAll('{{branchName}}', 'Main Branch')
-    .replaceAll('{{templateName}}', form.name.trim() || 'Certificate of Achievement')
-    .replaceAll('{{certificateType}}', form.type)
-    .replaceAll('{{issuedDate}}', new Date().toLocaleDateString('en-GB'))
-    .replaceAll('{{certificateId}}', 'CERT-PREVIEW');
   const issuedTemplate = templates.find((template) => template.id === templateId);
+  const selectedStudent = students.find((item) => `${item.studentId}:${item.branchId}` === studentKey);
+  const selectedTemplate = templates.find((item) => item.id === templateId);
+
+  const revokeCertificate = async () => {
+    if (!revokeId || revokeReason.trim().length < 5) return;
+    setBusy(true);
+    try { await api.branchAdmin.revokeCertificate(revokeId, revokeReason); setRevokeId(''); setRevokeReason(''); await loadTemplates(); showToast('Certificate revoked.', 'success'); }
+    catch (next) { showToast(errorMessage(next), 'error'); }
+    finally { setBusy(false); }
+  };
+  const archiveTemplate = async (id: string) => {
+    setBusy(true);
+    try { await api.branchAdmin.archiveCertificateTemplate(id); await loadTemplates(); showToast('Template archived. Existing certificates are unchanged.', 'success'); }
+    catch (next) { showToast(errorMessage(next), 'error'); }
+    finally { setBusy(false); }
+  };
 
   return (
     <div className="tenant-certificate-page">
-      <Header title="Certificates" description="Create PDF, image, or HTML templates and allot certificates directly to enrolled students." />
+      <Header title="Certificates" description="Create trusted certificate designs, issue them to enrolled students, and manage their validity." />
       {loadError ? <RemoteState kind="error" message={`Certificate tools could not be loaded. ${loadError}`} onRetry={() => void loadTemplates()} /> : null}
-      <div className="tenant-certificate-layout">
+      <nav className="tenant-certificate-tabs" aria-label="Certificate workspace">{([['ISSUE', 'Issue certificate'], ['TEMPLATES', 'Templates'], ['ISSUED', 'Issued certificates']] as const).map(([id, label]) => <button key={id} type="button" className={activeTab === id ? 'is-active' : ''} aria-current={activeTab === id ? 'page' : undefined} onClick={() => setActiveTab(id)}>{label}{id === 'TEMPLATES' ? <span>{templates.length}</span> : id === 'ISSUED' ? <span>{issued.length}</span> : null}</button>)}</nav>
+      {activeTab === 'TEMPLATES' ? <div className="tenant-certificate-layout">
         <Card hoverable={false}>
           <div className="tenant-certificate-heading"><div><h3>Template library</h3><p>Reusable institution-level certificate designs.</p></div><StatusBadge variant="info">{templates.length} templates</StatusBadge></div>
           <div className="tenant-certificate-table-wrap"><table className="tenant-certificate-table">
             <thead>
-              <tr><th>Template name</th><th>Type</th><th>Format</th><th>Status</th></tr>
+              <tr><th>Template name</th><th>Type</th><th>Version</th><th>Status</th><th>Actions</th></tr>
             </thead>
             <tbody>
               {templates.map(t => (
-                <tr key={t.id}><td>{t.name}</td><td>{t.type}</td><td><span className="tenant-certificate-format"><span className="material-symbols-outlined" aria-hidden="true">{t.layoutConfig?.renderMode === 'HTML' ? 'code' : 'description'}</span>{t.layoutConfig?.renderMode === 'HTML' ? 'HTML' : t.layoutConfig?.sourceFile?.mimeType?.split('/').at(-1)?.toUpperCase() || 'File'}</span></td><td><StatusBadge variant={t.status === 'ACTIVE' ? 'success' : 'warning'}>{t.status}</StatusBadge></td>
+                <tr key={t.id}><td>{t.name}<small>{t.layoutConfig?.renderMode === 'DESIGN' ? `${t.layoutConfig.theme ?? 'Classic'} design` : 'Legacy template'}</small></td><td>{t.type}</td><td>v{t.version}</td><td><StatusBadge variant={t.status === 'ACTIVE' ? 'success' : 'warning'}>{t.status}</StatusBadge></td><td><Button type="button" variant="ghost" disabled={busy} onClick={() => void archiveTemplate(t.id)}>Archive</Button></td>
                 </tr>
               ))}
-              {!loading && !templates.length ? <tr><td colSpan={4} className="tenant-certificate-empty">No certificate templates have been created.</td></tr> : null}
+              {!loading && !templates.length ? <tr><td colSpan={5} className="tenant-certificate-empty">No certificate templates have been created.</td></tr> : null}
             </tbody>
           </table></div>
         </Card>
 
         <Card hoverable={false}>
-          <div className="tenant-certificate-heading"><div><h3>Create template</h3><p>Choose an uploaded design or author HTML.</p></div></div>
+          <div className="tenant-certificate-heading"><div><h3>Create template</h3><p>Build a reusable, print-ready design without writing code.</p></div></div>
           <form onSubmit={addTemplate} className="tenant-certificate-form">
             <label htmlFor="certificate-name">Template name<input id="certificate-name" style={input} placeholder="Special Achievement" value={form.name} onChange={e => setForm(old => ({ ...old, name: e.target.value }))} required /></label>
             <label htmlFor="certificate-type">Certificate type<select id="certificate-type" style={input} value={form.type} onChange={e => setForm(old => ({ ...old, type: e.target.value }))}>
@@ -461,21 +469,26 @@ export function TenantCertificatesPage() {
                 <option value="ATTENDANCE">Attendance</option>
                 <option value="CUSTOM">Custom</option>
               </select></label>
-            <fieldset className="tenant-certificate-source"><legend>Template format</legend><div><label><input type="radio" name="certificate-source" checked={sourceMode === 'FILE'} onChange={() => setSourceMode('FILE')} />Upload PDF or image</label><label><input type="radio" name="certificate-source" checked={sourceMode === 'HTML'} onChange={() => setSourceMode('HTML')} />Render from HTML</label></div></fieldset>
-            {sourceMode === 'FILE' ? <label htmlFor="certificate-file">Certificate file *<input id="certificate-file" type="file" accept="application/pdf,image/png,image/jpeg" required style={input} onChange={(event) => { const selected = event.target.files?.[0] ?? null; if (selected && selected.size > 5 * 1024 * 1024) { event.target.value = ''; setFile(null); showToast('Choose a PDF or image smaller than 5 MB.', 'error'); return; } setFile(selected); }} /><small>PDF, PNG, or JPG. Maximum 5 MB.</small></label> : <><label htmlFor="certificate-html">HTML template *<textarea id="certificate-html" rows={14} value={html} onChange={(event) => setHtml(event.target.value)} spellCheck={false} required /><small>Available placeholders: {'{{studentName}}'}, {'{{gradeName}}'}, {'{{branchName}}'}, {'{{templateName}}'}, {'{{certificateType}}'}, {'{{issuedDate}}'}, {'{{certificateId}}'}.</small></label><div className="tenant-certificate-preview"><span>Safe preview</span><iframe title="Certificate HTML preview" sandbox="" srcDoc={previewHtml} /></div></>}
-            <Button type="submit" disabled={busy || (sourceMode === 'FILE' ? !file : !html.trim())} aria-busy={busy}>{busy ? 'Saving template…' : sourceMode === 'HTML' ? 'Save HTML template' : 'Upload template'}</Button>
+            <fieldset className="tenant-certificate-source"><legend>Visual style</legend><div>{(['CLASSIC', 'MODERN', 'ACADEMIC'] as const).map((theme) => <label key={theme} className={form.theme === theme ? 'is-selected' : ''}><input type="radio" name="certificate-theme" checked={form.theme === theme} onChange={() => setForm((old) => ({ ...old, theme }))} />{theme.charAt(0) + theme.slice(1).toLowerCase()}</label>)}</div></fieldset>
+            <label htmlFor="certificate-title">Certificate heading<input id="certificate-title" style={input} value={form.title} onChange={(event) => setForm((old) => ({ ...old, title: event.target.value }))} required /></label>
+            <label htmlFor="certificate-achievement">Achievement statement<textarea id="certificate-achievement" rows={3} value={form.achievementLine} onChange={(event) => setForm((old) => ({ ...old, achievementLine: event.target.value }))} required /><small>Describe exactly what the student earned or completed.</small></label>
+            <div className="tenant-certificate-form-row"><label htmlFor="certificate-signatory">Signatory name<input id="certificate-signatory" style={input} value={form.signatoryName} onChange={(event) => setForm((old) => ({ ...old, signatoryName: event.target.value }))} required /></label><label htmlFor="certificate-signatory-title">Signatory role<input id="certificate-signatory-title" style={input} value={form.signatoryTitle} onChange={(event) => setForm((old) => ({ ...old, signatoryTitle: event.target.value }))} required /></label></div>
+            <div className={`tenant-certificate-design-preview is-${form.theme.toLowerCase()}`} aria-label="Certificate design preview"><small>Main Branch</small><h4>{form.title || 'Certificate title'}</h4><p>{form.presentationLine}</p><strong>Sample Student</strong><p>{form.achievementLine || 'Achievement statement'}</p><footer><span>{form.signatoryName || 'Signatory name'}</span><span>Issue date</span></footer></div>
+            <Button type="submit" disabled={busy || !form.name.trim() || !form.title.trim() || !form.achievementLine.trim() || !form.signatoryName.trim()} aria-busy={busy}>{busy ? 'Creating template…' : 'Create template'}</Button>
           </form>
         </Card>
-      </div>
-      <Card hoverable={false}>
-        <div className="tenant-certificate-heading"><div><h3>Allot certificate to student</h3><p>The issued certificate is added immediately to the student and parent portals.</p></div></div>
+      </div> : null}
+      {activeTab === 'ISSUE' ? <Card hoverable={false}>
+        <div className="tenant-certificate-heading"><div><h3>Issue certificate</h3><p>Choose the recipient and approved design, then review the final details.</p></div></div>
         <form onSubmit={issueCertificate} className="tenant-certificate-issue-form">
           <label htmlFor="certificate-student">Student *<select id="certificate-student" style={input} value={studentKey} onChange={(event) => { setStudentKey(event.target.value); setIssuedId(''); }} required><option value="">Select enrolled student</option>{students.map((student) => <option key={`${student.studentId}:${student.branchId}`} value={`${student.studentId}:${student.branchId}`}>{student.studentName} · {student.gradeName} · {student.branchName}</option>)}</select></label>
-          <label htmlFor="certificate-template">Template *<select id="certificate-template" style={input} value={templateId} onChange={(event) => { setTemplateId(event.target.value); setIssuedId(''); }} required><option value="">Select certificate template</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name} · {template.layoutConfig?.renderMode === 'HTML' ? 'HTML' : 'PDF/image'}</option>)}</select></label>
-          <Button type="submit" disabled={issuing || !studentKey || !templateId} aria-busy={issuing}>{issuing ? 'Allotting…' : 'Allot certificate'}</Button>
+          <label htmlFor="certificate-template">Template *<select id="certificate-template" style={input} value={templateId} onChange={(event) => { setTemplateId(event.target.value); setIssuedId(''); }} required><option value="">Select certificate template</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name} · {template.layoutConfig?.renderMode === 'DESIGN' ? `${template.layoutConfig.theme ?? 'Classic'} design` : 'Legacy'}</option>)}</select></label>
+          <Button type="submit" disabled={issuing || !studentKey || !templateId} aria-busy={issuing}>{issuing ? 'Issuing…' : 'Issue certificate'}</Button>
         </form>
-        {issuedId ? <div className="tenant-certificate-issued" role="status"><span className="material-symbols-outlined" aria-hidden="true">verified</span><div><strong>Certificate allotted successfully</strong><p>Verification ID: {issuedId}</p></div><div><Button type="button" variant="outline" onClick={() => window.open(`${API_BASE_URL}/certificates/${encodeURIComponent(issuedId)}/download`, '_blank', 'noopener,noreferrer')}>Download PDF</Button>{issuedTemplate?.layoutConfig?.renderMode === 'HTML' ? <Button type="button" onClick={() => window.open(`${API_BASE_URL}/certificates/${encodeURIComponent(issuedId)}/html`, '_blank', 'noopener,noreferrer')}>Open HTML</Button> : null}</div></div> : null}
-      </Card>
+        {selectedStudent && selectedTemplate ? <div className="tenant-certificate-issue-preview"><span className="material-symbols-outlined" aria-hidden="true">preview</span><div><strong>{selectedTemplate.name}</strong><p>{selectedStudent.studentName} · {selectedStudent.gradeName} · {selectedStudent.branchName}</p></div><StatusBadge variant="info">Ready to issue</StatusBadge></div> : <div className="tenant-certificate-empty-state"><span className="material-symbols-outlined" aria-hidden="true">workspace_premium</span><div><strong>Choose a student and template</strong><p>The final details will appear here before issuance.</p></div></div>}
+        {issuedId ? <div className="tenant-certificate-issued" role="status"><span className="material-symbols-outlined" aria-hidden="true">verified</span><div><strong>Certificate issued successfully</strong><p>Verification ID: {issuedId}</p></div><div><Button type="button" variant="outline" onClick={() => window.open(`${API_BASE_URL}/certificates/${encodeURIComponent(issuedId)}/download`, '_blank', 'noopener,noreferrer')}>Download PDF</Button>{issuedTemplate?.layoutConfig?.renderMode === 'HTML' ? <Button type="button" onClick={() => window.open(`${API_BASE_URL}/certificates/${encodeURIComponent(issuedId)}/html`, '_blank', 'noopener,noreferrer')}>Open HTML</Button> : null}</div></div> : null}
+      </Card> : null}
+      {activeTab === 'ISSUED' ? <Card hoverable={false}><div className="tenant-certificate-heading"><div><h3>Issued certificates</h3><p>Permanent credential records with downloadable documents and live validity.</p></div></div>{issued.length ? <div className="tenant-certificate-table-wrap"><table className="tenant-certificate-table"><thead><tr><th>Student</th><th>Certificate</th><th>Branch</th><th>Issued</th><th>Status</th><th>Actions</th></tr></thead><tbody>{issued.map((item) => <tr key={item.certificateId}><td><strong>{item.studentName}</strong><small>{item.gradeName}</small></td><td>{item.templateName}<small>{item.certificateId}</small></td><td>{item.branchName}</td><td>{new Date(item.issuedDate).toLocaleDateString('en-GB')}</td><td><StatusBadge variant={item.status === 'ACTIVE' ? 'success' : 'warning'}>{item.status}</StatusBadge></td><td><div className="tenant-certificate-row-actions"><Button type="button" variant="outline" onClick={() => window.open(`${API_BASE_URL}/certificates/${encodeURIComponent(item.certificateId)}/download`, '_blank', 'noopener,noreferrer')}>Download</Button>{item.status === 'ACTIVE' ? <Button type="button" variant="ghost" onClick={() => { setRevokeId(item.certificateId); setRevokeReason(''); }}>Revoke</Button> : null}</div></td></tr>)}</tbody></table></div> : <div className="tenant-certificate-empty-state"><span className="material-symbols-outlined" aria-hidden="true">history_edu</span><div><strong>No certificates issued</strong><p>Issued certificates will appear here as permanent records.</p></div></div>}{revokeId ? <div className="tenant-certificate-revoke" role="alert"><div><strong>Revoke certificate?</strong><p>This marks {revokeId} invalid on public verification. The audit record remains.</p></div><label htmlFor="certificate-revoke-reason">Reason<textarea id="certificate-revoke-reason" rows={2} value={revokeReason} onChange={(event) => setRevokeReason(event.target.value)} placeholder="Explain why this credential is no longer valid" /></label><div><Button type="button" variant="danger" disabled={busy || revokeReason.trim().length < 5} onClick={() => void revokeCertificate()}>Revoke certificate</Button><Button type="button" variant="outline" disabled={busy} onClick={() => setRevokeId('')}>Cancel</Button></div></div> : null}</Card> : null}
     </div>
   );
 }

@@ -1054,6 +1054,8 @@ model CertificateTemplate {
   name         String
   type         CertificateType @default(COMPLETION)
   layoutConfig Json // JSON: fonts, background, logos, text blocks
+  status       String          @default("ACTIVE")
+  version      Int             @default(1)
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
   certificates Certificate[]
@@ -1070,8 +1072,15 @@ model Certificate {
   branch        Branch              @relation(fields: [branchId], references: [id])
   issuerId      String // Admin User ID who issued
   issuedDate    DateTime            @default(now())
-  pdfUrl        String // Cloud Storage link to generated PDF
+  pdfUrl        String? // Optional cached private object reference
+  snapshot      Json? // Immutable recipient, issuer, branch, template and award values
+  status        String              @default("ACTIVE")
+  revokedAt     DateTime?
+  revokedBy     String?
+  revocationReason String?
   createdAt     DateTime            @default(now())
+
+  @@index([branchId, status, issuedDate])
 }
 
 // 25. Extended HR — Staff Documents

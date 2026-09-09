@@ -906,16 +906,18 @@ function ResultsView() {
 }
 
 function CertificatesView() {
+  type CertificateOptions = Awaited<ReturnType<typeof api.branchAdmin.getCertificateOptions>>;
   const [studentKey, setStudentKey] = useState('');
   const [template, setTemplate] = useState('');
   const [preview, setPreview] = useState(false);
-  const [templates, setTemplates] = useState<Array<{ id: string; name: string; type: string }>>([]);
-  const [students, setStudents] = useState<Array<{ studentId: string; studentName: string; gradeName: string; branchId: string; branchName: string }>>([]);
+  const [templates, setTemplates] = useState<CertificateOptions['templates']>([]);
+  const [students, setStudents] = useState<CertificateOptions['students']>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [issuedId, setIssuedId] = useState('');
   const action = useAction();
   const selectedStudent = students.find((item) => `${item.studentId}:${item.branchId}` === studentKey);
+  const selectedTemplate = templates.find((item) => item.id === template);
 
   const load = useCallback(async () => {
     setLoading(true); setLoadError('');
@@ -936,10 +938,10 @@ function CertificatesView() {
   };
 
   return (
-    <Page title="Certificate Generation" description="Manually issue certificates to students using customized branch-specific details based on master templates.">
+    <Page title="Issue certificates" description="Review an approved institution template and issue a permanent certificate to an enrolled student.">
       <div className="certificate-workspace-grid">
         <Card hoverable={false}>
-          <h2 style={{ fontSize: '18px' }}>Issue Certificate</h2>
+          <h2 style={{ fontSize: '18px' }}>Certificate details</h2>
           <form onSubmit={submit} style={{ ...form, marginTop: '16px' }} aria-busy={action.busy}>
             <label style={label}>
               Select Student
@@ -958,21 +960,21 @@ function CertificatesView() {
                 <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>Certificate details</h3>
                 <p><strong>{selectedStudent.studentName}</strong><br /><span style={{ color: 'var(--text-muted)' }}>{selectedStudent.gradeName} · {selectedStudent.branchName}</span></p>
                 <p style={{ marginTop: 10, color: 'var(--text-muted)' }}>{templates.find((item) => item.id === template)?.name}</p>
-                <Button type="button" variant="outline" style={{ marginTop: '16px', width: '100%' }} onClick={() => setPreview(true)}>Generate Preview</Button>
+                <Button type="button" variant="outline" style={{ marginTop: '16px', width: '100%' }} onClick={() => setPreview(true)}>Review certificate</Button>
               </div>
             )}
             
             <Feedback message={action.message} error={loadError || action.error} />
             {loading ? <p aria-busy="true" style={{ color: 'var(--text-muted)' }}>Loading students and templates…</p> : !loadError && (!students.length || !templates.length) ? <p role="status" style={{ color: 'var(--text-muted)' }}>{!templates.length ? 'Create a certificate template before issuing certificates.' : 'No enrolled students are available in your branch.'}</p> : null}
-            <Button type="submit" disabled={!preview || action.busy}>{action.busy ? 'Issuing...' : 'Issue & Download PDF'}</Button>
+            <Button type="submit" disabled={!preview || action.busy}>{action.busy ? 'Issuing…' : 'Issue certificate'}</Button>
             {issuedId ? <Button type="button" variant="outline" onClick={() => window.open(`${API_BASE_URL}/certificates/${encodeURIComponent(issuedId)}/download`, '_blank', 'noopener,noreferrer')}>Download issued PDF</Button> : null}
           </form>
         </Card>
         
         <Card hoverable={false} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px', background: 'var(--color-surface)' }}>
-          {preview && selectedStudent ? (
-            <article aria-label="Certificate preview" style={{ width: '100%', minHeight: 360, border: '3px solid var(--color-primary)', outline: '1px solid var(--color-warning)', outlineOffset: -12, display: 'grid', placeItems: 'center', padding: 40, textAlign: 'center', background: 'var(--color-surface)' }}>
-              <div><p style={{ margin: 0, color: 'var(--color-primary)', fontSize: 13, fontWeight: 800, letterSpacing: 2, textTransform: 'uppercase' }}>{selectedStudent.branchName}</p><span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: 48, color: 'var(--color-primary)', marginTop: 18 }}>verified</span><h3 style={{ fontSize: 25, marginTop: 12 }}>{templates.find((item) => item.id === template)?.name}</h3><p style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 20 }}>This certificate is issued to</p><p style={{ color: 'var(--color-primary)', fontSize: 28, fontWeight: 800, margin: '8px 0' }}>{selectedStudent.studentName}</p><p style={{ color: 'var(--text-muted)', fontSize: 14 }}>{selectedStudent.gradeName}</p><div style={{ display: 'flex', justifyContent: 'space-between', gap: 40, marginTop: 52, fontSize: 12 }}><span style={{ minWidth: 120, borderTop: '1px solid var(--color-text)', paddingTop: 6 }}>Issued date</span><span style={{ minWidth: 120, borderTop: '1px solid var(--color-text)', paddingTop: 6 }}>Authorized signature</span></div></div>
+          {preview && selectedStudent && selectedTemplate ? (
+            <article aria-label="Certificate preview" className={`tenant-certificate-design-preview is-${(selectedTemplate.layoutConfig.theme ?? 'CLASSIC').toLowerCase()}`} style={{ width: '100%', minHeight: 360 }}>
+              <small>{selectedStudent.branchName}</small><h4>{selectedTemplate.layoutConfig.title ?? selectedTemplate.name}</h4><p>{selectedTemplate.layoutConfig.presentationLine ?? 'This certificate is proudly presented to'}</p><strong>{selectedStudent.studentName}</strong><p>{selectedTemplate.layoutConfig.achievementLine ?? `In recognition of achievement in ${selectedStudent.gradeName}`}</p><footer><span>{selectedTemplate.layoutConfig.signatoryName ?? 'Authorized signatory'}</span><span>{new Date().toLocaleDateString('en-GB')}</span></footer>
             </article>
           ) : (
             <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>

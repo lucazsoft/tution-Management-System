@@ -904,15 +904,18 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
       kind: eventKind(event.eventType),
       details: event.description ?? '',
     }));
-    const certificates = student.certificates.map((certificate) => ({
-      id: certificate.certificateId,
-      title: certificate.template.name,
-      course: student.grade?.name ?? 'Student record',
-      issuedDate: formatDate(certificate.issuedDate),
-      fileName: certificate.pdfUrl.split('/').pop() || `${certificate.certificateId}.pdf`,
-      pdfUrl: `/certificates/${encodeURIComponent(certificate.certificateId)}/download`,
-      htmlUrl: (certificate.template.layoutConfig as { renderMode?: string }).renderMode === 'HTML' ? `/certificates/${encodeURIComponent(certificate.certificateId)}/html` : undefined,
-    }));
+    const certificates = student.certificates.map((certificate) => {
+      const snapshot = certificate.snapshot as { templateName?: string; gradeName?: string } | null;
+      return {
+        id: certificate.certificateId,
+        title: snapshot?.templateName || certificate.template.name,
+        course: snapshot?.gradeName || student.grade?.name || 'Student record',
+        issuedDate: formatDate(certificate.issuedDate),
+        fileName: certificate.pdfUrl?.split('/').pop() || `${certificate.certificateId}.pdf`,
+        pdfUrl: `/certificates/${encodeURIComponent(certificate.certificateId)}/download`,
+        htmlUrl: (certificate.template.layoutConfig as { renderMode?: string }).renderMode === 'HTML' ? `/certificates/${encodeURIComponent(certificate.certificateId)}/html` : undefined,
+      };
+    });
 
     const notifications = [
       ...student.invoices
