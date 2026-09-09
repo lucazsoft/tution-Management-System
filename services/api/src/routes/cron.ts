@@ -2,7 +2,8 @@ import { Router, Response } from 'express';
 import prisma from '../utils/db';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware } from '../middleware/auth';
-import { MockSmsSender, MockPushNotificationService } from '../utils/notifications';
+import { MockSmsSender } from '../utils/notifications';
+import { PushNotificationService } from '../services/push-notification';
 import { isTenantAdmin } from '../utils/access-control';
 import { reconcilePendingConnectIps } from '../utils/connectips';
 import { generateDailyTeacherSessions } from '../services/timetable-service';
@@ -40,12 +41,21 @@ router.post(
         );
         logs.push('Sent overdue SMS alerts to parents of blocked students.');
       } else if (taskName === 'salary-reminder') {
-        await MockPushNotificationService.sendPush(
-          'admin-user-111',
+        const tenantAdmins = await prisma.user.findMany({
+          where: {
+            tenantId: req.tenantId!,
+            status: 'ACTIVE',
+            userRoles: { some: { role: { name: 'Tenant Admin' } } },
+          },
+          select: { id: true },
+        });
+        await Promise.all(tenantAdmins.map((admin) => PushNotificationService.sendPush(
+          req.tenantId!,
+          admin.id,
           'Payroll Calculation Reminder',
-          'It is the 25th of the month. Please run and calculate payrolls for all staff.'
-        );
-        logs.push('Sent payroll calculation notification to Tenant Admin.');
+          'It is the 25th of the month. Please run and calculate payrolls for all staff.',
+        )));
+        logs.push(`Sent payroll calculation notification to ${tenantAdmins.length} Tenant Admin(s).`);
       } else if (taskName === 'petty-cash-reset') {
         logs.push('Petty cash caps reset for all branches.');
       } else if (taskName === 'contract-expiry-alerts') {

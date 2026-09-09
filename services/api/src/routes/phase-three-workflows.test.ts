@@ -56,8 +56,8 @@ const authPath = require.resolve('../utils/auth');
 require.cache[authPath] = { id: authPath, filename: authPath, loaded: true, exports: { auth: { api: { getSession: async () => ({ user: {
   id: 'admin', tenantId: 'tenant', roles: [{ roleName: 'Tenant Admin', branchId: null, permissions: [] }],
 } }) } } } } as NodeModule;
-const notifications = require('../utils/notifications');
-notifications.MockPushNotificationService.sendPush = async () => { if (failPush) throw new Error('injected push failure'); return { success: true }; };
+const notifications = require('../services/push-notification');
+notifications.PushNotificationService.sendPush = async () => { if (failPush) throw new Error('injected push failure'); return { success: true }; };
 const resources = require('./resources').default;
 const smsPath = require.resolve('../utils/sms');
 require.cache[smsPath] = { id: smsPath, filename: smsPath, loaded: true, exports: { default: {

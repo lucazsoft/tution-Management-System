@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/core/database/app_database.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
+import 'package:tms_mobile/core/notifications/firebase_push_bootstrap.dart';
+import 'package:tms_mobile/core/notifications/push_notification_service.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/router/app_router.dart';
 import 'package:tms_mobile/core/sync/sync_queue.dart';
@@ -11,6 +13,7 @@ import 'package:tms_mobile/core/theme/app_theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await ApiClient.instance.init();
+  PushNotifications.install(await initializeFirebasePushNotifications());
   final db = AppDatabase();
   await registerOfflineDatabase(db);
   runApp(
