@@ -85,11 +85,11 @@ class StudentCalendarScreen extends ConsumerWidget {
       onRefresh: viewModel.refresh,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(StudentSpace.md),
+        padding: const EdgeInsets.all(TmsSpace.md),
         children: [
           Wrap(
-            spacing: StudentSpace.xs,
-            runSpacing: StudentSpace.xs,
+            spacing: TmsSpace.xs,
+            runSpacing: TmsSpace.xs,
             children: [
               _FilterChip(
                 label: 'All',
@@ -104,14 +104,14 @@ class StudentCalendarScreen extends ConsumerWidget {
                 ),
             ],
           ),
-          const SizedBox(height: StudentSpace.lg),
+          const SizedBox(height: TmsSpace.lg),
           Text(
             state.selectedKind == 'All'
                 ? 'Upcoming events (${visible.length})'
                 : '${state.selectedKind} (${visible.length})',
             style: Theme.of(context).textTheme.titleLarge,
           ),
-          const SizedBox(height: StudentSpace.sm),
+          const SizedBox(height: TmsSpace.sm),
           if (visible.isEmpty)
             const StudentEmptyView(
               icon: Icons.filter_list_off_outlined,
@@ -121,7 +121,7 @@ class StudentCalendarScreen extends ConsumerWidget {
           else
             for (final event in visible) ...[
               _EventCard(event: event),
-              const SizedBox(height: StudentSpace.sm),
+              const SizedBox(height: TmsSpace.sm),
             ],
         ],
       ),
@@ -160,7 +160,7 @@ class _EventCard extends StatelessWidget {
     final color = _typeColor(event.kind);
     return Card(
       child: InkWell(
-        borderRadius: BorderRadius.circular(StudentRadius.card),
+        borderRadius: BorderRadius.circular(TmsRadius.card),
         onTap: () => showModalBottomSheet<void>(
           context: context,
           showDragHandle: true,
@@ -175,14 +175,14 @@ class _EventCard extends StatelessWidget {
                   icon: _typeIcon(event.kind),
                   color: color,
                 ),
-                const SizedBox(height: StudentSpace.md),
+                const SizedBox(height: TmsSpace.md),
                 Text(
                   event.title,
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
-                const SizedBox(height: StudentSpace.xs),
+                const SizedBox(height: TmsSpace.xs),
                 Text(event.dateLabel),
-                const SizedBox(height: StudentSpace.md),
+                const SizedBox(height: TmsSpace.md),
                 Text(
                   event.details.isEmpty
                       ? 'No further details were provided.'
@@ -193,7 +193,7 @@ class _EventCard extends StatelessWidget {
           ),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(StudentSpace.md),
+          padding: const EdgeInsets.all(TmsSpace.md),
           child: Row(
             children: [
               Container(
@@ -201,7 +201,7 @@ class _EventCard extends StatelessWidget {
                 height: 58,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: .10),
-                  borderRadius: BorderRadius.circular(StudentRadius.control),
+                  borderRadius: BorderRadius.circular(TmsRadius.control),
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -223,7 +223,7 @@ class _EventCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: StudentSpace.md),
+              const SizedBox(width: TmsSpace.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -232,7 +232,7 @@ class _EventCard extends StatelessWidget {
                       event.title,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    const SizedBox(height: StudentSpace.xxs),
+                    const SizedBox(height: TmsSpace.xxs),
                     Text(
                       event.details.isEmpty ? event.dateLabel : event.details,
                       maxLines: 2,

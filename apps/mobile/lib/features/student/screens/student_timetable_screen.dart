@@ -202,7 +202,7 @@ class _TimetableSessionTile extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(TmsRadius.r14),
         border: Border.all(color: StudentColors.border),
       ),
       child: Column(
@@ -216,7 +216,7 @@ class _TimetableSessionTile extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
                   color: kColorPrimary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(TmsRadius.r12),
                 ),
                 child: Text(
                   session.time,
@@ -264,7 +264,7 @@ class _TimetableSessionTile extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: StudentColors.info.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(StudentRadius.pill),
+                borderRadius: BorderRadius.circular(TmsRadius.pill),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,

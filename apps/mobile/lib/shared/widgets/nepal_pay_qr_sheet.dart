@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../app/theme/app_colors.dart';
+import 'package:tms_mobile/core/theme/app_colors.dart';
 import '../utils/formatters.dart';
+import 'package:tms_mobile/core/theme/app_tokens.dart';
 
 Future<void> showNepalPayQrSheet(
   BuildContext context, {
@@ -24,7 +25,7 @@ Future<void> showNepalPayQrSheet(
               Text(
                 'Scan to continue with Nepal Pay',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: TmsAppColors.mutedText,
+                      color: kColorMutedText,
                     ),
               ),
               const SizedBox(height: 20),
@@ -32,9 +33,9 @@ Future<void> showNepalPayQrSheet(
                 width: 180,
                 height: 180,
                 decoration: BoxDecoration(
-                  color: TmsAppColors.surface,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: TmsAppColors.border),
+                  color: kColorSurface,
+                  borderRadius: BorderRadius.circular(TmsRadius.r20),
+                  border: Border.all(color: kColorBorder),
                 ),
                 child: const Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -42,14 +43,14 @@ Future<void> showNepalPayQrSheet(
                     Icon(
                       Icons.qr_code_2_rounded,
                       size: 56,
-                      color: TmsAppColors.mutedText,
+                      color: kColorMutedText,
                     ),
                     SizedBox(height: 8),
                     Text(
                       'Nepal Pay QR',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: TmsAppColors.mutedText,
+                        color: kColorMutedText,
                       ),
                     ),
                   ],

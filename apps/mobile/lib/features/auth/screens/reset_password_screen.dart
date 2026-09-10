@@ -5,6 +5,7 @@ import 'package:tms_mobile/core/utils/validators.dart';
 import 'package:tms_mobile/features/auth/data/auth_service.dart';
 import 'package:tms_mobile/features/auth/screens/login_screen.dart';
 import 'package:tms_mobile/features/auth/widgets/auth_card.dart';
+import 'package:tms_mobile/core/theme/app_tokens.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   const ResetPasswordScreen({
@@ -245,7 +246,7 @@ class _PasswordStrengthBar extends StatelessWidget {
         Stack(
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: BorderRadius.circular(TmsRadius.rFull),
               child: LinearProgressIndicator(
                 value: score / 4,
                 minHeight: 10,

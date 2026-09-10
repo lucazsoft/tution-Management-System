@@ -16,6 +16,7 @@ import 'package:tms_mobile/core/theme/app_colors.dart';
 import '../models/janitor_task.dart';
 import '../viewmodels/janitor_portal_viewmodel.dart';
 import '../widgets/janitor_task_card.dart';
+import 'package:tms_mobile/core/theme/app_tokens.dart';
 
 class JanitorTaskDetailScreen extends ConsumerStatefulWidget {
   const JanitorTaskDetailScreen({
@@ -164,7 +165,7 @@ class _CompletedBanner extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: kColorSuccess.withValues(alpha: .1),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(TmsRadius.r16),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

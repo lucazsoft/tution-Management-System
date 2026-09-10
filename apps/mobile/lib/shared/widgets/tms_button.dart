@@ -46,7 +46,7 @@ class _TMSButtonState extends State<TMSButton> {
                 backgroundColor: kColorAccent,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(7),
+                  borderRadius: BorderRadius.circular(TmsRadius.control),
                 ),
                 textStyle: const TextStyle(
                   fontSize: 15,

@@ -71,4 +71,3 @@ final connectivityMonitorProvider =
   ref.onDispose(monitor.dispose);
   return monitor;
 });
-

@@ -7,6 +7,7 @@ import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/features/auth/data/auth_service.dart';
 import 'package:tms_mobile/features/auth/data/mock_auth_service.dart';
 import 'package:tms_mobile/features/auth/widgets/auth_card.dart';
+import 'package:tms_mobile/core/theme/app_tokens.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -127,7 +128,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: kColorError.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(TmsRadius.r8),
                   border: Border.all(color: kColorError.withValues(alpha: 0.3)),
                 ),
                 child: Row(
@@ -162,7 +163,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 hintText: 'e.g. teacher@tms.edu.np',
                 prefixIcon: const Icon(Icons.email_outlined),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(TmsRadius.r10),
                 ),
                 filled: true,
                 fillColor: kColorSurface,
@@ -203,7 +204,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   },
                 ),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(TmsRadius.r10),
                 ),
                 filled: true,
                 fillColor: kColorSurface,
@@ -263,7 +264,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   backgroundColor: kColorPrimary,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(TmsRadius.r10),
                   ),
                   elevation: 2,
                 ),
@@ -377,16 +378,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       backgroundColor:
           isSelected ? kColorPrimary : kColorPrimary.withValues(alpha: 0.08),
       side: BorderSide(
-        color: isSelected
-            ? kColorPrimary
-            : kColorPrimary.withValues(alpha: 0.2),
+        color:
+            isSelected ? kColorPrimary : kColorPrimary.withValues(alpha: 0.2),
       ),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(TmsRadius.r20),
       ),
-      onPressed: _isLoading
-          ? null
-          : () => _fillDemoCredentials(email, pass),
+      onPressed: _isLoading ? null : () => _fillDemoCredentials(email, pass),
     );
   }
 }

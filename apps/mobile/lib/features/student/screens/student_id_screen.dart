@@ -137,7 +137,7 @@ class _StudentIdScreenState extends ConsumerState<StudentIdScreen>
                 ),
                 decoration: BoxDecoration(
                   color: StudentColors.error.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(TmsRadius.r14),
                   border: Border.all(
                     color: StudentColors.error.withValues(alpha: 0.4),
                   ),
@@ -170,7 +170,7 @@ class _StudentIdScreenState extends ConsumerState<StudentIdScreen>
                 ),
                 decoration: BoxDecoration(
                   color: kColorSuccess.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(TmsRadius.r20),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -203,7 +203,7 @@ class _StudentIdScreenState extends ConsumerState<StudentIdScreen>
                 ),
                 decoration: BoxDecoration(
                   color: kColorPrimary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(TmsRadius.r20),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -257,7 +257,7 @@ class _StudentIdScreenState extends ConsumerState<StudentIdScreen>
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size.fromHeight(50),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(TmsRadius.r14),
                       ),
                     ),
                     onPressed: () {
@@ -281,7 +281,7 @@ class _StudentIdScreenState extends ConsumerState<StudentIdScreen>
                       backgroundColor: kColorAccent,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(TmsRadius.r14),
                       ),
                     ),
                     onPressed: _flipCard,
@@ -303,7 +303,7 @@ class _StudentIdScreenState extends ConsumerState<StudentIdScreen>
       onTap: _flipCard,
       child: Card(
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(TmsRadius.r24),
           side: const BorderSide(color: Color(0xFFD7DFEA), width: 2),
         ),
         elevation: 6,
@@ -315,7 +315,8 @@ class _StudentIdScreenState extends ConsumerState<StudentIdScreen>
               padding: const EdgeInsets.all(20),
               decoration: const BoxDecoration(
                 color: kColorPrimary,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+                borderRadius:
+                    BorderRadius.vertical(top: Radius.circular(TmsRadius.r22)),
               ),
               child: Row(
                 children: [
@@ -410,7 +411,7 @@ class _StudentIdScreenState extends ConsumerState<StudentIdScreen>
                         decoration: BoxDecoration(
                           color: Colors.white,
                           border: Border.all(color: Colors.black26),
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(TmsRadius.r10),
                         ),
                         child: const Icon(
                           Icons.qr_code_2_rounded,
@@ -465,7 +466,7 @@ class _StudentIdScreenState extends ConsumerState<StudentIdScreen>
       onTap: _flipCard,
       child: Card(
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(TmsRadius.r24),
           side: const BorderSide(color: Color(0xFFD7DFEA), width: 2),
         ),
         elevation: 6,
@@ -477,7 +478,8 @@ class _StudentIdScreenState extends ConsumerState<StudentIdScreen>
               padding: const EdgeInsets.all(20),
               decoration: const BoxDecoration(
                 color: kColorAccent,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+                borderRadius:
+                    BorderRadius.vertical(top: Radius.circular(TmsRadius.r22)),
               ),
               child: Row(
                 children: [
@@ -529,7 +531,7 @@ class _StudentIdScreenState extends ConsumerState<StudentIdScreen>
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: kColorSurface,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(TmsRadius.r12),
                     ),
                     child: Text(
                       'Terms: This digital card is non-transferable and must be presented upon entering the campus or library. ${card.statusReason}',
