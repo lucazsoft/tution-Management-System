@@ -216,7 +216,7 @@ export function AcademicRoster({ role, title, subtitle, emptyText, showFees = fa
                 filtered.map((person) => {
                   const branchNames = Array.from(new Set(person.roles.map((r) => r.branchName).filter(Boolean) as string[]));
                   return (
-                    <tr key={person.id} onClick={() => setSelectedUserId(person.id)} style={{ cursor: 'pointer' }}>
+                    <tr key={person.id} role="button" tabIndex={0} aria-label={`Open ${person.name}'s profile`} onClick={() => setSelectedUserId(person.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedUserId(person.id); } }} style={{ cursor: 'pointer' }}>
                       <td>
                         <div className="people-person">
                           <div className="people-avatar">{initials(person.name)}</div>
