@@ -1,3 +1,4 @@
+import { AccountMenu } from './AccountMenu';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -14,17 +15,6 @@ import './dashboardShell.css';
 interface DashboardShellProps {
   role: DashboardRole;
   children: ReactNode;
-}
-
-function getInitials(name: string): string {
-  return (
-    name
-      .split(' ')
-      .filter(Boolean)
-      .map((part) => part[0]?.toUpperCase())
-      .join('')
-      .slice(0, 2) || 'TM'
-  );
 }
 
 function groupNavigation(items: DashboardNavItem[]): Array<[string, DashboardNavItem[]]> {
@@ -134,7 +124,6 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
   const sidebarWidth = isCollapsed ? 64 : 240;
   const pageTitle = activeItem?.label ?? formatFallbackTitle(location.pathname);
   const userName = user?.name ?? roleLabel;
-  const userInitials = getInitials(userName);
   const updatedLabel = lastUpdated ? 'Updated just now' : 'Updated just now';
 
   useEffect(() => {
@@ -431,47 +420,7 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
                   {theme === 'light' ? 'dark_mode' : 'light_mode'}
                 </span>
               </button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', borderRadius: '999px', background: 'var(--bg-card)', boxShadow: '0 8px 20px -18px rgba(21, 96, 189, 0.8)' }}>
-                <div
-                  style={{
-                    width: '38px',
-                    height: '38px',
-                    borderRadius: '50%',
-                    background: 'rgba(21, 96, 189, 0.1)',
-                    color: 'var(--color-primary)',
-                    display: 'grid',
-                    placeItems: 'center',
-                    fontWeight: 700,
-                  }}
-                >
-                  {accountPath ? <button type="button" aria-label="Open my account" onClick={() => navigate(accountPath)} style={{ color: 'inherit', background: 'transparent', border: 0, minWidth: 44, minHeight: 44, font: 'inherit', cursor: 'pointer' }}>{userInitials}</button> : userInitials}
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ color: 'var(--color-text)', fontSize: '13px', fontWeight: 700, whiteSpace: 'nowrap' }}>{userName}</div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: '11px', fontWeight: 600 }}>{roleLabel}</div>
-                </div>
-                <button
-                  type="button"
-                  onClick={logout}
-                  aria-label="Sign out"
-                  style={{
-                    width: '34px',
-                    height: '34px',
-                    borderRadius: '50%',
-                    border: 'none',
-                    background: 'rgba(21, 96, 189, 0.08)',
-                    color: 'var(--color-primary)',
-                    display: 'grid',
-                    placeItems: 'center',
-                    cursor: 'pointer',
-                    flexShrink: 0,
-                  }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
-                    logout
-                  </span>
-                </button>
-              </div>
+              <AccountMenu name={userName} role={roleLabel} accountPath={accountPath ?? undefined} securityPath={accountPath?.replace('/account', '/security') ?? (role === 'super-admin' ? '/platform/security' : role === 'receptionist' ? '/staff/reception#security' : '/staff/tasks#security')} onLogout={logout} />
             </div>
           </div>
         </header>

@@ -1,3 +1,4 @@
+import { AccountMenu } from './AccountMenu';
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -44,18 +45,13 @@ export function PageShell({
   });
   const [isCollapsed, setIsCollapsed] = useState(defaultSidebarCollapsed);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
-  const menuRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
   // Close menus on click outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setShowUserMenu(false);
-      }
       if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
         setShowNotifications(false);
       }
@@ -91,7 +87,6 @@ export function PageShell({
     return groups;
   }, [navItems]);
 
-  const initials = userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
 
   // Construct simple breadcrumb from pathname
   const pathParts = location.pathname.split('/').filter(Boolean);
@@ -211,48 +206,7 @@ export function PageShell({
             )}
           </div>
 
-          {/* User Profile Menu */}
-          <div className="topbar-dropdown-wrap" ref={menuRef}>
-            <button 
-              className="topbar-user-btn" 
-              onClick={() => setShowUserMenu(!showUserMenu)}
-              aria-label="User account menu"
-            >
-              {userAvatar ? (
-                <img src={userAvatar} alt={userName} className="user-avatar" />
-              ) : (
-                <div className="user-avatar-initials">{initials}</div>
-              )}
-              <div className="user-profile-meta desktop-only">
-                <span className="profile-name">{userName}</span>
-                <span className="profile-role">{userRole.replace('_', ' ')}</span>
-              </div>
-              <span className="material-symbols-outlined expand-arrow">arrow_drop_down</span>
-            </button>
-
-            {showUserMenu && (
-              <div className="topbar-dropdown user-dropdown">
-                <div className="dropdown-user-header">
-                  <p className="dropdown-user-name">{userName}</p>
-                  <p className="dropdown-user-role">{userRole.replace('_', ' ')}</p>
-                </div>
-                <div className="dropdown-divider" />
-                <button className="dropdown-item-btn" onClick={() => { handleNavClick(accountPath ?? '/profile'); setShowUserMenu(false); }}>
-                  <span className="material-symbols-outlined">person</span>
-                  {accountPath ? 'My account' : 'My Profile'}
-                </button>
-                <button className="dropdown-item-btn" onClick={() => { handleNavClick(securityPath ?? '/settings'); setShowUserMenu(false); }}>
-                  <span className="material-symbols-outlined">settings</span>
-                  {securityPath ? 'Security' : 'Settings'}
-                </button>
-                <div className="dropdown-divider" />
-                <button className="dropdown-item-btn text-danger" onClick={onLogout}>
-                  <span className="material-symbols-outlined">logout</span>
-                  Sign Out
-                </button>
-              </div>
-            )}
-          </div>
+          <AccountMenu name={userName} role={userRole.replaceAll('_', ' ')} avatar={userAvatar} accountPath={accountPath} securityPath={securityPath} onLogout={onLogout} />
         </div>
       </header>
 
