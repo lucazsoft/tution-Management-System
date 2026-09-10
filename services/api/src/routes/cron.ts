@@ -1,4 +1,6 @@
 import { Router, Response } from 'express';
+import crypto from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import prisma from '../utils/db';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware } from '../middleware/auth';
@@ -12,6 +14,18 @@ import { recoverAdmissionDeliveries } from '../services/admission-delivery';
 import { runBranchExpenseAnomalyAlerts } from '../services/financial-anomaly-alerts';
 import { executeDueSocialPosts, MissingCredentialsAdapter } from '../services/social-publishing';
 import { prismaSocialPublishingRepository } from '../services/social-publishing-store';
+import {
+  compensationStructure,
+  money,
+} from '../services/payroll-service';
+import {
+  countApprovedLeaveDaysInMonth,
+  distinctPresentDays,
+  runMonthlyPayrollAutomation,
+  type AutomationPersistRow,
+  type AutomationStaffInput,
+} from '../services/payroll-automation';
+import { handlePayrollCron } from './cron-payroll';
 
 const router = Router();
 
@@ -127,6 +141,151 @@ router.post(
       return res.status(500).json({ error: 'Failed to run cron automation task.', details: error.message });
     }
   }
+);
+
+// Monthly payroll automation (P3.2): auto-calculates FIXED-contract salaries from
+// geo-attendance (TeacherAttendance), approved leaves, and Nepal tax/SSF rules.
+// Tenant scope comes from the verified session only. Idempotent per staff/month.
+router.post(
+  '/payroll',
+  authMiddleware,
+  async (req: TenantRequest, res: Response) => {
+    const tenantId = req.tenantId!;
+    try {
+      const outcome = await handlePayrollCron({
+        tenantId,
+        isTenantAdmin: isTenantAdmin(req.user!),
+        month: req.body?.month,
+        year: req.body?.year,
+        runAutomation: async ({ tenantId: scopedTenantId, month, year }) => {
+        const periodStart = new Date(Date.UTC(year, month - 1, 1));
+        const periodEnd = new Date(Date.UTC(year, month, 1));
+
+        const staffRecords = await prisma.staffRecord.findMany({
+          where: { user: { tenantId: scopedTenantId, status: 'ACTIVE' } },
+          include: { user: { include: { userRoles: true } } },
+          orderBy: [{ id: 'asc' }],
+        });
+
+        let skippedUnsupported = 0;
+        const eligible: typeof staffRecords = [];
+        for (const record of staffRecords) {
+          if (record.contractType !== 'FIXED') {
+            skippedUnsupported += 1;
+            continue;
+          }
+          const compensation = compensationStructure(record.contractType, record.salaryStructure);
+          if (!compensation.success || compensation.value.baseMonthlySalary === undefined) {
+            skippedUnsupported += 1;
+            continue;
+          }
+          eligible.push(record);
+        }
+
+        const existing = await prisma.payroll.findMany({
+          where: { tenantId: scopedTenantId, month, year },
+          select: { staffRecordId: true },
+        });
+        const paidIds = new Set(existing.map((row) => row.staffRecordId));
+
+        const staffInputs: AutomationStaffInput[] = [];
+        for (const record of eligible) {
+          const branchIds = [...new Set(record.user.userRoles.map((role) => role.branchId).filter((id): id is string => Boolean(id)))];
+          if (branchIds.length !== 1) {
+            skippedUnsupported += 1;
+            continue;
+          }
+          const compensation = compensationStructure(record.contractType, record.salaryStructure);
+          if (!compensation.success || compensation.value.baseMonthlySalary === undefined) {
+            skippedUnsupported += 1;
+            continue;
+          }
+          const [stamps, leaves] = await Promise.all([
+            prisma.teacherAttendance.findMany({
+              where: { userId: record.userId, timestamp: { gte: periodStart, lt: periodEnd } },
+              select: { timestamp: true },
+            }),
+            prisma.leave.findMany({
+              where: {
+                userId: record.userId,
+                status: { in: ['APPROVED_LEVEL1', 'APPROVED_LEVEL2'] },
+                startDate: { lt: periodEnd },
+                endDate: { gte: periodStart },
+              },
+              select: { startDate: true, endDate: true, status: true },
+            }),
+          ]);
+          staffInputs.push({
+            staffRecordId: record.id,
+            branchId: branchIds[0],
+            baseSalary: money(compensation.value.baseMonthlySalary),
+            bonuses: 0,
+            manualDeductions: 0,
+            presentDayCount: distinctPresentDays(stamps.map((stamp) => stamp.timestamp)).length,
+            approvedLeaveDays: countApprovedLeaveDaysInMonth(leaves, year, month),
+            alreadyPaid: paidIds.has(record.id),
+          });
+        }
+
+        const summary = await runMonthlyPayrollAutomation({
+          tenantId: scopedTenantId,
+          month,
+          year,
+          calculatedBy: req.user!.id,
+          loadStaff: async () => staffInputs,
+          persist: async (rows: AutomationPersistRow[]) => {
+            try {
+              await prisma.payroll.createMany({
+                data: rows.map((row) => ({
+                  tenantId: scopedTenantId,
+                  branchId: row.branchId,
+                  staffRecordId: row.staffRecordId,
+                  month: row.month,
+                  year: row.year,
+                  payslipNumber: `PS-${row.year}${String(row.month).padStart(2, '0')}-${crypto.randomBytes(5).toString('hex').toUpperCase()}`,
+                  baseSalary: row.baseSalary,
+                  attendanceDeductions: money(row.attendanceDeduction + row.manualDeductions),
+                  bonuses: row.bonuses,
+                  netPayable: row.netPayable,
+                  calculationBreakdown: {
+                    ...row.breakdown,
+                    ssfEmployeeShare: row.ssfEmployeeShare,
+                    incomeTax: row.incomeTax,
+                    source: 'AUTOMATED_MONTHLY_CRON',
+                  },
+                  calculatedBy: row.calculatedBy,
+                  status: 'PENDING',
+                })),
+              });
+            } catch (error) {
+              if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+                const conflict = new Error('Payroll already exists for one or more staff members in this period.');
+                (conflict as { statusCode?: number }).statusCode = 409;
+                throw conflict;
+              }
+              throw error;
+            }
+            return rows.length;
+          },
+        });
+        return {
+          created: summary.created,
+          skipped: summary.skipped + skippedUnsupported,
+          rows: summary.rows.map((row) => ({
+            staffRecordId: row.staffRecordId,
+            branchId: row.branchId,
+            netPayable: row.netPayable,
+          })),
+        };
+        },
+      });
+      return res.status(outcome.status).json(outcome.body);
+    } catch (error) {
+      const statusCode = (error as { statusCode?: number }).statusCode ?? 500;
+      const message = error instanceof Error ? error.message : 'Monthly payroll automation failed.';
+      return res.status(statusCode).json({ error: message });
+    }
+  },
 );
 
 export default router;

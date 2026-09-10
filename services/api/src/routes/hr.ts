@@ -11,6 +11,8 @@ import {
   PayrollConfigurationError,
   PayrollPeriodConflictError,
 } from '../services/payroll-service';
+import { daysInMonth, type MonthlyPayrollBreakdown } from '../services/payroll-automation';
+import { renderPayslipPdf } from '../services/payslip-renderer';
 
 const router = Router();
 const STAFF_DOCUMENT_TYPES = new Set(['NID', 'CONTRACT', 'ACADEMIC', 'CERTIFICATION']);
@@ -518,5 +520,81 @@ router.post('/payroll/reconcile-bulk', authMiddleware, hasPermission('manage_sta
     return res.status(500).json({ error: 'Bulk payroll reconciliation failed.' });
   }
 });
+
+// 9. Itemized payslip PDF with Nepal tax/SSF breakdown (P3.2).
+router.get(
+  '/payroll/:id/payslip',
+  authMiddleware,
+  hasPermission('manage_staff'),
+  async (req: TenantRequest, res: Response) => {
+    try {
+      if (!isTenantAdmin(req.user!)) return res.status(403).json({ error: 'Only the Tenant Admin may view payslips.' });
+      const { id } = req.params;
+      if (!id || id.length > 128) return res.status(400).json({ error: 'A valid payroll identifier is required.' });
+      const payroll = await prisma.payroll.findFirst({
+        where: { id, tenantId: req.tenantId! },
+        include: { staffRecord: { include: { user: true } }, branch: true },
+      });
+      if (!payroll) return res.status(404).json({ error: 'Payroll record not found in your institution.' });
+      const tenant = await prisma.tenant.findUnique({ where: { id: req.tenantId! }, select: { name: true } });
+
+      const stored = payroll.calculationBreakdown as Record<string, unknown>;
+      const asNumber = (value: unknown, fallback: number) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : fallback;
+      };
+      const breakdown: MonthlyPayrollBreakdown = stored && typeof stored.ssfEmployeeShare !== 'undefined'
+        ? {
+          daysInMonth: asNumber(stored.daysInMonth, daysInMonth(payroll.year, payroll.month)),
+          dailyRate: asNumber(stored.dailyRate, 0),
+          presentDays: asNumber(stored.presentDays, 0),
+          approvedLeaveDays: asNumber(stored.approvedLeaveDays, 0),
+          absentDays: asNumber(stored.absentDays, 0),
+          baseSalary: asNumber(stored.baseSalary, Number(payroll.baseSalary)),
+          bonuses: asNumber(stored.bonuses, Number(payroll.bonuses)),
+          grossEarnings: asNumber(stored.grossEarnings, Number(payroll.baseSalary) + Number(payroll.bonuses)),
+          attendanceDeduction: asNumber(stored.attendanceDeduction, Number(payroll.attendanceDeductions)),
+          manualDeductions: asNumber(stored.manualDeductions, 0),
+          ssfEmployeeShare: asNumber(stored.ssfEmployeeShare, 0),
+          incomeTax: asNumber(stored.incomeTax, 0),
+          totalDeductions: asNumber(stored.totalDeductions, Number(payroll.attendanceDeductions)),
+          netPayable: asNumber(stored.netPayable, Number(payroll.netPayable)),
+        }
+        : {
+          daysInMonth: daysInMonth(payroll.year, payroll.month),
+          dailyRate: 0,
+          presentDays: 0,
+          approvedLeaveDays: 0,
+          absentDays: 0,
+          baseSalary: Number(payroll.baseSalary),
+          bonuses: Number(payroll.bonuses),
+          grossEarnings: Number(payroll.baseSalary) + Number(payroll.bonuses),
+          attendanceDeduction: Number(payroll.attendanceDeductions),
+          manualDeductions: 0,
+          ssfEmployeeShare: 0,
+          incomeTax: 0,
+          totalDeductions: Number(payroll.attendanceDeductions),
+          netPayable: Number(payroll.netPayable),
+        };
+
+      const pdf = await renderPayslipPdf({
+        payslipNumber: payroll.payslipNumber,
+        staffName: `${payroll.staffRecord.user.firstName} ${payroll.staffRecord.user.lastName}`.trim(),
+        designation: payroll.staffRecord.designation,
+        branchName: payroll.branch.name,
+        institutionName: tenant?.name ?? 'Institution',
+        month: payroll.month,
+        year: payroll.year,
+        breakdown,
+        calculatedAt: payroll.calculatedAt.toISOString(),
+      });
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${payroll.payslipNumber}.pdf"`);
+      return res.status(200).send(pdf);
+    } catch {
+      return res.status(500).json({ error: 'Failed to generate payslip.' });
+    }
+  }
+);
 
 export default router;
