@@ -1,5 +1,5 @@
 import prisma from '../utils/db';
-import { MockPushNotificationService } from '../utils/notifications';
+import { PushNotificationService } from './push-notification';
 import { buildFinancialIntelligence } from '../utils/financial-intelligence';
 
 type BranchRow = { id: string; name: string };
@@ -31,7 +31,9 @@ export async function runBranchExpenseAnomalyAlerts(input: {
 }) {
   const now = input.now ?? new Date();
   const db = input.db ?? (prisma as unknown as FinancialAnomalyDb);
-  const sendPush = input.sendPush ?? MockPushNotificationService.sendPush.bind(MockPushNotificationService);
+  const sendPush = input.sendPush ??
+    ((userId: string, title: string, body: string) =>
+      PushNotificationService.sendPush(input.tenantId, userId, title, body));
   const historyStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 3, 1));
   const historyEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 
