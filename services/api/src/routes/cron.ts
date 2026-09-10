@@ -10,6 +10,8 @@ import { generateDailyTeacherSessions } from '../services/timetable-service';
 import { markOverdueInvoices } from '../services/billing-access';
 import { recoverAdmissionDeliveries } from '../services/admission-delivery';
 import { runBranchExpenseAnomalyAlerts } from '../services/financial-anomaly-alerts';
+import { executeDueSocialPosts, MissingCredentialsAdapter } from '../services/social-publishing';
+import { prismaSocialPublishingRepository } from '../services/social-publishing-store';
 
 const router = Router();
 
@@ -101,6 +103,17 @@ router.post(
           `Detected ${financialAnomalyAlerts.anomalies.length} branch expense ${anomalyLabel}; ` +
           `delivered ${financialAnomalyAlerts.delivered} of ${financialAnomalyAlerts.attemptedDeliveries} alert ${notificationLabel}.`,
         );
+      } else if (taskName === 'social-publishing') {
+        const result = await executeDueSocialPosts({
+          tenantId: req.tenantId!,
+          repository: prismaSocialPublishingRepository,
+          adapters: {
+            META: new MissingCredentialsAdapter('META'),
+            TIKTOK: new MissingCredentialsAdapter('TIKTOK'),
+            LINKEDIN: new MissingCredentialsAdapter('LINKEDIN'),
+          },
+        });
+        logs.push(`Social publishing claimed ${result.claimed}; published ${result.published}; blocked ${result.blocked}; failed ${result.failed}.`);
       } else {
         return res.status(400).json({ error: `Unknown taskName: ${taskName}.` });
       }
