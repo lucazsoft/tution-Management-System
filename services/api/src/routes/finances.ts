@@ -24,6 +24,16 @@ import {
   PayrollConfigurationError,
   PayrollPeriodConflictError,
 } from '../services/payroll-service';
+import {
+  buildLedger,
+  expenseToEntry,
+  formatNpr,
+  invoiceToEntry,
+  payrollToEntry,
+  renderLedgerPdf,
+  toLedgerCsv,
+  type JournalEntry,
+} from '../services/general-ledger';
 
 const router = Router();
 
@@ -2207,44 +2217,99 @@ router.put(
   }
 );
 
-// 9. Double-Entry Ledger Export
+// 9. Double-Entry General Ledger (P3.1.2) — tenant scope comes from the
+// verified session only; a client-supplied tenantId is never honored.
+async function collectLedgerEntries(tenantId: string): Promise<JournalEntry[]> {
+  const [invoices, expenses, payrolls] = await Promise.all([
+    prisma.invoice.findMany({ where: { tenantId, status: 'PAID' } }),
+    prisma.expense.findMany({ where: { tenantId } }),
+    prisma.payroll.findMany({ where: { tenantId, status: 'MANUALLY_PAID' } }),
+  ]);
+  return buildLedger([
+    ...invoices.map((invoice) => invoiceToEntry(invoice)),
+    ...expenses.map((expense) => expenseToEntry(expense)),
+    ...payrolls.map((payroll) => payrollToEntry(payroll)),
+  ]).entries;
+}
+
+function toLedgerRow(entry: JournalEntry) {
+  const debit = entry.lines.find((line) => line.debitPaisa > 0)!;
+  const credit = entry.lines.find((line) => line.creditPaisa > 0)!;
+  return {
+    date: entry.date,
+    memo: entry.memo,
+    source: entry.source,
+    sourceId: entry.sourceId,
+    branchId: entry.branchId ?? null,
+    debitAccount: debit.account,
+    creditAccount: credit.account,
+    amountPaisa: debit.debitPaisa,
+    amountNpr: formatNpr(debit.debitPaisa),
+  };
+}
+
+router.get(
+  '/ledger/general',
+  authMiddleware,
+  hasPermission('view_reports'),
+  async (req: TenantRequest, res: Response) => {
+    try {
+      const entries = await collectLedgerEntries(req.tenantId!);
+      const ledger = buildLedger(entries);
+      return res.status(200).json({
+        balanced: ledger.balanced,
+        entryCount: ledger.entryCount,
+        totalDebitPaisa: ledger.totalDebitPaisa,
+        totalCreditPaisa: ledger.totalCreditPaisa,
+        entries: ledger.entries.map(toLedgerRow),
+      });
+    } catch (error: any) {
+      return res.status(500).json({ error: 'Failed to load the general ledger.' });
+    }
+  },
+);
+
+// 10. Double-Entry Ledger Export (P3.1.3) — JSON (default), CSV, or PDF for audit compliance.
 router.get(
   '/ledger/export',
   authMiddleware,
   hasPermission('view_reports'),
   async (req: TenantRequest, res: Response) => {
     try {
-      const [invoices, expenses, payrolls] = await Promise.all([
-        prisma.invoice.findMany({ where: { tenantId: req.tenantId!, status: 'PAID' } }),
-        prisma.expense.findMany({ where: { tenantId: req.tenantId! } }),
-        prisma.payroll.findMany({ where: { tenantId: req.tenantId!, status: 'MANUALLY_PAID' } }),
-      ]);
-      const ledgerEntries = [
-        ...invoices.map((invoice) => ({
-          date: invoice.paymentDate ?? invoice.updatedAt,
-          accountDebit: 'Cash/Bank Account',
-          accountCredit: `${invoice.invoiceType} Income`,
-          amount: Number(invoice.netPayable),
-          description: `Payment for invoice ${invoice.id}`,
-        })),
-        ...expenses.map((expense) => ({
-          date: expense.date,
-          accountDebit: `${expense.category} Expense`,
-          accountCredit: 'Cash/Bank Account',
-          amount: Number(expense.amount),
-          description: expense.purpose,
-        })),
-        ...payrolls.map((payroll) => ({
-          date: payroll.paymentDate ?? payroll.updatedAt,
-          accountDebit: 'Payroll Expense',
-          accountCredit: 'Cash/Bank Account',
-          amount: payroll.netPayable,
-          description: `Payroll ${payroll.month}/${payroll.year}`,
-        })),
-      ].sort((a, b) => a.date.getTime() - b.date.getTime());
+      const format = typeof req.query.format === 'string' ? req.query.format.toLowerCase() : 'json';
+      if (!['json', 'csv', 'pdf'].includes(format)) {
+        return res.status(400).json({ error: 'Export format must be one of json, csv, or pdf.' });
+      }
+      const entries = await collectLedgerEntries(req.tenantId!);
+      const ledger = buildLedger(entries);
+      if (format === 'csv') {
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="general-ledger.csv"');
+        res.setHeader('Cache-Control', 'private, no-store');
+        return res.send(toLedgerCsv(ledger.entries));
+      }
+      if (format === 'pdf') {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'attachment; filename="general-ledger.pdf"');
+        res.setHeader('Cache-Control', 'private, no-store');
+        return res.send(await renderLedgerPdf(ledger.entries, req.tenantId!));
+      }
+      const ledgerEntries = ledger.entries.map((entry) => {
+        const row = toLedgerRow(entry);
+        return {
+          date: row.date,
+          accountDebit: row.debitAccount,
+          accountCredit: row.creditAccount,
+          amount: Number(row.amountNpr),
+          description: row.memo,
+        };
+      });
       return res.status(200).json({
         exportFormat: 'Excel Double-Entry Ledger',
         columns: ['Date', 'Debit Account', 'Credit Account', 'Amount (NPR)', 'Description'],
+        balanced: ledger.balanced,
+        totalDebitPaisa: ledger.totalDebitPaisa,
+        totalCreditPaisa: ledger.totalCreditPaisa,
         entries: ledgerEntries,
       });
     } catch (error: any) {
