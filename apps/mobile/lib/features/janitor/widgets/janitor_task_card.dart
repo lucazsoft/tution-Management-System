@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:tms_mobile/core/theme/app_colors.dart';
 
 import '../models/janitor_task.dart';
+import 'package:tms_mobile/core/theme/app_tokens.dart';
 
 class JanitorTaskCard extends StatelessWidget {
   const JanitorTaskCard({super.key, required this.task, required this.onTap});
@@ -15,7 +16,7 @@ class JanitorTaskCard extends StatelessWidget {
     return Card(
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(TmsRadius.r20),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -26,7 +27,7 @@ class JanitorTaskCard extends StatelessWidget {
                 height: 44,
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: .12),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(TmsRadius.r14),
                 ),
                 child: Icon(_statusIcon(task.status), color: statusColor),
               ),
@@ -85,7 +86,7 @@ class _TaskPill extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: color.withValues(alpha: .12),
-          borderRadius: BorderRadius.circular(99),
+          borderRadius: BorderRadius.circular(TmsRadius.r99),
         ),
         child: Text(
           label,

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../app/theme/app_colors.dart';
+import 'package:tms_mobile/core/theme/app_colors.dart';
 
 class SkeletonLoader extends StatefulWidget {
   const SkeletonLoader({
@@ -55,9 +55,9 @@ class _SkeletonLoaderState extends State<SkeletonLoader> {
           begin: _highlight ? Alignment.topLeft : Alignment.bottomRight,
           end: _highlight ? Alignment.bottomRight : Alignment.topLeft,
           colors: const <Color>[
-            TmsAppColors.surface,
-            TmsAppColors.divider,
-            TmsAppColors.surface,
+            kColorSurface,
+            kColorDivider,
+            kColorSurface,
           ],
         ),
       ),

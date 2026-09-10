@@ -65,7 +65,7 @@ class StudentHomeScreen extends ConsumerWidget {
             ),
           ),
         ),
-        const SizedBox(width: StudentSpace.xs),
+        const SizedBox(width: TmsSpace.xs),
       ],
       body: RefreshIndicator(
         onRefresh: viewModel.refresh,
@@ -123,14 +123,14 @@ class StudentHomeScreen extends ConsumerWidget {
       children: [
         _buildWelcomeCard(context, portal),
         if (portal.overdueAmount > 0) ...[
-          const SizedBox(height: StudentSpace.md),
+          const SizedBox(height: TmsSpace.md),
           _buildOverdueCard(context, portal.overdueAmount),
         ],
-        const SizedBox(height: StudentSpace.lg),
+        const SizedBox(height: TmsSpace.lg),
         _buildTimetableSection(context, portal),
-        const SizedBox(height: StudentSpace.sm),
+        const SizedBox(height: TmsSpace.sm),
         _buildHomeworkSection(context, portal),
-        const SizedBox(height: StudentSpace.sm),
+        const SizedBox(height: TmsSpace.sm),
         _buildQuickActions(context, portal),
       ],
     );
@@ -147,12 +147,12 @@ class StudentHomeScreen extends ConsumerWidget {
             children: [
               _buildWelcomeCard(context, portal),
               if (portal.overdueAmount > 0) ...[
-                const SizedBox(height: StudentSpace.md),
+                const SizedBox(height: TmsSpace.md),
                 _buildOverdueCard(context, portal.overdueAmount),
               ],
-              const SizedBox(height: StudentSpace.lg),
+              const SizedBox(height: TmsSpace.lg),
               _buildTimetableSection(context, portal),
-              const SizedBox(height: StudentSpace.sm),
+              const SizedBox(height: TmsSpace.sm),
               _buildHomeworkSection(context, portal),
             ],
           ),
@@ -164,9 +164,9 @@ class StudentHomeScreen extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(12, 8, 24, 24),
             children: [
               _buildQuickActions(context, portal, isSidebar: true),
-              const SizedBox(height: StudentSpace.lg),
+              const SizedBox(height: TmsSpace.lg),
               _buildNextEventCard(context, portal),
-              const SizedBox(height: StudentSpace.lg),
+              const SizedBox(height: TmsSpace.lg),
               _buildCertificatesCard(context, portal),
             ],
           ),
@@ -186,7 +186,7 @@ class StudentHomeScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(16),
             children: [
               _buildProfileSidebar(context, portal),
-              const SizedBox(height: StudentSpace.lg),
+              const SizedBox(height: TmsSpace.lg),
               _buildQuickActions(context, portal, isSidebar: true),
             ],
           ),
@@ -200,12 +200,12 @@ class StudentHomeScreen extends ConsumerWidget {
             children: [
               _buildWelcomeCard(context, portal),
               if (portal.overdueAmount > 0) ...[
-                const SizedBox(height: StudentSpace.md),
+                const SizedBox(height: TmsSpace.md),
                 _buildOverdueCard(context, portal.overdueAmount),
               ],
-              const SizedBox(height: StudentSpace.lg),
+              const SizedBox(height: TmsSpace.lg),
               _buildTimetableSection(context, portal),
-              const SizedBox(height: StudentSpace.sm),
+              const SizedBox(height: TmsSpace.sm),
               _buildHomeworkSection(context, portal),
             ],
           ),
@@ -218,7 +218,7 @@ class StudentHomeScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(16),
             children: [
               _buildNextEventCard(context, portal),
-              const SizedBox(height: StudentSpace.lg),
+              const SizedBox(height: TmsSpace.lg),
               _buildCertificatesCard(context, portal),
             ],
           ),
@@ -230,14 +230,14 @@ class StudentHomeScreen extends ConsumerWidget {
   Widget _buildWelcomeCard(BuildContext context, StudentPortal portal) {
     final profile = portal.profile;
     return Container(
-      padding: const EdgeInsets.all(StudentSpace.lg),
+      padding: const EdgeInsets.all(TmsSpace.lg),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [StudentColors.primaryDark, StudentColors.primary],
         ),
-        borderRadius: BorderRadius.circular(StudentRadius.card),
+        borderRadius: BorderRadius.circular(TmsRadius.card),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -249,7 +249,7 @@ class StudentHomeScreen extends ConsumerWidget {
                 .displaySmall
                 ?.copyWith(color: Colors.white),
           ),
-          const SizedBox(height: StudentSpace.xs),
+          const SizedBox(height: TmsSpace.xs),
           Text(
             '${profile.grade} · ${profile.branch}',
             style: Theme.of(context)
@@ -257,11 +257,11 @@ class StudentHomeScreen extends ConsumerWidget {
                 .bodyMedium
                 ?.copyWith(color: Colors.white70),
           ),
-          const SizedBox(height: StudentSpace.lg),
+          const SizedBox(height: TmsSpace.lg),
           Row(
             children: [
               const Icon(Icons.schedule_rounded, color: StudentColors.accent),
-              const SizedBox(width: StudentSpace.xs),
+              const SizedBox(width: TmsSpace.xs),
               Text(
                 '${portal.todaySessions.length} sessions today',
                 style: Theme.of(context)
@@ -280,14 +280,14 @@ class StudentHomeScreen extends ConsumerWidget {
     return Card(
       color: StudentColors.error.withValues(alpha: .06),
       child: InkWell(
-        borderRadius: BorderRadius.circular(StudentRadius.card),
+        borderRadius: BorderRadius.circular(TmsRadius.card),
         onTap: () => context.go('/student/fees'),
         child: Padding(
-          padding: const EdgeInsets.all(StudentSpace.md),
+          padding: const EdgeInsets.all(TmsSpace.md),
           child: Row(
             children: [
               const Icon(Icons.lock_rounded, color: StudentColors.error),
-              const SizedBox(width: StudentSpace.sm),
+              const SizedBox(width: TmsSpace.sm),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -299,7 +299,7 @@ class StudentHomeScreen extends ConsumerWidget {
                           .titleMedium
                           ?.copyWith(color: StudentColors.error),
                     ),
-                    const SizedBox(height: StudentSpace.xxs),
+                    const SizedBox(height: TmsSpace.xxs),
                     Text(
                       'NPR ${overdue.toStringAsFixed(0)} is overdue. View what is owed and the payment QR.',
                     ),
@@ -323,18 +323,18 @@ class StudentHomeScreen extends ConsumerWidget {
           action: 'Full timetable',
           onTap: () => context.push('/student/timetable'),
         ),
-        const SizedBox(height: StudentSpace.sm),
+        const SizedBox(height: TmsSpace.sm),
         if (portal.todaySessions.isEmpty)
           const Card(
             child: Padding(
-              padding: EdgeInsets.all(StudentSpace.md),
+              padding: EdgeInsets.all(TmsSpace.md),
               child: Row(
                 children: [
                   Icon(
                     Icons.event_busy_outlined,
                     color: StudentColors.mutedText,
                   ),
-                  SizedBox(width: StudentSpace.sm),
+                  SizedBox(width: TmsSpace.sm),
                   Expanded(child: Text('No sessions scheduled for today.')),
                 ],
               ),
@@ -343,7 +343,7 @@ class StudentHomeScreen extends ConsumerWidget {
         else
           for (final session in portal.todaySessions) ...[
             _SessionTile(session: session),
-            const SizedBox(height: StudentSpace.sm),
+            const SizedBox(height: TmsSpace.sm),
           ],
       ],
     );
@@ -359,18 +359,18 @@ class StudentHomeScreen extends ConsumerWidget {
           action: 'View all',
           onTap: () => context.go('/student/academics'),
         ),
-        const SizedBox(height: StudentSpace.sm),
+        const SizedBox(height: TmsSpace.sm),
         if (pending.isEmpty)
           const Card(
             child: Padding(
-              padding: EdgeInsets.all(StudentSpace.md),
+              padding: EdgeInsets.all(TmsSpace.md),
               child: Row(
                 children: [
                   Icon(
                     Icons.check_circle_outline_rounded,
                     color: StudentColors.success,
                   ),
-                  SizedBox(width: StudentSpace.sm),
+                  SizedBox(width: TmsSpace.sm),
                   Expanded(child: Text('All caught up. No pending homework.')),
                 ],
               ),
@@ -391,7 +391,7 @@ class StudentHomeScreen extends ConsumerWidget {
                 onTap: () => context.go('/student/academics'),
               ),
             ),
-            const SizedBox(height: StudentSpace.sm),
+            const SizedBox(height: TmsSpace.sm),
           ],
       ],
     );
@@ -443,7 +443,7 @@ class StudentHomeScreen extends ConsumerWidget {
       return Column(
         children: actions
             .map((action) => Padding(
-                  padding: const EdgeInsets.only(bottom: StudentSpace.sm),
+                  padding: const EdgeInsets.only(bottom: TmsSpace.sm),
                   child: _QuickAction(
                     icon: action.icon,
                     label: action.label,
@@ -459,7 +459,7 @@ class StudentHomeScreen extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Your record', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: StudentSpace.sm),
+        const SizedBox(height: TmsSpace.sm),
         Row(
           children: [
             Expanded(
@@ -470,7 +470,7 @@ class StudentHomeScreen extends ConsumerWidget {
                 onTap: actions[0].onTap,
               ),
             ),
-            const SizedBox(width: StudentSpace.sm),
+            const SizedBox(width: TmsSpace.sm),
             Expanded(
               child: _QuickAction(
                 icon: actions[1].icon,
@@ -481,7 +481,7 @@ class StudentHomeScreen extends ConsumerWidget {
             ),
           ],
         ),
-        const SizedBox(height: StudentSpace.sm),
+        const SizedBox(height: TmsSpace.sm),
         Row(
           children: [
             Expanded(
@@ -492,7 +492,7 @@ class StudentHomeScreen extends ConsumerWidget {
                 onTap: actions[2].onTap,
               ),
             ),
-            const SizedBox(width: StudentSpace.sm),
+            const SizedBox(width: TmsSpace.sm),
             Expanded(
               child: _QuickAction(
                 icon: actions[3].icon,
@@ -510,21 +510,21 @@ class StudentHomeScreen extends ConsumerWidget {
   Widget _buildNextEventCard(BuildContext context, StudentPortal portal) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(StudentSpace.md),
+        padding: const EdgeInsets.all(TmsSpace.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 const Icon(Icons.event_outlined, color: StudentColors.primary),
-                const SizedBox(width: StudentSpace.sm),
+                const SizedBox(width: TmsSpace.sm),
                 Expanded(
                   child: Text('Upcoming Events',
                       style: Theme.of(context).textTheme.titleMedium),
                 ),
               ],
             ),
-            const SizedBox(height: StudentSpace.md),
+            const SizedBox(height: TmsSpace.md),
             if (portal.events.isEmpty)
               Text(
                 'No upcoming events.',
@@ -532,7 +532,7 @@ class StudentHomeScreen extends ConsumerWidget {
               )
             else
               ...portal.events.take(3).map((e) => Padding(
-                    padding: const EdgeInsets.only(bottom: StudentSpace.sm),
+                    padding: const EdgeInsets.only(bottom: TmsSpace.sm),
                     child: Row(
                       children: [
                         Container(
@@ -540,8 +540,7 @@ class StudentHomeScreen extends ConsumerWidget {
                           height: 48,
                           decoration: BoxDecoration(
                             color: StudentColors.primary.withValues(alpha: 0.1),
-                            borderRadius:
-                                BorderRadius.circular(StudentRadius.card),
+                            borderRadius: BorderRadius.circular(TmsRadius.card),
                           ),
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -568,7 +567,7 @@ class StudentHomeScreen extends ConsumerWidget {
                             ],
                           ),
                         ),
-                        const SizedBox(width: StudentSpace.md),
+                        const SizedBox(width: TmsSpace.md),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -597,7 +596,7 @@ class StudentHomeScreen extends ConsumerWidget {
   Widget _buildCertificatesCard(BuildContext context, StudentPortal portal) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(StudentSpace.md),
+        padding: const EdgeInsets.all(TmsSpace.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -605,7 +604,7 @@ class StudentHomeScreen extends ConsumerWidget {
               children: [
                 const Icon(Icons.workspace_premium_outlined,
                     color: StudentColors.primary),
-                const SizedBox(width: StudentSpace.sm),
+                const SizedBox(width: TmsSpace.sm),
                 Expanded(
                   child: Text('Certificates',
                       style: Theme.of(context).textTheme.titleMedium),
@@ -616,7 +615,7 @@ class StudentHomeScreen extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: StudentSpace.md),
+            const SizedBox(height: TmsSpace.md),
             if (portal.certificates.isEmpty)
               Text(
                 'No certificates yet.',
@@ -624,7 +623,7 @@ class StudentHomeScreen extends ConsumerWidget {
               )
             else
               ...portal.certificates.take(2).map((cert) => Padding(
-                    padding: const EdgeInsets.only(bottom: StudentSpace.sm),
+                    padding: const EdgeInsets.only(bottom: TmsSpace.sm),
                     child: Row(
                       children: [
                         Container(
@@ -632,13 +631,12 @@ class StudentHomeScreen extends ConsumerWidget {
                           height: 48,
                           decoration: BoxDecoration(
                             color: StudentColors.accent.withValues(alpha: 0.1),
-                            borderRadius:
-                                BorderRadius.circular(StudentRadius.card),
+                            borderRadius: BorderRadius.circular(TmsRadius.card),
                           ),
                           child: const Icon(Icons.star_rounded,
                               color: StudentColors.accent),
                         ),
-                        const SizedBox(width: StudentSpace.md),
+                        const SizedBox(width: TmsSpace.md),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -672,7 +670,7 @@ class StudentHomeScreen extends ConsumerWidget {
         : '${portal.results.first.percentage.toStringAsFixed(0)}%';
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(StudentSpace.md),
+        padding: const EdgeInsets.all(TmsSpace.md),
         child: Column(
           children: [
             CircleAvatar(
@@ -685,13 +683,13 @@ class StudentHomeScreen extends ConsumerWidget {
                     ),
               ),
             ),
-            const SizedBox(height: StudentSpace.md),
+            const SizedBox(height: TmsSpace.md),
             Text(
               profile.name,
               style: Theme.of(context).textTheme.titleLarge,
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: StudentSpace.xxs),
+            const SizedBox(height: TmsSpace.xxs),
             Text(
               '${profile.grade} · ${profile.branch}',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -699,7 +697,7 @@ class StudentHomeScreen extends ConsumerWidget {
                   ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: StudentSpace.md),
+            const SizedBox(height: TmsSpace.md),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
@@ -882,7 +880,7 @@ class _SessionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(StudentSpace.md),
+        padding: const EdgeInsets.all(TmsSpace.md),
         child: Row(
           children: [
             SizedBox(
@@ -908,10 +906,10 @@ class _SessionTile extends StatelessWidget {
             Container(
               width: 3,
               height: 48,
-              margin: const EdgeInsets.symmetric(horizontal: StudentSpace.sm),
+              margin: const EdgeInsets.symmetric(horizontal: TmsSpace.sm),
               decoration: BoxDecoration(
                 color: StudentColors.primary,
-                borderRadius: BorderRadius.circular(StudentRadius.pill),
+                borderRadius: BorderRadius.circular(TmsRadius.pill),
               ),
             ),
             Expanded(
@@ -920,7 +918,7 @@ class _SessionTile extends StatelessWidget {
                 children: [
                   Text(session.subject,
                       style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: StudentSpace.xxs),
+                  const SizedBox(height: TmsSpace.xxs),
                   Text(
                     '${session.teacher} · ${session.room}',
                     style: Theme.of(context).textTheme.bodySmall,
@@ -957,17 +955,17 @@ class _QuickAction extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: InkWell(
-        borderRadius: BorderRadius.circular(StudentRadius.card),
+        borderRadius: BorderRadius.circular(TmsRadius.card),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(StudentSpace.md),
+          padding: const EdgeInsets.all(TmsSpace.md),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(icon, color: StudentColors.primary),
-              const SizedBox(height: StudentSpace.md),
+              const SizedBox(height: TmsSpace.md),
               Text(value, style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: StudentSpace.xxs),
+              const SizedBox(height: TmsSpace.xxs),
               Text(label, style: Theme.of(context).textTheme.bodySmall),
             ],
           ),

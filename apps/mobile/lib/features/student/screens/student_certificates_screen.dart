@@ -92,14 +92,14 @@ class StudentCertificatesScreen extends ConsumerWidget {
       body: RefreshIndicator(
         onRefresh: viewModel.refresh,
         child: ListView(
-          padding: const EdgeInsets.all(StudentSpace.md),
+          padding: const EdgeInsets.all(TmsSpace.md),
           children: [
             if (state.error != null) ...[
               Container(
-                padding: const EdgeInsets.all(StudentSpace.sm),
+                padding: const EdgeInsets.all(TmsSpace.sm),
                 decoration: BoxDecoration(
                   color: StudentColors.error.withValues(alpha: .08),
-                  borderRadius: BorderRadius.circular(StudentRadius.control),
+                  borderRadius: BorderRadius.circular(TmsRadius.control),
                 ),
                 child: Row(
                   children: [
@@ -111,18 +111,18 @@ class StudentCertificatesScreen extends ConsumerWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: StudentSpace.md),
+              const SizedBox(height: TmsSpace.md),
             ],
             Container(
-              padding: const EdgeInsets.all(StudentSpace.md),
+              padding: const EdgeInsets.all(TmsSpace.md),
               decoration: BoxDecoration(
                 color: StudentColors.success.withValues(alpha: .08),
-                borderRadius: BorderRadius.circular(StudentRadius.card),
+                borderRadius: BorderRadius.circular(TmsRadius.card),
               ),
               child: const Row(
                 children: [
                   Icon(Icons.verified_rounded, color: StudentColors.success),
-                  SizedBox(width: StudentSpace.sm),
+                  SizedBox(width: TmsSpace.sm),
                   Expanded(
                     child: Text(
                       'Issued certificates stay in your history and can be downloaded anytime.',
@@ -131,11 +131,11 @@ class StudentCertificatesScreen extends ConsumerWidget {
                 ],
               ),
             ),
-            const SizedBox(height: StudentSpace.lg),
+            const SizedBox(height: TmsSpace.lg),
             for (final certificate in state.certificates) ...[
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(StudentSpace.md),
+                  padding: const EdgeInsets.all(TmsSpace.md),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -149,7 +149,7 @@ class StudentCertificatesScreen extends ConsumerWidget {
                               color:
                                   StudentColors.primary.withValues(alpha: .08),
                               borderRadius: BorderRadius.circular(
-                                StudentRadius.control,
+                                TmsRadius.control,
                               ),
                             ),
                             child: const Icon(
@@ -157,7 +157,7 @@ class StudentCertificatesScreen extends ConsumerWidget {
                               color: StudentColors.primary,
                             ),
                           ),
-                          const SizedBox(width: StudentSpace.md),
+                          const SizedBox(width: TmsSpace.md),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -167,7 +167,7 @@ class StudentCertificatesScreen extends ConsumerWidget {
                                   style:
                                       Theme.of(context).textTheme.titleMedium,
                                 ),
-                                const SizedBox(height: StudentSpace.xxs),
+                                const SizedBox(height: TmsSpace.xxs),
                                 Text(
                                   '${certificate.course}\nIssued ${certificate.issuedLabel}',
                                   style: Theme.of(context).textTheme.bodySmall,
@@ -177,9 +177,9 @@ class StudentCertificatesScreen extends ConsumerWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: StudentSpace.md),
+                      const SizedBox(height: TmsSpace.md),
                       const Divider(height: 1),
-                      const SizedBox(height: StudentSpace.sm),
+                      const SizedBox(height: TmsSpace.sm),
                       Row(
                         children: [
                           Expanded(
@@ -202,7 +202,7 @@ class StudentCertificatesScreen extends ConsumerWidget {
                                     strokeWidth: 2,
                                   ),
                                 ),
-                                const SizedBox(width: StudentSpace.sm),
+                                const SizedBox(width: TmsSpace.sm),
                                 const Text('Downloading…'),
                               ],
                             )
@@ -218,7 +218,7 @@ class StudentCertificatesScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: StudentSpace.sm),
+              const SizedBox(height: TmsSpace.sm),
             ],
           ],
         ),

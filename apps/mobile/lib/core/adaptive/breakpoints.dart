@@ -48,7 +48,7 @@ extension LayoutSizeClassX on LayoutSizeClass {
   bool get isAtLeastExpanded => index >= LayoutSizeClass.expanded.index;
 }
 
-/// Spacing scale adapted from StudentSpace but unified for the app.
+/// Spacing scale adapted from TmsSpace but unified for the app.
 abstract final class AdaptiveSpacing {
   static const double xxs = 4;
   static const double xs = 8;

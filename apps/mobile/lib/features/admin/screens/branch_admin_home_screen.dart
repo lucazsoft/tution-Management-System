@@ -6,6 +6,7 @@ import 'package:tms_mobile/core/adaptive/widgets/adaptive_layout.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/shared/widgets/kpi_card.dart';
+import 'package:tms_mobile/core/theme/app_tokens.dart';
 
 class BranchAdminHomeScreen extends ConsumerStatefulWidget {
   const BranchAdminHomeScreen({super.key});
@@ -301,8 +302,8 @@ class _BranchAdminHomeScreenState extends ConsumerState<BranchAdminHomeScreen> {
                 ?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 12),
         Card(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(TmsRadius.r14)),
           child: Column(
             children: [
               ListTile(
@@ -348,7 +349,7 @@ class _BranchAdminHomeScreenState extends ConsumerState<BranchAdminHomeScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: kColorPrimary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(TmsRadius.r16),
               ),
               child: Text(
                 '${_leaveRequests.where((r) => r['status'] == 'PENDING').length} Pending',
@@ -365,8 +366,8 @@ class _BranchAdminHomeScreenState extends ConsumerState<BranchAdminHomeScreen> {
 
           return Card(
             margin: const EdgeInsets.only(bottom: 14),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(TmsRadius.r16)),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -387,7 +388,7 @@ class _BranchAdminHomeScreenState extends ConsumerState<BranchAdminHomeScreen> {
                               : isPending
                                   ? kColorWarning.withValues(alpha: 0.1)
                                   : kColorError.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(TmsRadius.r8),
                         ),
                         child: Text(
                           leave['status'] as String,
@@ -412,7 +413,7 @@ class _BranchAdminHomeScreenState extends ConsumerState<BranchAdminHomeScreen> {
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: kColorSurface,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(TmsRadius.r10),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -483,8 +484,8 @@ class _BranchAdminHomeScreenState extends ConsumerState<BranchAdminHomeScreen> {
           final isCheckedIn = staff['status'] == 'CHECKED_IN';
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(TmsRadius.r14)),
             child: ListTile(
               leading: CircleAvatar(
                 backgroundColor: isCheckedIn
@@ -509,7 +510,7 @@ class _BranchAdminHomeScreenState extends ConsumerState<BranchAdminHomeScreen> {
                       color: isCheckedIn
                           ? kColorSuccess.withValues(alpha: 0.1)
                           : kColorWarning.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(TmsRadius.r6),
                     ),
                     child: Text(
                       isCheckedIn ? 'Present' : 'Leave',
@@ -537,8 +538,8 @@ class _BranchAdminHomeScreenState extends ConsumerState<BranchAdminHomeScreen> {
       padding: const EdgeInsets.all(20),
       children: [
         Card(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(TmsRadius.r16)),
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -550,7 +551,7 @@ class _BranchAdminHomeScreenState extends ConsumerState<BranchAdminHomeScreen> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: kColorPrimary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(TmsRadius.r12),
                       ),
                       child: const Icon(Icons.business_rounded,
                           color: kColorPrimary, size: 32),
@@ -677,12 +678,12 @@ class _AdminActionTile extends StatelessWidget {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(TmsRadius.r14),
         side: BorderSide(color: color.withValues(alpha: 0.2)),
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(TmsRadius.r14),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(
@@ -691,7 +692,7 @@ class _AdminActionTile extends StatelessWidget {
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(TmsRadius.r10),
                 ),
                 child: Icon(icon, color: color),
               ),

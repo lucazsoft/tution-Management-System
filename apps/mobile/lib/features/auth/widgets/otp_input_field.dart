@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tms_mobile/core/theme/app_colors.dart';
+import 'package:tms_mobile/core/theme/app_tokens.dart';
 
 class OtpInputField extends StatefulWidget {
   const OtpInputField({
@@ -137,7 +138,7 @@ class _OtpInputFieldState extends State<OtpInputField> {
                 fillColor: Colors.white,
                 contentPadding: EdgeInsets.zero,
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(TmsRadius.r8),
                   borderSide: BorderSide(
                     color: _controllers[index].text.isEmpty
                         ? const Color(0xFFC8D0DB)
@@ -145,7 +146,7 @@ class _OtpInputFieldState extends State<OtpInputField> {
                   ),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(TmsRadius.r8),
                   borderSide:
                       const BorderSide(color: kColorPrimaryLight, width: 2),
                 ),

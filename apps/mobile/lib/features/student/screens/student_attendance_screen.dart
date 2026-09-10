@@ -107,15 +107,15 @@ class _StudentAttendanceScreenState
     return RefreshIndicator(
       onRefresh: viewModel.refresh,
       child: ListView(
-        padding: const EdgeInsets.all(StudentSpace.md),
+        padding: const EdgeInsets.all(TmsSpace.md),
         children: [
           Container(
-            padding: const EdgeInsets.all(StudentSpace.lg),
+            padding: const EdgeInsets.all(TmsSpace.lg),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 colors: [StudentColors.primaryDark, StudentColors.primary],
               ),
-              borderRadius: BorderRadius.circular(StudentRadius.card),
+              borderRadius: BorderRadius.circular(TmsRadius.card),
             ),
             child: Row(
               children: [
@@ -143,7 +143,7 @@ class _StudentAttendanceScreenState
                     ],
                   ),
                 ),
-                const SizedBox(width: StudentSpace.lg),
+                const SizedBox(width: TmsSpace.lg),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -155,7 +155,7 @@ class _StudentAttendanceScreenState
                             .bodySmall
                             ?.copyWith(color: Colors.white70),
                       ),
-                      const SizedBox(height: StudentSpace.xs),
+                      const SizedBox(height: TmsSpace.xs),
                       Text(
                         '${state.presentCount} present · '
                         '${state.absentCount} absent · '
@@ -172,28 +172,28 @@ class _StudentAttendanceScreenState
             ),
           ),
           if (explanations.isNotEmpty) ...[
-            const SizedBox(height: StudentSpace.lg),
+            const SizedBox(height: TmsSpace.lg),
             Text('Approved leave',
                 style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: StudentSpace.sm),
+            const SizedBox(height: TmsSpace.sm),
             for (final explanation in explanations) ...[
               _LeaveExplanationCard(explanation: explanation),
-              const SizedBox(height: StudentSpace.sm),
+              const SizedBox(height: TmsSpace.sm),
             ],
           ],
-          const SizedBox(height: StudentSpace.lg),
+          const SizedBox(height: TmsSpace.lg),
           Text('Session record', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: StudentSpace.sm),
+          const SizedBox(height: TmsSpace.sm),
           for (final record in records) ...[
             _AttendanceTile(record: record),
-            const SizedBox(height: StudentSpace.sm),
+            const SizedBox(height: TmsSpace.sm),
           ],
           StudentLoadMoreFooter(
             hasMore: state.hasMore,
             remaining: state.records.length - records.length,
             onLoadMore: viewModel.loadMore,
           ),
-          const SizedBox(height: StudentSpace.xs),
+          const SizedBox(height: TmsSpace.xs),
           Text(
             'Attendance is recorded by your teacher. Approved leave appears as Absent (Excused).',
             style: Theme.of(context).textTheme.bodySmall,
@@ -214,13 +214,13 @@ class _LeaveExplanationCard extends StatelessWidget {
     final leave = explanation.leave;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(StudentSpace.md),
+        padding: const EdgeInsets.all(TmsSpace.md),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Icon(Icons.event_available_rounded,
                 color: StudentColors.warning),
-            const SizedBox(width: StudentSpace.sm),
+            const SizedBox(width: TmsSpace.sm),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -229,7 +229,7 @@ class _LeaveExplanationCard extends StatelessWidget {
                     '${explanation.record.subject} · ${explanation.record.date}',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  const SizedBox(height: StudentSpace.xxs),
+                  const SizedBox(height: TmsSpace.xxs),
                   Text(
                     leave == null
                         ? 'Excused: approved leave on record.'
