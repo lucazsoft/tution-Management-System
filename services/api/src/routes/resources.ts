@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import prisma from '../utils/db';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware } from '../middleware/auth';
-import { MockPushNotificationService } from '../utils/notifications';
+import { PushNotificationService } from '../services/push-notification';
 import { canAccessBranch, hasBranchPermission, hasRole } from '../utils/access-control';
 
 const router = Router();
@@ -65,7 +65,8 @@ router.post(
       let notificationDelivered = true;
       if (maintenanceTask && assignedStaffId) {
         try {
-          await MockPushNotificationService.sendPush(
+          await PushNotificationService.sendPush(
+            req.tenantId!,
             assignedStaffId,
             'New Maintenance Task Auto-Assigned',
             `Room ${classroomId} requires check. Reason: ${remarks}`

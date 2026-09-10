@@ -138,6 +138,12 @@ enum NotificationDeliveryStatus {
   FAILED
 }
 
+enum PushPlatform {
+  ANDROID
+  IOS
+  WEB
+}
+
 enum AdmissionLoginRecipient {
   STUDENT
   PARENT
@@ -239,6 +245,7 @@ model Tenant {
   admissionLoginDeliveries  AdmissionLoginDelivery[]
   branchPaymentSettings     BranchPaymentSettings[]
   mediaObjects              MediaObject[]
+  devicePushTokens          DevicePushToken[]
 }
 
 // 2. Branch / Center
@@ -318,6 +325,7 @@ model User {
   recordedStudentScores    StudentScore[]           @relation("StudentScoreRecorder")
   admissionLoginDeliveries AdmissionLoginDelivery[] @relation("AdmissionLoginRecipientUser")
   authoredBroadcasts       Broadcast[]              @relation("BroadcastAuthor")
+  devicePushTokens         DevicePushToken[]
 
   // Better Auth support
   name             String
@@ -327,6 +335,20 @@ model User {
   sessions         Session[]
   accounts         Account[]
   twoFactor        TwoFactor?
+}
+
+model DevicePushToken {
+  id        String       @id @default(uuid())
+  tenantId String
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token    String       @unique
+  platform PushPlatform
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([tenantId, userId])
 }
 
 model TwoFactor {

@@ -3,7 +3,8 @@ import { Router, Response } from 'express';
 import prisma from '../utils/db';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware } from '../middleware/auth';
-import { MockPushNotificationService, MockSmsSender } from '../utils/notifications';
+import { MockSmsSender } from '../utils/notifications';
+import { PushNotificationService } from '../services/push-notification';
 import { canAccessBranch, isTenantAdmin, managedBranchIds } from '../utils/access-control';
 
 const router = Router();
@@ -19,7 +20,7 @@ async function linkedStudent(parentUserId: string, tenantId: string, studentId: 
   });
 }
 
-async function notifyAppointmentUsers(userIds: string[], title: string, message: string) {
+async function notifyAppointmentUsers(tenantId: string, userIds: string[], title: string, message: string) {
   const uniqueIds = [...new Set(userIds)];
   const users = await prisma.user.findMany({
     where: { id: { in: uniqueIds } },
@@ -27,7 +28,7 @@ async function notifyAppointmentUsers(userIds: string[], title: string, message:
   });
   const smsSender = new MockSmsSender();
   await Promise.all(users.flatMap((user) => [
-    MockPushNotificationService.sendPush(user.id, title, message),
+    PushNotificationService.sendPush(tenantId, user.id, title, message),
     ...(user.phone ? [smsSender.sendSms(user.phone, `${title}: ${message}`)] : []),
   ]));
 }
@@ -99,7 +100,7 @@ router.post('/request', authMiddleware, async (req: TenantRequest, res: Response
       where: { tenantId: req.tenantId!, status: 'ACTIVE', userRoles: { some: { branchId: { in: branchIds }, role: { name: 'Branch Admin' } } } },
       select: { id: true },
     });
-    await notifyAppointmentUsers([...uniqueParticipants, ...branchAdmins.map((admin) => admin.id)], 'Appointment requested', `A parent requested an appointment about ${student.user.firstName}.`);
+    await notifyAppointmentUsers(req.tenantId!, [...uniqueParticipants, ...branchAdmins.map((admin) => admin.id)], 'Appointment requested', `A parent requested an appointment about ${student.user.firstName}.`);
     return res.status(201).json({ message: 'Appointment requested.', appointment, bookingWindowHours: tenant.appointmentWindowHours });
   } catch (error: any) {
     return res.status(500).json({ error: 'Failed to request appointment.', details: error.message });
@@ -112,7 +113,7 @@ router.post('/respond/:appointmentId', authMiddleware, async (req: TenantRequest
     let notificationDelivered = true;
     if (result.notify) {
       try {
-        await notifyAppointmentUsers([result.requestedById], 'Appointment updated', `Appointment status: ${result.appointment.status}.`);
+        await notifyAppointmentUsers(req.tenantId!, [result.requestedById], 'Appointment updated', `Appointment status: ${result.appointment.status}.`);
       } catch {
         notificationDelivered = false;
       }

@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import prisma from '../utils/db';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware } from '../middleware/auth';
-import { MockPushNotificationService } from '../utils/notifications';
+import { PushNotificationService } from '../services/push-notification';
 import { isTenantAdmin, managedBranchIds } from '../utils/access-control';
 import { parseStrictKeys, readTrimmedString } from '../utils/request-validation';
 
@@ -58,7 +58,7 @@ router.post('/messages', authMiddleware, async (req: TenantRequest, res: Respons
     const message = await prisma.parentMessage.create({
       data: { tenantId: req.tenantId!, studentId, senderId: req.user!.id, receiverId, messageText: text },
     });
-    await MockPushNotificationService.sendPush(receiverId, 'New school message', `New message regarding ${access.student.id}.`);
+    await PushNotificationService.sendPush(req.tenantId!, receiverId, 'New school message', `New message regarding ${access.student.id}.`);
     return res.status(201).json({ message: 'Message sent.', record: message });
   } catch (error: any) {
     return res.status(500).json({ error: 'Failed to send message.', details: error.message });
