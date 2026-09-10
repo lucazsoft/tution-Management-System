@@ -21,6 +21,7 @@
     "test:access": "ts-node src/utils/access-control.test.ts",
     "test:calendar": "ts-node src/services/calendar-access.test.ts && ts-node src/routes/calendar-permissions.test.ts",
     "test:billing": "ts-node src/utils/billing-rules.test.ts",
+    "test:refund-pricing": "ts-node src/utils/refund-pricing.test.ts",
     "test:sms": "ts-node src/utils/sms.test.ts",
     "test:auth-sms": "ts-node src/utils/delivery.test.ts && ts-node src/routes/auth-sms.test.ts",
     "test:connectips": "ts-node src/utils/connectips.test.ts",
