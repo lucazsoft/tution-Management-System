@@ -33,7 +33,7 @@
     "test:timetable": "ts-node src/services/timetable-service.test.ts",
     "test:financial-intelligence": "ts-node src/utils/financial-intelligence.test.ts && ts-node src/services/financial-anomaly-alerts.test.ts && ts-node src/routes/financial-anomaly-cron.test.ts",
     "test:forecast": "ts-node src/routes/financial-forecast.test.ts",
-    "test:payroll": "ts-node src/services/payroll-service.test.ts",
+    "test:payroll": "ts-node src/services/payroll-service.test.ts && ts-node src/services/payroll-automation.test.ts && ts-node src/services/payslip-renderer.test.ts && ts-node src/routes/cron-payroll.test.ts",
     "test:social": "ts-node src/services/social-publishing.test.ts && ts-node src/services/social-publishing-store.test.ts && ts-node src/routes/social.test.ts && ts-node src/routes/cron-social.test.ts",
     "test:route-auth": "ts-node src/routes/route-authentication.test.ts",
     "test:attendance": "ts-node src/routes/attendance.test.ts",
