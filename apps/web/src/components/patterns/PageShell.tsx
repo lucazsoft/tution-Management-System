@@ -140,13 +140,13 @@ export function PageShell({
           </button>
 
           {/* Logo brand */}
-          <div className="topbar-logo" onClick={() => navigate('/')}>
+          <button type="button" className="topbar-logo" aria-label="Go to dashboard" onClick={() => navigate('/')}>
             <span className="material-symbols-outlined logo-icon">school</span>
             <div>
               <h1 className="logo-text">TMS</h1>
               <span className="logo-subtext">Tuition Management</span>
             </div>
-          </div>
+          </button>
 
           {/* Breadcrumbs */}
           <div className="topbar-breadcrumbs desktop-only" aria-label="Breadcrumb">

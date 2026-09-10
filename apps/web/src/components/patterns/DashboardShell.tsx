@@ -9,6 +9,7 @@ import {
   type DashboardNavItem,
   type DashboardRole,
 } from './dashboardNavigation';
+import './dashboardShell.css';
 
 interface DashboardShellProps {
   role: DashboardRole;
@@ -54,10 +55,16 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
   const navigate = useNavigate();
   const accountPath = role === 'tenant-admin' ? '/tenant/account' : role === 'branch-admin' ? '/branch/account' : role === 'teacher' ? '/teacher/account' : role === 'parent' ? '/parent/account' : role === 'student' ? '/student/account' : null;
   const navItems = useMemo(() => getDashboardNavigation(role), [role]);
-  const groupedNav = useMemo(() => groupNavigation(navItems), [navItems]);
+  const [navQuery, setNavQuery] = useState('');
+  const filteredNavItems = useMemo(() => {
+    const query = navQuery.trim().toLowerCase();
+    if (!query) return navItems;
+    return navItems.filter((item) => `${item.label} ${item.section}`.toLowerCase().includes(query));
+  }, [navItems, navQuery]);
+  const groupedNav = useMemo(() => groupNavigation(filteredNavItems), [filteredNavItems]);
   const roleLabel = useMemo(() => getDashboardRoleLabel(role), [role]);
   const activeItem = useMemo(() => findNavigationItem(role, location.pathname), [location.pathname, role]);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => localStorage.getItem('tms_sidebar_collapsed') === 'true');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isCompactViewport, setIsCompactViewport] = useState(() => window.innerWidth < 1280);
   const [lastUpdated, setLastUpdated] = useState(Date.now());
@@ -71,6 +78,23 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
     document.documentElement.style.colorScheme = theme;
     localStorage.setItem('tms_theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem('tms_sidebar_collapsed', String(isCollapsed));
+  }, [isCollapsed]);
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === '/') {
+        event.preventDefault();
+        if (isCompactViewport) setIsDrawerOpen(true);
+        window.setTimeout(() => document.getElementById('dashboard-nav-search')?.focus(), 0);
+      }
+      if (event.key === 'Escape' && isDrawerOpen) setIsDrawerOpen(false);
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [isCompactViewport, isDrawerOpen]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -89,7 +113,15 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
     if (isCompactViewport) {
       setIsDrawerOpen(false);
     }
+    setNavQuery('');
+    window.scrollTo({ top: 0, behavior: 'auto' });
   }, [isCompactViewport, location.pathname]);
+
+  useEffect(() => {
+    if (!isCompactViewport) return;
+    document.body.style.overflow = isDrawerOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [isCompactViewport, isDrawerOpen]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -105,8 +137,12 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
   const userInitials = getInitials(userName);
   const updatedLabel = lastUpdated ? 'Updated just now' : 'Updated just now';
 
+  useEffect(() => {
+    document.title = `${pageTitle} · TMS`;
+  }, [pageTitle]);
+
   const renderNavSection = (section: string, items: DashboardNavItem[]) => (
-    <div key={section} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+    <div className="dashboard-nav-section" key={section} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       {!isCollapsed ? (
         <span
           style={{
@@ -138,6 +174,8 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
                 }
               }}
               title={isCollapsed ? item.label : undefined}
+              aria-current={isActive ? 'page' : undefined}
+              className={`dashboard-nav-item${isActive ? ' is-active' : ''}`}
               style={{
                 width: '100%',
                 minHeight: '46px',
@@ -261,13 +299,16 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
       </div>
 
       <nav style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', padding: '18px 10px 22px' }}>
+        {!isCollapsed ? <label className="dashboard-nav-search" htmlFor="dashboard-nav-search"><span className="material-symbols-outlined" aria-hidden="true">search</span><input id="dashboard-nav-search" type="search" value={navQuery} onChange={(event) => setNavQuery(event.target.value)} placeholder="Find a section…" autoComplete="off" spellCheck={false} /><kbd>Ctrl /</kbd></label> : null}
         {groupedNav.map(([section, items]) => renderNavSection(section, items))}
+        {!groupedNav.length ? <div className="dashboard-nav-empty" role="status"><span className="material-symbols-outlined" aria-hidden="true">search_off</span><strong>No matching section</strong><small>Try a different name.</small></div> : null}
       </nav>
     </div>
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--color-surface)' }}>
+    <div className="dashboard-shell" style={{ minHeight: '100vh', background: 'var(--color-surface)' }}>
+      <a className="dashboard-skip-link" href="#dashboard-main">Skip to main content</a>
       {!isCompactViewport ? (
         <aside
           style={{
@@ -345,7 +386,7 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
           transition: 'margin-left 220ms ease',
         }}
       >
-        <header
+        <header className="dashboard-topbar"
           style={{
             position: 'sticky',
             top: 0,
@@ -357,14 +398,15 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
-            <div>
+            <div className="dashboard-page-context">
+              <div className="dashboard-breadcrumb" aria-label="Current location"><span>{activeItem?.section || roleLabel}</span><span className="material-symbols-outlined" aria-hidden="true">chevron_right</span><strong>{pageTitle}</strong></div>
               <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 600, color: 'var(--color-text)' }}>{pageTitle}</h1>
               <p style={{ marginTop: '4px', color: 'var(--text-muted)', fontSize: '13px', fontWeight: 500 }}>
                 {roleLabel} workspace
               </p>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginLeft: 'auto' }}>
-              <div style={{ textAlign: 'right' }}>
+            <div className="dashboard-topbar-actions" style={{ display: 'flex', alignItems: 'center', gap: '14px', marginLeft: 'auto' }}>
+              <div className="dashboard-refresh-status" style={{ textAlign: 'right' }}>
                 <div style={{ color: 'var(--color-primary-light)', fontSize: '12px', fontWeight: 700 }}>{updatedLabel}</div>
                 <div style={{ color: 'var(--text-muted)', fontSize: '11px', fontWeight: 600 }}>{role === 'student' ? 'Refreshes when a section opens' : 'Auto-refresh every 5 min'}</div>
               </div>
@@ -434,9 +476,10 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
           </div>
         </header>
 
-        <main style={{ padding: isCompactViewport ? '24px' : '28px', overflowX: 'hidden' }}>
+        <main id="dashboard-main" className="dashboard-shell__main" tabIndex={-1} style={{ padding: isCompactViewport ? '24px' : '28px', overflowX: 'hidden' }}>
           {activeItem && ['dashboard', 'home'].includes(activeItem.icon) && <div style={{ marginBottom: 'var(--sp-5)' }}><NepalDateTime /></div>}
-          {children}
+          {/* Route change: content settles in place (0ms reduced motion / 150ms standard). */}
+          <div className="dashboard-route-content" key={location.pathname}>{children}</div>
         </main>
       </div>
     </div>
