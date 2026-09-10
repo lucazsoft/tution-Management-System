@@ -222,6 +222,10 @@ function PettyCashView() {
   const [decision, setDecision] = useState<'APPROVE' | 'REJECT'>('APPROVE');
   const [pettyCash, setPettyCash] = useState<any[]>([]);
   const [allowances, setAllowances] = useState<BranchAllowance[]>([]);
+  const [requestOpen, setRequestOpen] = useState(false);
+  const [requestBranchId, setRequestBranchId] = useState('');
+  const [requestPurpose, setRequestPurpose] = useState('');
+  const [requestAmountInput, setRequestAmountInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const loadPettyCash = useCallback(async () => { setLoading(true); setLoadError(''); try { const [records, config] = await Promise.all([api.finances.getPettyCash(), financeApi.funding()]); setPettyCash(records); setAllowances(config.allowances); } catch (cause) { setLoadError(cause instanceof Error ? cause.message : 'Petty-cash requests could not be loaded.'); } finally { setLoading(false); } }, []);
@@ -245,8 +249,38 @@ function PettyCashView() {
   };
 
   const reasonMissing = decision === 'REJECT' && !reason.trim();
-  
+
+  const requestBranches = allowances.length ? allowances : pettyCash
+    .filter((item) => item.branchId && !allowances.some((entry) => entry.branchId === item.branchId))
+    .map((item) => ({ branchId: item.branchId, branchName: item.branchName || item.branchId, period: '', limit: 0, used: 0, available: 0 }));
+  const openRequest = () => { setRequestBranchId(requestBranches[0]?.branchId || ''); setRequestPurpose(''); setRequestAmountInput(''); setRequestOpen(true); };
+  const closeRequest = () => setRequestOpen(false);
+  const requestAmountValue = Number(requestAmountInput);
+  const requestReady = Boolean(requestBranchId) && Boolean(requestPurpose.trim()) && Number.isFinite(requestAmountValue) && requestAmountValue > 0;
+  const submitRequest = (event: FormEvent) => {
+    event.preventDefault();
+    if (!requestReady) return;
+    const amount = Math.round(requestAmountValue * 100) / 100;
+    const purpose = requestPurpose.trim();
+    void action.run(async () => {
+      await api.finances.requestPettyCash({ branchId: requestBranchId, purpose, amount, items: [{ name: purpose, quantity: 1, unitAmount: amount }] });
+      setRequestOpen(false); setRequestPurpose(''); setRequestAmountInput(''); await loadPettyCash();
+    }, 'Petty cash request submitted for approval.');
+  };
+
   return <Page title="Petty Cash Approvals" description="Manage petty cash requests. If within limit, grant directly. If out of limit, forward to Tenant Admin.">
+    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}><Button onClick={openRequest}>New petty cash request</Button></div>
+    {requestOpen ? <div role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeRequest(); }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)', display: 'grid', placeItems: 'center', padding: 16, zIndex: 60 }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="petty-cash-request-title" style={{ width: 'min(560px, 100%)', maxHeight: '90vh', overflowY: 'auto', background: '#fff', borderRadius: 12, padding: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}><h2 id="petty-cash-request-title" style={{ fontSize: 18 }}>New petty cash request</h2><Button variant="outline" onClick={closeRequest} aria-label="Close petty cash request">Close</Button></div>
+        <form onSubmit={submitRequest} style={{ ...form, marginTop: 16 }}>
+          <label style={label} htmlFor="cash-branch">Branch<select id="cash-branch" required style={field} value={requestBranchId} onChange={(event) => setRequestBranchId(event.target.value)}><option value="" disabled>Select a branch</option>{requestBranches.map((item) => <option key={item.branchId} value={item.branchId}>{item.branchName || item.branchId}</option>)}</select></label>
+          <label style={label} htmlFor="cash-amount">Amount (NPR)<input id="cash-amount" required inputMode="decimal" pattern="[0-9]+(?:\.[0-9]{1,2})?" style={field} value={requestAmountInput} onChange={(event) => setRequestAmountInput(event.target.value)} placeholder="e.g. 2500" /></label>
+          <label style={label} htmlFor="cash-purpose">Purpose<textarea id="cash-purpose" required maxLength={1000} rows={4} style={{ ...field, minHeight: 96 }} value={requestPurpose} onChange={(event) => setRequestPurpose(event.target.value)} placeholder="Explain why this cash is required…" /></label>
+          <div style={{ display: 'flex', gap: 8 }}><Button type="submit" disabled={action.busy || !requestReady}>{action.busy ? 'Submitting…' : 'Submit request'}</Button><Button type="button" variant="outline" onClick={closeRequest}>Cancel</Button></div>
+        </form>
+      </div>
+    </div> : null}
     <PettyCashFunding key={JSON.stringify(allowances)} onUpdated={() => void loadPettyCash()} />
     <Feedback message={action.message} error={action.error} />
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
