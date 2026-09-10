@@ -161,6 +161,19 @@ class StudentFeesScreen extends ConsumerWidget {
       onDismissNotice: viewModel.dismissNotice,
     );
   }
+
+  static void _showQr(
+    BuildContext context,
+    NepalPayQr qr,
+    ApiStudentInvoice invoice,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => NepalPayQrSheet(qr: qr, invoice: invoice),
+    );
+  }
 }
 
 /// Bottom-sheet content rendering the NepalPay payload as a scannable QR

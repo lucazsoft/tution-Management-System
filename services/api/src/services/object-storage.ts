@@ -37,24 +37,31 @@ const defaultOperations: ObjectStorageOperations = {
   },
 };
 
-function parseDataImage(value: string) {
+function parseDataImage(value: string): { contentType: 'image/png' | 'image/jpeg' | 'image/webp'; bytes: Buffer } {
   const match = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(value);
   if (!match) throw new Error('A valid PNG, JPEG, or WebP image is required.');
-  return { contentType: match[1], bytes: Buffer.from(match[2], 'base64') };
+  return { contentType: match[1] as 'image/png' | 'image/jpeg' | 'image/webp', bytes: Buffer.from(match[2], 'base64') };
 }
 
 export function objectStorageEnabled() {
   return configuration() !== null;
 }
 
-export async function storePrivateImage(value: string, scope: { tenantId: string; branchId: string; category: 'payment-proofs'; id: string }, operations: ObjectStorageOperations = defaultOperations) {
+type PrivateImageScope = { tenantId: string; branchId: string; category: 'payment-proofs' | 'student-photos'; id: string };
+
+export async function storePrivateBytes(image: { bytes: Buffer; contentType: 'image/png' | 'image/jpeg' | 'image/webp' }, scope: PrivateImageScope, operations: ObjectStorageOperations = defaultOperations) {
   const config = configuration();
-  if (!config) return value;
-  const image = parseDataImage(value);
+  if (!config) throw new Error('Private object storage is not configured.');
   const extension = image.contentType === 'image/jpeg' ? 'jpg' : image.contentType.slice('image/'.length);
   const key = `tenants/${scope.tenantId}/branches/${scope.branchId}/${scope.category}/${scope.id}-${crypto.randomUUID()}.${extension}`;
   await operations.put({ bucket: config.bucket, key, bytes: image.bytes, contentType: image.contentType, tenantId: scope.tenantId, branchId: scope.branchId });
   return `${prefix}${key}`;
+}
+
+export async function storePrivateImage(value: string, scope: PrivateImageScope, operations: ObjectStorageOperations = defaultOperations) {
+  const config = configuration();
+  if (!config) return value;
+  return storePrivateBytes(parseDataImage(value), scope, operations);
 }
 
 export async function privateImageUrl(value: string | null, operations: ObjectStorageOperations = defaultOperations) {

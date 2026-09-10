@@ -439,6 +439,15 @@ export const api = {
     getProfile: async (userId: string) => {
       return request<any>(`/users/${userId}/profile`);
     },
+    updateStudentPhoto: async (studentId: string, image: string) => {
+      return request<{ message: string; photoUrl: string }>(`/users/students/${studentId}/photo`, {
+        method: 'PUT',
+        body: JSON.stringify({ image }),
+      });
+    },
+    removeStudentPhoto: async (studentId: string) => {
+      return request<{ message: string }>(`/users/students/${studentId}/photo`, { method: 'DELETE' });
+    },
     resetPassword: async (userId: string) => {
       return request<{ temporaryPassword: string }>(`/users/${userId}/reset-password`, { method: 'POST' });
     },
@@ -673,7 +682,10 @@ export const api = {
       request<{ message: string; event: any }>('/academic-events', { method: 'POST', body: JSON.stringify(payload) }),
     issueCertificate: async (payload: { studentId: string; templateId: string; branchId: string }) =>
       request<{ message: string; certificate: any }>('/certificates/issue', { method: 'POST', body: JSON.stringify(payload) }),
-    getCertificateOptions: async () => request<{ templates: Array<{ id: string; name: string; type: string; layoutConfig: { renderMode?: string; html?: string; sourceFile?: { name: string; mimeType: string } } }>; students: Array<{ studentId: string; studentName: string; gradeName: string; branchId: string; branchName: string }> }>('/certificates/options'),
+    getCertificateOptions: async () => request<{ templates: Array<{ id: string; name: string; type: string; status: string; version: number; updatedAt: string; layoutConfig: { renderMode?: string; theme?: 'CLASSIC' | 'MODERN' | 'ACADEMIC'; title?: string; presentationLine?: string; achievementLine?: string; signatoryName?: string; signatoryTitle?: string; sourceFile?: { name: string; mimeType: string } } }>; students: Array<{ studentId: string; studentName: string; gradeName: string; branchId: string; branchName: string }> }>('/certificates/options'),
+    getIssuedCertificates: async () => request<{ certificates: Array<{ certificateId: string; status: string; issuedDate: string; studentName: string; gradeName: string; branchName: string; templateName: string; templateType: string; revokedAt: string | null; revocationReason: string | null }> }>('/certificates/issued'),
+    revokeCertificate: async (certificateId: string, reason: string) => request<{ message: string }>(`/certificates/${encodeURIComponent(certificateId)}/revoke`, { method: 'POST', body: JSON.stringify({ reason }) }),
+    archiveCertificateTemplate: async (templateId: string) => request<{ message: string }>(`/certificates/templates/${encodeURIComponent(templateId)}/archive`, { method: 'POST' }),
     completeMaintenanceTask: async (taskId: string) =>
       request<{ message: string; task: any }>(`/resources/tasks/complete/${taskId}`, { method: 'POST' }),
     grantFeeOverride: async (payload: { studentId: string; branchId: string; scope: 'ONE_SESSION' | 'ONE_DAY'; reason: string }) =>

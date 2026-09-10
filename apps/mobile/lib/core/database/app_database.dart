@@ -64,7 +64,16 @@ class EntityCache extends Table {
 
 @DriftDatabase(tables: [SyncQueue, EntityCache])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(driftDatabase(name: 'tms_offline'));
+  AppDatabase()
+      : super(
+          driftDatabase(
+            name: 'tms_offline',
+            web: DriftWebOptions(
+              sqlite3Wasm: Uri.parse('sqlite3.wasm'),
+              driftWorker: Uri.parse('drift_worker.js'),
+            ),
+          ),
+        );
 
   /// Test / in-memory constructor.
   AppDatabase.forTesting(super.executor);

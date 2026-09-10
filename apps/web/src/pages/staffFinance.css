@@ -335,6 +335,11 @@
 }
 
 .tenant-certificate-page { display: grid; gap: 18px; }
+.tenant-certificate-tabs { display: flex; gap: 4px; width: fit-content; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--color-surface); }
+.tenant-certificate-tabs button { min-height: 42px; display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); cursor: pointer; font-weight: 700; }
+.tenant-certificate-tabs button.is-active { background: var(--color-primary); color: #fff; }
+.tenant-certificate-tabs button span { min-width: 20px; padding: 2px 6px; border-radius: 999px; background: color-mix(in srgb, currentColor 12%, transparent); font-size: 11px; text-align: center; }
+.tenant-certificate-tabs button:focus-visible { outline: 3px solid var(--color-primary-soft); outline-offset: 2px; }
 .tenant-certificate-layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, .75fr); gap: 18px; align-items: start; }
 .tenant-certificate-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .tenant-certificate-heading h3 { font-size: 18px; }
@@ -354,8 +359,9 @@
 .tenant-certificate-form textarea { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-card); color: var(--color-text); font: 12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; resize: vertical; }
 .tenant-certificate-source { margin: 0; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .tenant-certificate-source legend { padding: 0 6px; font-size: 13px; font-weight: 700; }
-.tenant-certificate-source > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.tenant-certificate-source > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .tenant-certificate-source label { min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; cursor: pointer; }
+.tenant-certificate-source label.is-selected { border-color: var(--color-primary); background: var(--color-primary-soft); color: var(--color-primary); }
 .tenant-certificate-source input { width: 18px; height: 18px; accent-color: var(--color-primary); }
 .tenant-certificate-preview { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--color-surface); }
 .tenant-certificate-preview > span { display: block; padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }
@@ -365,6 +371,25 @@
 .tenant-certificate-issued > .material-symbols-outlined { color: var(--color-success); font-size: 28px; }
 .tenant-certificate-issued p { margin-top: 3px; color: var(--text-muted); font-size: 12px; }
 .tenant-certificate-issued > div:last-child { display: flex; flex-wrap: wrap; gap: 8px; }
+.tenant-certificate-form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.tenant-certificate-form-row label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; }
+.tenant-certificate-design-preview { min-height: 260px; display: grid; place-content: center; gap: 8px; padding: 28px; border: 6px double var(--color-primary); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); text-align: center; }
+.tenant-certificate-design-preview h4 { color: var(--color-primary); font-family: var(--font-display); font-size: 25px; }
+.tenant-certificate-design-preview > strong { margin: 5px 0; color: var(--color-warning); font-family: var(--font-display); font-size: 23px; }
+.tenant-certificate-design-preview p, .tenant-certificate-design-preview small { color: var(--text-muted); font-size: 11px; }
+.tenant-certificate-design-preview footer { display: flex; justify-content: space-between; gap: 24px; margin-top: 24px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 10px; }
+.tenant-certificate-design-preview.is-modern { border-style: solid; border-color: #2c7a7b; }
+.tenant-certificate-design-preview.is-academic { border-color: #5a2348; }
+.tenant-certificate-issue-preview, .tenant-certificate-empty-state { display: flex; align-items: center; gap: 12px; margin-top: 18px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--color-surface); }
+.tenant-certificate-issue-preview > .material-symbols-outlined, .tenant-certificate-empty-state > .material-symbols-outlined { color: var(--color-primary); font-size: 30px; }
+.tenant-certificate-issue-preview > div, .tenant-certificate-empty-state > div { min-width: 0; flex: 1; }
+.tenant-certificate-issue-preview p, .tenant-certificate-empty-state p, .tenant-certificate-table td small { display: block; margin-top: 3px; color: var(--text-muted); font-size: 11px; }
+.tenant-certificate-row-actions { display: flex; gap: 6px; }
+.tenant-certificate-revoke { display: grid; gap: 12px; margin-top: 18px; padding: 16px; border: 1px solid color-mix(in srgb, var(--color-error) 35%, var(--border)); border-radius: var(--radius-sm); background: var(--color-error-soft); }
+.tenant-certificate-revoke p { margin-top: 4px; color: var(--text-muted); font-size: 12px; }
+.tenant-certificate-revoke label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; }
+.tenant-certificate-revoke textarea { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-card); color: var(--color-text); resize: vertical; }
+.tenant-certificate-revoke > div:last-child { display: flex; gap: 8px; }
 .tenant-certificate-form input:focus-visible,
 .tenant-certificate-form select:focus-visible,
 .tenant-certificate-form textarea:focus-visible,
@@ -456,6 +481,7 @@
   .tenant-certificate-issue-form { grid-template-columns: minmax(0, 1fr); }
   .tenant-certificate-issued { grid-template-columns: auto minmax(0, 1fr); }
   .tenant-certificate-issued > div:last-child { grid-column: 1 / -1; }
+  .tenant-certificate-form-row { grid-template-columns: minmax(0, 1fr); }
 
   .result-event-summary,
   .result-danger-zone {
@@ -475,6 +501,8 @@
 @media (max-width: 430px) {
   .result-workflow-steps { grid-template-columns: minmax(0, 1fr); }
   .tenant-certificate-source > div { grid-template-columns: minmax(0, 1fr); }
+  .tenant-certificate-tabs { width: 100%; overflow-x: auto; }
+  .tenant-certificate-tabs button { flex: 1 0 auto; }
 }
 
 .payroll-page { display: grid; gap: 18px; }

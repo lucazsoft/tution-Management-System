@@ -1,5 +1,7 @@
 # TMS Architecture Documentation
 
+See [Private media storage](./private-media-storage.md) for R2 ownership, authorization, object keys, and the rollout covering payment proofs, student photos, Digital IDs, QR images, and certificates.
+
 ## Overview
 This document describes the architecture of the TMS (Task Management System) based on the **flutter-architecture** skill principles: MVVM pattern, feature-first organization, and layered architecture.
 

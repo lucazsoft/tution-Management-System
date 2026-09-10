@@ -272,12 +272,15 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
       month: event.startDate.toLocaleDateString('en', { month: 'short', timeZone: 'Asia/Kathmandu' }).toUpperCase(),
       date: formatDate(event.startDate), title: event.title, kind: eventKind(event.eventType), details: event.description ?? '',
     }));
-    const certificates = student.certificates.map((certificate) => ({
-      id: certificate.certificateId, childId: student.id, title: certificate.template.name,
-      course: student.grade?.name ?? 'Student record', issuedDate: formatDate(certificate.issuedDate),
-      fileName: `${certificate.certificateId}.pdf`, pdfUrl: `/certificates/${encodeURIComponent(certificate.certificateId)}/download`,
-      htmlUrl: (certificate.template.layoutConfig as { renderMode?: string }).renderMode === 'HTML' ? `/certificates/${encodeURIComponent(certificate.certificateId)}/html` : undefined,
-    }));
+    const certificates = student.certificates.map((certificate) => {
+      const snapshot = certificate.snapshot as { templateName?: string; gradeName?: string } | null;
+      return {
+        id: certificate.certificateId, childId: student.id, title: snapshot?.templateName || certificate.template.name,
+        course: snapshot?.gradeName || student.grade?.name || 'Student record', issuedDate: formatDate(certificate.issuedDate),
+        fileName: `${certificate.certificateId}.pdf`, pdfUrl: `/certificates/${encodeURIComponent(certificate.certificateId)}/download`,
+        htmlUrl: (certificate.template.layoutConfig as { renderMode?: string }).renderMode === 'HTML' ? `/certificates/${encodeURIComponent(certificate.certificateId)}/html` : undefined,
+      };
+    });
     const mappedMessages = messages.map((message) => ({
       id: message.id, childId: student.id,
       teacherId: message.senderId === req.user!.id ? message.receiverId : message.senderId,

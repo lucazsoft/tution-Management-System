@@ -67,8 +67,8 @@ db.appointment.update = async ({ data }: any) => { writes.push(data); return { i
 db.tenant.findUnique = async () => ({ appointmentWindowHours: 1 });
 db.user.findMany = async () => [];
 db.parent.findFirst = async () => parentView ? { id: 'parent-record' } : null;
-db.branch.findFirst = async ({ where }: any) => where.tenantId === 'tenant-a' && where.id === 'branch-a' ? { id: 'branch-a' } : null;
-db.certificateTemplate.findFirst = async ({ where }: any) => where.tenantId === 'tenant-a' && where.id === 'template' ? { id: 'template' } : null;
+db.branch.findFirst = async ({ where }: any) => where.tenantId === 'tenant-a' && where.id === 'branch-a' ? { id: 'branch-a', name: 'Branch A' } : null;
+db.certificateTemplate.findFirst = async ({ where }: any) => where.tenantId === 'tenant-a' && where.id === 'template' ? { id: 'template', name: 'Completion', type: 'COMPLETION', version: 1, status: 'ACTIVE', layoutConfig: { renderMode: 'DESIGN' }, tenant: { name: 'Tenant A' } } : null;
 db.appointment.findFirst = async () => savedAppointment;
 db.$transaction = async (run: any) => run(db);
 db.$queryRaw = async () => [];

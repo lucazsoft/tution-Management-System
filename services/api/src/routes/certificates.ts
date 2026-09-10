@@ -4,7 +4,8 @@ import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware, hasPermission } from '../middleware/auth';
 import { CertificateType } from '@tms/types';
 import { canAccessBranch, isTenantAdmin } from '../utils/access-control';
-import PDFDocument from 'pdfkit';
+import crypto from 'node:crypto';
+import { certificateDesign, renderCertificatePdf, snapshotFromRecord, type CertificateSnapshot } from '../services/certificate-renderer';
 
 const router = Router();
 
@@ -25,11 +26,13 @@ function renderCertificateHtml(template: string, values: Record<string, unknown>
 }
 
 router.get('/options', authMiddleware, async (req: TenantRequest, res: Response) => {
+  const certificateAdmin = isTenantAdmin(req.user!) || req.user!.roles.some((role: { roleName: string }) => role.roleName === 'Branch Admin');
+  if (!certificateAdmin) return res.status(403).json({ error: 'Certificate tools are available to institution administrators.' });
   try {
     const [templates, students] = await Promise.all([
       prisma.certificateTemplate.findMany({
-        where: { tenantId: req.tenantId! },
-        select: { id: true, name: true, type: true, layoutConfig: true },
+        where: { tenantId: req.tenantId!, status: 'ACTIVE' },
+        select: { id: true, name: true, type: true, layoutConfig: true, status: true, version: true, updatedAt: true },
         orderBy: { name: 'asc' },
       }),
       prisma.student.findMany({
@@ -68,8 +71,12 @@ router.get('/options', authMiddleware, async (req: TenantRequest, res: Response)
           id: template.id,
           name: template.name,
           type: template.type,
+          status: template.status,
+          version: template.version,
+          updatedAt: template.updatedAt,
           layoutConfig: {
-            renderMode: layout.renderMode === 'HTML' ? 'HTML' : 'FILE',
+            renderMode: layout.renderMode === 'HTML' ? 'HTML' : layout.renderMode === 'DESIGN' ? 'DESIGN' : 'FILE',
+            ...(layout.renderMode === 'DESIGN' ? certificateDesign(layout, template.name) : {}),
             ...(layout.sourceFile ? { sourceFile: { name: layout.sourceFile.name ?? '', mimeType: layout.sourceFile.mimeType ?? '' } } : {}),
           },
         };
@@ -81,6 +88,46 @@ router.get('/options', authMiddleware, async (req: TenantRequest, res: Response)
   }
 });
 
+router.get('/issued', authMiddleware, async (req: TenantRequest, res: Response) => {
+  const certificateAdmin = isTenantAdmin(req.user!) || req.user!.roles.some((role: { roleName: string }) => role.roleName === 'Branch Admin');
+  if (!certificateAdmin) return res.status(403).json({ error: 'Certificate records are available to institution administrators.' });
+  try {
+    const records = await prisma.certificate.findMany({
+      where: {
+        template: { tenantId: req.tenantId! },
+        ...(isTenantAdmin(req.user!) ? {} : { branchId: { in: req.user!.roles.filter((role: { roleName: string; branchId: string | null }) => role.roleName === 'Branch Admin' && role.branchId).map((role: { roleName: string; branchId: string | null }) => role.branchId!) } }),
+      },
+      include: { template: true, branch: true, student: { include: { user: true, grade: true } } },
+      orderBy: { issuedDate: 'desc' },
+      take: 250,
+    });
+    return res.json({ certificates: records.map((record) => {
+      const snapshot = snapshotFromRecord({ ...record, template: { ...record.template, tenant: null } });
+      return { certificateId: record.certificateId, status: record.status, issuedDate: record.issuedDate, studentName: snapshot.studentName, gradeName: snapshot.gradeName, branchName: snapshot.branchName, templateName: snapshot.templateName, templateType: snapshot.templateType, revokedAt: record.revokedAt, revocationReason: record.revocationReason };
+    }) });
+  } catch {
+    return res.status(500).json({ error: 'Failed to load issued certificates.' });
+  }
+});
+
+router.post('/:certificateId/revoke', authMiddleware, async (req: TenantRequest, res: Response) => {
+  if (!isTenantAdmin(req.user!)) return res.status(403).json({ error: 'Only the Tenant Admin may revoke certificates.' });
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+  if (reason.length < 5 || reason.length > 300) return res.status(400).json({ error: 'Enter a revocation reason between 5 and 300 characters.' });
+  const record = await prisma.certificate.findFirst({ where: { certificateId: req.params.certificateId, template: { tenantId: req.tenantId! } } });
+  if (!record) return res.status(404).json({ error: 'Certificate not found.' });
+  if (record.status === 'REVOKED') return res.status(409).json({ error: 'Certificate is already revoked.' });
+  await prisma.certificate.update({ where: { id: record.id }, data: { status: 'REVOKED', revokedAt: new Date(), revokedBy: req.user!.id, revocationReason: reason } });
+  return res.json({ message: 'Certificate revoked.' });
+});
+
+router.post('/templates/:templateId/archive', authMiddleware, async (req: TenantRequest, res: Response) => {
+  if (!isTenantAdmin(req.user!)) return res.status(403).json({ error: 'Only the Tenant Admin may archive certificate templates.' });
+  const result = await prisma.certificateTemplate.updateMany({ where: { id: req.params.templateId, tenantId: req.tenantId!, status: 'ACTIVE' }, data: { status: 'ARCHIVED' } });
+  if (!result.count) return res.status(404).json({ error: 'Active certificate template not found.' });
+  return res.json({ message: 'Certificate template archived.' });
+});
+
 router.get(
   '/:certificateId/html',
   authMiddleware,
@@ -89,7 +136,7 @@ router.get(
       const certificate = await prisma.certificate.findFirst({
         where: { certificateId: req.params.certificateId, template: { tenantId: req.tenantId! } },
         include: {
-          template: true,
+          template: { include: { tenant: { select: { name: true } } } },
           branch: true,
           student: { include: { grade: true, user: true, studentParents: { include: { parent: true } } } },
         },
@@ -153,32 +200,13 @@ router.get(
         return res.status(404).json({ error: 'Certificate not found.' });
       }
 
-      const studentName = `${certificate.student.user.firstName} ${certificate.student.user.lastName}`;
+      const snapshot = snapshotFromRecord(certificate);
       const safeFileName = `${certificate.certificateId}.pdf`.replace(/[^a-zA-Z0-9_.-]/g, '_');
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
       res.setHeader('Cache-Control', 'private, no-store');
 
-      const document = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 56 });
-      document.pipe(res);
-      document.rect(28, 28, document.page.width - 56, document.page.height - 56).lineWidth(3).stroke('#1560BD');
-      document.rect(38, 38, document.page.width - 76, document.page.height - 76).lineWidth(1).stroke('#FFBC3B');
-      document.moveDown(2);
-      document.fillColor('#002D72').font('Helvetica-Bold').fontSize(32).text(certificate.branch.name, { align: 'center' });
-      document.moveDown(1.4);
-      document.fillColor('#1B1F3B').font('Helvetica').fontSize(18).text(certificate.template.name, { align: 'center' });
-      document.moveDown(1.5);
-      document.fontSize(14).text('This certificate is issued to', { align: 'center' });
-      document.moveDown(0.5);
-      document.fillColor('#1560BD').font('Helvetica-Bold').fontSize(28).text(studentName, { align: 'center' });
-      document.moveDown(0.6);
-      document.fillColor('#1B1F3B').font('Helvetica').fontSize(14).text(
-        certificate.student.grade ? `Student of ${certificate.student.grade.name}` : 'Enrolled student',
-        { align: 'center' },
-      );
-      document.moveDown(1.5);
-      document.fontSize(12).text(`Issued: ${certificate.issuedDate.toLocaleDateString('en-GB')}   •   Verification ID: ${certificate.certificateId}`, { align: 'center' });
-      document.end();
+      return res.send(await renderCertificatePdf(snapshot));
     } catch (error: any) {
       if (!res.headersSent) return res.status(500).json({ error: 'Failed to generate certificate PDF.' });
       res.end();
@@ -199,6 +227,7 @@ router.post(
     if (!name || !type || !layoutConfig) {
       return res.status(400).json({ error: 'Missing required parameters: name, type, layoutConfig.' });
     }
+    if (!['COMPLETION', 'ACHIEVEMENT', 'ATTENDANCE', 'CUSTOM'].includes(String(type))) return res.status(400).json({ error: 'Choose a supported certificate type.' });
     const htmlLayout = layoutConfig as HtmlCertificateLayout;
     if (htmlLayout.renderMode === 'HTML' && (typeof htmlLayout.html !== 'string' || !htmlLayout.html.trim())) {
       return res.status(400).json({ error: 'HTML certificate templates require HTML content.' });
@@ -206,14 +235,17 @@ router.post(
     if (htmlLayout.renderMode === 'HTML' && htmlLayout.html!.length > 250_000) {
       return res.status(413).json({ error: 'HTML certificate templates must be smaller than 250 KB.' });
     }
+    if (htmlLayout.renderMode === 'FILE') return res.status(400).json({ error: 'File-backed templates are being migrated. Create a structured certificate design.' });
+    if (htmlLayout.renderMode && !['DESIGN', 'HTML'].includes(String(htmlLayout.renderMode))) return res.status(400).json({ error: 'Choose a supported certificate template format.' });
+    const normalizedLayout = htmlLayout.renderMode === 'HTML' ? htmlLayout : certificateDesign(layoutConfig, String(name).trim());
 
     try {
       const template = await prisma.certificateTemplate.create({
         data: {
           tenantId: req.tenantId!,
-          name,
+          name: String(name).trim().slice(0, 120),
           type: type as CertificateType,
-          layoutConfig,
+          layoutConfig: JSON.parse(JSON.stringify(normalizedLayout)),
         },
       });
 
@@ -244,8 +276,8 @@ router.post(
           id: studentId,
           user: { tenantId: req.tenantId! },
           enrollments: { some: { status: { in: ['ACTIVE', 'BLOCKED'] }, class: { branchId } } },
-        } }),
-        prisma.certificateTemplate.findFirst({ where: { id: templateId, tenantId: req.tenantId! } }),
+        }, include: { user: true, grade: true } }),
+        prisma.certificateTemplate.findFirst({ where: { id: templateId, tenantId: req.tenantId!, status: 'ACTIVE' }, include: { tenant: { select: { name: true } } } }),
         prisma.branch.findFirst({ where: { id: branchId, tenantId: req.tenantId! } }),
       ]);
       if (!student || !template || !branch) {
@@ -253,8 +285,20 @@ router.post(
       }
 
       // Generate unique verification ID
-      const uniqueHash = Math.random().toString(36).substr(2, 9).toUpperCase();
-      const verificationId = `CERT-2026-${uniqueHash}`;
+      const verificationId = `CERT-${new Date().getFullYear()}-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
+      const issuedDate = new Date();
+      const snapshot: CertificateSnapshot = {
+        studentName: `${student.user.firstName} ${student.user.lastName}`.trim(),
+        gradeName: student.grade?.name ?? 'Enrolled student',
+        branchName: branch.name,
+        institutionName: template.tenant.name,
+        templateName: template.name,
+        templateType: template.type,
+        templateVersion: template.version,
+        issuedDate: issuedDate.toLocaleDateString('en-GB'),
+        certificateId: verificationId,
+        design: certificateDesign(template.layoutConfig, template.name),
+      };
 
       const certificate = await prisma.certificate.create({
         data: {
@@ -263,7 +307,9 @@ router.post(
           templateId,
           branchId,
           issuerId: req.user!.id,
-          pdfUrl: `https://storage.tms.com.np/certs/${verificationId}.pdf`,
+          issuedDate,
+          pdfUrl: null,
+          snapshot: JSON.parse(JSON.stringify(snapshot)),
         },
       });
 
@@ -300,13 +346,19 @@ router.get(
         return res.status(404).json({ error: 'Certificate verification failed. Record not found.' });
       }
 
+      const snapshot = cert.snapshot && typeof cert.snapshot === 'object' ? cert.snapshot as unknown as CertificateSnapshot : null;
       return res.status(200).json({
-        isValid: true,
+        isValid: cert.status === 'ACTIVE',
+        status: cert.status,
         certificateId: cert.certificateId,
-        studentName: `${cert.student.user.firstName} ${cert.student.user.lastName}`,
+        studentName: snapshot?.studentName ?? `${cert.student.user.firstName} ${cert.student.user.lastName}`,
         issuedDate: cert.issuedDate,
-        templateName: cert.template.name,
-        type: cert.template.type,
+        templateName: snapshot?.templateName ?? cert.template.name,
+        type: snapshot?.templateType ?? cert.template.type,
+        institutionName: snapshot?.institutionName ?? null,
+        branchName: snapshot?.branchName ?? null,
+        revokedAt: cert.revokedAt,
+        revocationReason: cert.status === 'REVOKED' ? cert.revocationReason : null,
       });
     } catch (error: any) {
       return res.status(503).json({ isValid: false, error: 'Certificate verification is temporarily unavailable.' });

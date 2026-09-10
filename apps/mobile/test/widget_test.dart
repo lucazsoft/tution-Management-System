@@ -11,7 +11,11 @@ void main() {
     await tester.pumpWidget(const ProviderScope(child: TMSApp()));
     await tester.pumpAndSettle();
 
-    expect(find.text('Tuition Management System'), findsOneWidget);
+    expect(find.text('Welcome Back'), findsOneWidget);
+    expect(
+      find.text('Sign in to your Tuition Management account'),
+      findsOneWidget,
+    );
     expect(find.text('Sign In'), findsOneWidget);
   });
 }
