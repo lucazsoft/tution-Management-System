@@ -386,14 +386,14 @@ export function PeopleDirectory() {
                 </div>
                 <div className="pd-card-body">
                   {preview.map((person) => (
-                    <div key={person.id} className="pd-person pd-person--preview" onClick={(e) => { e.stopPropagation(); setSelectedUserId(person.id); }}>
+                    <button type="button" key={person.id} className="pd-person pd-person--preview" aria-label={`Open ${person.name}'s profile`} onClick={(e) => { e.stopPropagation(); setSelectedUserId(person.id); }}>
                       <div className="people-avatar pd-av">{initials(person.name)}</div>
                       <div className="pd-info">
                         <span className="pd-name">{person.name}</span>
                         <span className="pd-meta">{person.email}</span>
                       </div>
                       <StatusBadge variant={person.status === 'ACTIVE' ? 'success' : 'warning'}>{person.status}</StatusBadge>
-                    </div>
+                    </button>
                   ))}
                 </div>
                 {isClickable && (

@@ -3,14 +3,14 @@ import { Card } from '../ui/Card';
 
 export function RemoteState({ kind, message, onRetry }: { kind: 'loading' | 'empty' | 'error' | 'denied' | 'unavailable'; message?: string; onRetry?: () => void }) {
   const content = {
-    loading: ['progress_activity', 'Loading…'],
-    empty: ['inbox', message || 'No records found.'],
-    error: ['error', message || 'The page could not be loaded.'],
-    denied: ['lock', message || 'You do not have access to this workspace.'],
-    unavailable: ['schedule', message || 'This workflow is not available yet.'],
+    loading: ['progress_activity', 'Loading workspace', message || 'Your latest records are being prepared.'],
+    empty: ['inbox', 'Nothing here yet', message || 'New records will appear here when they are available.'],
+    error: ['error', 'Couldn’t load this section', message || 'Check your connection and try again.'],
+    denied: ['lock', 'Access restricted', message || 'Your account does not have permission to use this workspace.'],
+    unavailable: ['schedule', 'Coming soon', message || 'This workflow is not available yet.'],
   }[kind];
-  return <Card hoverable={false}><div role={kind === 'error' ? 'alert' : 'status'} style={{ minHeight: 170, display: 'grid', placeItems: 'center', textAlign: 'center', gap: 10, color: 'var(--text-muted)' }}>
-    <span className="material-symbols-outlined" style={{ fontSize: 38 }}>{content[0]}</span><p>{content[1]}</p>
-    {onRetry ? <Button variant="outline" onClick={onRetry}>Retry</Button> : null}
+  return <Card hoverable={false}><div className={`remote-state remote-state--${kind}`} role={kind === 'error' ? 'alert' : 'status'} aria-busy={kind === 'loading'}>
+    <span className="material-symbols-outlined" aria-hidden="true">{content[0]}</span><div><strong>{content[1]}</strong><p>{content[2]}</p></div>
+    {onRetry ? <Button variant="outline" onClick={onRetry}>Try again</Button> : null}
   </div></Card>;
 }

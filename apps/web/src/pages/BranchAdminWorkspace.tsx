@@ -1338,7 +1338,7 @@ function BranchStudentsView() {
       <Card hoverable={false}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <input style={{ ...field, width: '320px' }} placeholder="Search by name or class..." value={search} onChange={e => setSearch(e.target.value)} />
+            <input type="search" aria-label="Search students by name or class" autoComplete="off" style={{ ...field, width: '320px' }} placeholder="Search by name or class…" value={search} onChange={e => setSearch(e.target.value)} />
             <StatusBadge variant="info">{filtered.length} students</StatusBadge>
           </div>
           <Button onClick={() => { setIsAdding(true); setSelectedStudent(null); }}>Add Student</Button>
@@ -1365,7 +1365,7 @@ function BranchStudentsView() {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {filtered.map(s => (
-            <div key={s.id} onClick={() => { setSelectedStudent(s); setEditMode(false); setIsAdding(false); }} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px', border: `1px solid ${selectedStudent?.id === s.id ? 'var(--color-primary)' : 'var(--border)'}`, borderRadius: '12px', cursor: 'pointer', background: selectedStudent?.id === s.id ? 'var(--color-primary-soft, #e6f0fa)' : '#fff' }}>
+            <div key={s.id} role="button" tabIndex={0} aria-pressed={selectedStudent?.id === s.id} aria-label={`Open ${s.name}'s student record`} onClick={() => { setSelectedStudent(s); setEditMode(false); setIsAdding(false); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedStudent(s); setEditMode(false); setIsAdding(false); } }} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px', border: `1px solid ${selectedStudent?.id === s.id ? 'var(--color-primary)' : 'var(--border)'}`, borderRadius: '12px', cursor: 'pointer', background: selectedStudent?.id === s.id ? 'var(--color-primary-soft, #e6f0fa)' : 'var(--bg-card)' }}>
               <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: '15px', flexShrink: 0 }}>{initials(s.name)}</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: '15px' }}>{s.name}</div>
@@ -1545,12 +1545,12 @@ function BranchTeachersView() {
     <Page title="Branch Teachers" description="View all teacher profiles, payroll, classes, syllabus progress, timetable, and attendance.">
       <Card hoverable={false}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <input style={{ ...field, maxWidth: '320px' }} placeholder="Search by name..." value={search} onChange={e => setSearch(e.target.value)} />
+          <input type="search" aria-label="Search teachers by name" autoComplete="off" style={{ ...field, maxWidth: '320px' }} placeholder="Search by name…" value={search} onChange={e => setSearch(e.target.value)} />
           <StatusBadge variant="info">{filtered.length} teachers</StatusBadge>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {filtered.map(t => (
-            <div key={t.id} onClick={() => { setSelectedTeacher(t); setActiveTab('profile'); setEditMode(false); }} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px', border: `1px solid ${selectedTeacher?.id === t.id ? 'var(--color-primary)' : 'var(--border)'}`, borderRadius: '12px', cursor: 'pointer', background: selectedTeacher?.id === t.id ? 'var(--color-primary-soft, #e6f0fa)' : '#fff' }}>
+            <div key={t.id} role="button" tabIndex={0} aria-pressed={selectedTeacher?.id === t.id} aria-label={`Open ${t.name}'s teacher record`} onClick={() => { setSelectedTeacher(t); setActiveTab('profile'); setEditMode(false); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedTeacher(t); setActiveTab('profile'); setEditMode(false); } }} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px', border: `1px solid ${selectedTeacher?.id === t.id ? 'var(--color-primary)' : 'var(--border)'}`, borderRadius: '12px', cursor: 'pointer', background: selectedTeacher?.id === t.id ? 'var(--color-primary-soft, #e6f0fa)' : 'var(--bg-card)' }}>
               <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: '15px', flexShrink: 0 }}>{initials(t.name)}</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: '15px' }}>{t.name}</div>
