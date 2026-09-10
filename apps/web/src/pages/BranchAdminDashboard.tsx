@@ -125,6 +125,7 @@ export function BranchAdminDashboard() {
         <QuickAccessItem icon="assignment" label="Homework" path="/branch/homework" />
         <QuickAccessItem icon="analytics" label="Results" path="/branch/results" />
         <QuickAccessItem icon="payments" label="Fee & Billing" path="/branch/fees" />
+        <QuickAccessItem icon="savings" label="Petty cash" path="/branch/petty-cash" />
         <QuickAccessItem icon="event" label="Appointments" path="/branch/appointments" />
       </div>
     </div>
