@@ -40,6 +40,9 @@ jobs:
       - name: Web build
         run: npm run build --workspace=web
 
+      - name: Shared account menu browser regression
+        run: npm run test:account-menu --workspace=web
+
       - name: API build
         run: npm run build --workspace=@tms/api
 

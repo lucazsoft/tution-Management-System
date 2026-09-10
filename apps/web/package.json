@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "webpack serve --mode development --open",
     "build": "tsc -b && webpack --mode production",
-    "lint": "oxlint"
+    "lint": "oxlint",
+    "test:account-menu": "testcafe chrome:headless tests/account-menu.js --disable-native-automation --app \"webpack serve --mode development --port 5192 --no-open --no-client-overlay\" --app-init-delay 5000"
   },
   "dependencies": {
     "better-auth": "^1.6.23",
