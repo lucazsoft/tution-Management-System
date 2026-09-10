@@ -193,7 +193,7 @@ export const api = {
     changePassword: async (currentPassword: string, newPassword: string) => {
       return request<{ success: boolean }>('/auth/change-password', {
         method: 'POST',
-        body: JSON.stringify({ currentPassword, newPassword }),
+        body: JSON.stringify({ currentPassword, newPassword, revokeOtherSessions: true }),
       });
     },
   },

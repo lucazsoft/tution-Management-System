@@ -60,6 +60,9 @@ jobs:
       - name: Phase 3 workflow regression tests
         run: npm run test:phase-three-workflows --workspace=@tms/api
 
+      - name: Account profile ownership regression tests
+        run: npm run test:account-profile --workspace=@tms/api
+
       - name: Account contact security regression tests
         run: npm run test:account-contact --workspace=@tms/api
 

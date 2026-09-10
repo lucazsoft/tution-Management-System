@@ -9,7 +9,9 @@ export function ChangePasswordForm({ className = '' }: { className?: string }) {
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (busy) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const currentPassword = String(form.get('currentPassword'));
     const newPassword = String(form.get('newPassword'));
     const confirmPassword = String(form.get('confirmPassword'));
@@ -24,8 +26,8 @@ export function ChangePasswordForm({ className = '' }: { className?: string }) {
     setBusy(true);
     try {
       await api.auth.changePassword(currentPassword, newPassword);
-      showToast('Password changed successfully.', 'success');
-      event.currentTarget.reset();
+      formElement.reset();
+      showToast('Password changed. Other sessions have been signed out.', 'success');
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Failed to change password.', 'error');
     } finally {
@@ -49,20 +51,20 @@ export function ChangePasswordForm({ className = '' }: { className?: string }) {
     <section className={className} style={{ marginTop: '24px', padding: '24px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--color-bg)' }}>
       <header style={{ marginBottom: '16px' }}>
         <h2 style={{ fontSize: '18px', margin: 0 }}>Security</h2>
-        <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' }}>Update your portal login password.</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' }}>Changing your password signs out your other sessions.</p>
       </header>
       <form onSubmit={(e) => void submit(e)} style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '400px' }}>
         <div>
           <label htmlFor="currentPassword" style={{ fontSize: '13px', fontWeight: 600 }}>Current password</label>
-          <input id="currentPassword" name="currentPassword" type="password" required style={inputStyle} />
+          <input id="currentPassword" name="currentPassword" type="password" autoComplete="current-password" disabled={busy} maxLength={128} required style={inputStyle} />
         </div>
         <div>
           <label htmlFor="newPassword" style={{ fontSize: '13px', fontWeight: 600 }}>New password</label>
-          <input id="newPassword" name="newPassword" type="password" required minLength={8} style={inputStyle} />
+          <input id="newPassword" name="newPassword" type="password" autoComplete="new-password" disabled={busy} maxLength={128} required minLength={8} style={inputStyle} />
         </div>
         <div>
           <label htmlFor="confirmPassword" style={{ fontSize: '13px', fontWeight: 600 }}>Confirm new password</label>
-          <input id="confirmPassword" name="confirmPassword" type="password" required minLength={8} style={inputStyle} />
+          <input id="confirmPassword" name="confirmPassword" type="password" autoComplete="new-password" disabled={busy} maxLength={128} required minLength={8} style={inputStyle} />
         </div>
         <div style={{ marginTop: '8px' }}>
           <Button disabled={busy} type="submit" style={{ width: '100%' }}>
