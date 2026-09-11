@@ -24,9 +24,11 @@ test.requestHooks(mock)('requires verification, confirms SMS, shows recovery cod
   const section = Selector('.account-section').withText('Use an SMS code after your password');
   await t.click(section.find('button').withText('Set up'));
   await t.typeText(section.find('input[type=password]'), 'CorrectPassword123!').click(section.find('button').withText('Send setup code'));
-  await t.typeText(section.find('input[autocomplete=one-time-code]'), '000000').click(section.find('button').withText('Confirm code'));
+  const otpInput = section.find('input').withAttribute('autocomplete', 'one-time-code');
+  await t.expect(otpInput.exists).ok();
+  await t.typeText(otpInput, '000000').click(section.find('button').withText('Confirm code'));
   await t.expect(section.find('[role=alert]').innerText).contains('Invalid code');
-  await t.typeText(section.find('input[autocomplete=one-time-code]'), '123456', { replace: true }).click(section.find('button').withText('Confirm code'));
+  await t.typeText(otpInput, '123456', { replace: true }).click(section.find('button').withText('Confirm code'));
   await t.expect(section.innerText).contains('recovery-one').expect(section.find('button').withExactText('Done').hasAttribute('disabled')).ok();
   await t.click(section.find('input[type=checkbox]')).click(section.find('button').withExactText('Done'));
   await t.expect(section.innerText).notContains('recovery-one');
