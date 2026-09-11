@@ -1,283 +1,3620 @@
-import { AcademicCalendarView } from '../components/calendar/AcademicCalendarView';
-import { useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { useToast } from '../components/ui/Toast';
-import { ChangePasswordForm } from '../components/ChangePasswordForm';
-import { api } from '../services/api';
-import type { ChapterStatus, TeacherClass, TeacherDashboard, TeacherView } from '../features/teacher/teacherPortalTypes';
-import { normalizeSchedule } from '../utils/schedule';
-import { toBsMonthRangeLabel, toDualDateLabel } from '../utils/nepaliDate';
-import '../features/teacher/teacherPortal.css';
+import { AcademicCalendarView } from "../components/calendar/AcademicCalendarView";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useToast } from "../components/ui/Toast";
+import { ChangePasswordForm } from "../components/ChangePasswordForm";
+import { api } from "../services/api";
+import type {
+  ChapterStatus,
+  TeacherClass,
+  TeacherDashboard,
+  TeacherView,
+} from "../features/teacher/teacherPortalTypes";
+import { normalizeSchedule } from "../utils/schedule";
+import { toBsMonthRangeLabel, toDualDateLabel } from "../utils/nepaliDate";
+import "../features/teacher/teacherPortal.css";
 
 const VIEW_COPY: Record<TeacherView, [string, string]> = {
-  calendar: ['Academic calendar', 'Institution, branch, and assigned-class events in Nepal time.'],
-  dashboard: ['Teacher dashboard', 'Your attendance, today’s timetable, and classroom priorities.'],
-  timetable: ['My timetable', 'Every assigned class, branch, room, and teaching stream.'],
-  'geo-attendance': ['Geo attendance', 'Location-verified Teacher attendance is planned for a future release.'],
-  attendance: ['Class attendance', 'Mark assigned students and review class attendance statistics.'],
-  syllabus: ['Syllabus tracker', 'Plan chapters and share daily progress with enrolled students.'],
-  'daily-update-log': ['Daily class update', 'Confirm what was covered after each completed session.'],
-  homework: ['Homework', 'Assign text instructions and an optional student-visible file.'],
-  results: ['Results', 'Save mark sheets as drafts, verify percentiles, then share them.'],
-  profile: ['My profile', 'Your personal, employment, attendance, and performance record.'],
-  'leave-requests': ['Leave requests', 'Submit leave to your branch or tenant approval path.'],
-  'salary-slips': ['Salary slips', 'Review upcoming pay and your complete salary history.'],
-  security: ['Security', 'Manage your account password and authentication settings.'],
+  calendar: [
+    "Academic calendar",
+    "Institution, branch, and assigned-class events in Nepal time.",
+  ],
+  dashboard: [
+    "Teacher dashboard",
+    "Your attendance, today’s timetable, and classroom priorities.",
+  ],
+  timetable: [
+    "My timetable",
+    "Every assigned class, branch, room, and teaching stream.",
+  ],
+  "geo-attendance": [
+    "Geo attendance",
+    "Location-verified Teacher attendance is planned for a future release.",
+  ],
+  attendance: [
+    "Class attendance",
+    "Mark assigned students and review class attendance statistics.",
+  ],
+  syllabus: [
+    "Syllabus tracker",
+    "Plan chapters and share daily progress with enrolled students.",
+  ],
+  "daily-update-log": [
+    "Daily class update",
+    "Confirm what was covered after each completed session.",
+  ],
+  homework: [
+    "Homework",
+    "Assign text instructions and an optional student-visible file.",
+  ],
+  results: [
+    "Results",
+    "Save mark sheets as drafts, verify percentiles, then share them.",
+  ],
+  profile: [
+    "My profile",
+    "Your personal, employment, attendance, and performance record.",
+  ],
+  "leave-requests": [
+    "Leave requests",
+    "Submit leave to your branch or tenant approval path.",
+  ],
+  "salary-slips": [
+    "Salary slips",
+    "Review upcoming pay and your complete salary history.",
+  ],
+  security: [
+    "Security",
+    "Manage your account password and authentication settings.",
+  ],
 };
 
-const icon = (name: string) => <span className="material-symbols-outlined" aria-hidden="true">{name}</span>;
+const icon = (name: string) => (
+  <span className="material-symbols-outlined" aria-hidden="true">
+    {name}
+  </span>
+);
 const dateInput = () => new Date().toISOString().slice(0, 10);
-const money = (value: number) => `NPR ${Number(value || 0).toLocaleString('en-NP')}`;
-const statusLabel = (value: string) => value.toLowerCase().replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase());
+const money = (value: number) =>
+  `NPR ${Number(value || 0).toLocaleString("en-NP")}`;
+const statusLabel = (value: string) =>
+  value
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace(/^./, (letter) => letter.toUpperCase());
 const scheduleSlots = normalizeSchedule;
 const payrollPeriod = (month: number, year: number) => {
   const date = new Date(year, month - 1, 1);
-  return `${date.toLocaleDateString('en', { month: 'long', year: 'numeric' })} AD · ${toBsMonthRangeLabel(date)}`;
+  return `${date.toLocaleDateString("en", { month: "long", year: "numeric" })} AD · ${toBsMonthRangeLabel(date)}`;
 };
-const WEEK_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
+const WEEK_DAYS = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+] as const;
 const currentWeek = () => {
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const sunday = new Date(today); sunday.setDate(today.getDate() - today.getDay());
-  return WEEK_DAYS.map((day, index) => { const date = new Date(sunday); date.setDate(sunday.getDate() + index); return { day, date, isToday: date.getTime() === today.getTime() }; });
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const sunday = new Date(today);
+  sunday.setDate(today.getDate() - today.getDay());
+  return WEEK_DAYS.map((day, index) => {
+    const date = new Date(sunday);
+    date.setDate(sunday.getDate() + index);
+    return { day, date, isToday: date.getTime() === today.getTime() };
+  });
 };
 
-function Status({ tone = 'info', children }: { tone?: 'success' | 'warning' | 'error' | 'info'; children: React.ReactNode }) {
-  return <span className={`teacher-status teacher-status--${tone}`}>{children}</span>;
+function Status({
+  tone = "info",
+  children,
+}: {
+  tone?: "success" | "warning" | "error" | "info";
+  children: React.ReactNode;
+}) {
+  return (
+    <span className={`teacher-status teacher-status--${tone}`}>{children}</span>
+  );
 }
 
-function Empty({ iconName, title, text }: { iconName: string; title: string; text: string }) {
-  return <div className="teacher-empty" role="status">{icon(iconName)}<strong>{title}</strong><p>{text}</p></div>;
+function Empty({
+  iconName,
+  title,
+  text,
+}: {
+  iconName: string;
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className="teacher-empty" role="status">
+      {icon(iconName)}
+      <strong>{title}</strong>
+      <p>{text}</p>
+    </div>
+  );
 }
 
-function ClassPicker({ classes, value, onChange }: { classes: TeacherClass[]; value: string; onChange: (id: string) => void }) {
-  return <label className="teacher-picker" htmlFor="teacher-class-picker"><span>Assigned class</span><select id="teacher-class-picker" value={value} onChange={(event) => onChange(event.target.value)}>{classes.map((item) => <option value={item.id} key={item.id}>{item.name} · {item.subject} · {item.branch.name}</option>)}</select></label>;
+function ClassPicker({
+  classes,
+  value,
+  onChange,
+}: {
+  classes: TeacherClass[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  return (
+    <label className="teacher-picker" htmlFor="teacher-class-picker">
+      <span>Assigned class</span>
+      <select
+        id="teacher-class-picker"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {classes.map((item) => (
+          <option value={item.id} key={item.id}>
+            {item.name} · {item.subject} · {item.branch.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 async function fileData(file?: File): Promise<string | undefined> {
   if (!file) return undefined;
-  if (file.size > 120_000) throw new Error('Use a file smaller than 120 KB for this secure preview upload.');
-  return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error('The selected file could not be read.')); reader.readAsDataURL(file); });
+  if (file.size > 120_000)
+    throw new Error(
+      "Use a file smaller than 120 KB for this secure preview upload.",
+    );
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () =>
+      reject(new Error("The selected file could not be read."));
+    reader.readAsDataURL(file);
+  });
 }
 
-function Dashboard({ data, go }: { data: TeacherDashboard; go: (view: TeacherView) => void }) {
+function Dashboard({
+  data,
+  go,
+}: {
+  data: TeacherDashboard;
+  go: (view: TeacherView) => void;
+}) {
   const stats = [
-    ['Attendance', `${data.statistics.presentDays}/${data.statistics.requiredDays}`, 'calendar_month', 'Present days this month'],
-    ['Sessions', data.statistics.totalSessions, 'co_present', 'Completed teaching sessions'],
-    ['Update compliance', `${data.statistics.updateCompliance}%`, 'task_alt', 'Daily logs submitted'],
-    ['Classes', data.statistics.assignedClasses, 'school', 'Currently assigned classes'],
+    [
+      "Attendance",
+      `${data.statistics.presentDays}/${data.statistics.requiredDays}`,
+      "calendar_month",
+      "Present days this month",
+    ],
+    [
+      "Sessions",
+      data.statistics.totalSessions,
+      "co_present",
+      "Completed teaching sessions",
+    ],
+    [
+      "Update compliance",
+      `${data.statistics.updateCompliance}%`,
+      "task_alt",
+      "Daily logs submitted",
+    ],
+    [
+      "Classes",
+      data.statistics.assignedClasses,
+      "school",
+      "Currently assigned classes",
+    ],
   ];
-  return <div className="teacher-view">
-    <section className="teacher-stat-grid" aria-label="Teacher attendance and workload statistics">{stats.map(([label, value, iconName, detail]) => label === 'Attendance' ? <button type="button" className="teacher-stat-link" key={String(label)} onClick={() => go('attendance')}><span>{icon(String(iconName))}</span><div><small>{label}</small><strong>{value}</strong><p>{detail}</p></div>{icon('arrow_forward')}</button> : <article key={String(label)}><span>{icon(String(iconName))}</span><div><small>{label}</small><strong>{value}</strong><p>{detail}</p></div></article>)}</section>
-    {data.pendingUpdates.length ? <section className="teacher-reminder">{icon('notification_important')}<div><strong>{data.pendingUpdates.length} daily update{data.pendingUpdates.length === 1 ? '' : 's'} pending</strong><p>Complete the teaching log to confirm those sessions.</p></div><button type="button" onClick={() => go('daily-update-log')}>Update now</button></section> : null}
-    <section className="teacher-section"><header><div><span className="teacher-eyebrow">TODAY</span><h2>Today’s timetable</h2><p>{data.todayClasses.length} scheduled class{data.todayClasses.length === 1 ? '' : 'es'}</p></div><button type="button" onClick={() => go('timetable')}>Full timetable {icon('arrow_forward')}</button></header>{data.todayClasses.length ? <div className="teacher-session-list">{data.todayClasses.map((item) => { const slot = scheduleSlots(item.schedule)[0]; return <article key={item.sessionId}><time>{String(slot?.startTime || 'Today')}{slot?.endTime ? <small>– {String(slot.endTime)}</small> : null}</time><i /><div><h3>{item.courseName}</h3><p>{item.className} · {item.branch.name}</p>{slot?.room ? <small>{String(slot.room)}</small> : null}</div><Status tone={item.dailyUpdateSubmitted ? 'success' : 'warning'}>{item.dailyUpdateSubmitted ? 'Updated' : statusLabel(item.status)}</Status></article>; })}</div> : <Empty iconName="event_busy" title="No classes today" text="There are no teaching sessions scheduled for today." />}</section>
-    <nav className="teacher-quick-grid" aria-label="Teacher quick actions"><button onClick={() => go('attendance')}>{icon('how_to_reg')}<span><strong>Take attendance</strong><small>Assigned rosters</small></span></button><button onClick={() => go('syllabus')}>{icon('menu_book')}<span><strong>Update syllabus</strong><small>Daily progress</small></span></button><button onClick={() => go('homework')}>{icon('assignment_add')}<span><strong>Assign homework</strong><small>Text or file</small></span></button><button onClick={() => go('results')}>{icon('analytics')}<span><strong>Enter results</strong><small>Draft then share</small></span></button></nav>
-  </div>;
+  return (
+    <div className="teacher-view">
+      <section
+        className="teacher-stat-grid"
+        aria-label="Teacher attendance and workload statistics"
+      >
+        {stats.map(([label, value, iconName, detail]) =>
+          label === "Attendance" ? (
+            <button
+              type="button"
+              className="teacher-stat-link"
+              key={String(label)}
+              onClick={() => go("attendance")}
+            >
+              <span>{icon(String(iconName))}</span>
+              <div>
+                <small>{label}</small>
+                <strong>{value}</strong>
+                <p>{detail}</p>
+              </div>
+              {icon("arrow_forward")}
+            </button>
+          ) : (
+            <article key={String(label)}>
+              <span>{icon(String(iconName))}</span>
+              <div>
+                <small>{label}</small>
+                <strong>{value}</strong>
+                <p>{detail}</p>
+              </div>
+            </article>
+          ),
+        )}
+      </section>
+      {data.pendingUpdates.length ? (
+        <section className="teacher-reminder">
+          {icon("notification_important")}
+          <div>
+            <strong>
+              {data.pendingUpdates.length} daily update
+              {data.pendingUpdates.length === 1 ? "" : "s"} pending
+            </strong>
+            <p>Complete the teaching log to confirm those sessions.</p>
+          </div>
+          <button type="button" onClick={() => go("daily-update-log")}>
+            Update now
+          </button>
+        </section>
+      ) : null}
+      <section className="teacher-section">
+        <header>
+          <div>
+            <span className="teacher-eyebrow">TODAY</span>
+            <h2>Today’s timetable</h2>
+            <p>
+              {data.todayClasses.length} scheduled class
+              {data.todayClasses.length === 1 ? "" : "es"}
+            </p>
+          </div>
+          <button type="button" onClick={() => go("timetable")}>
+            Full timetable {icon("arrow_forward")}
+          </button>
+        </header>
+        {data.todayClasses.length ? (
+          <div className="teacher-session-list">
+            {data.todayClasses.map((item) => {
+              const slot = scheduleSlots(item.schedule)[0];
+              return (
+                <article key={item.sessionId}>
+                  <time>
+                    {String(slot?.startTime || "Today")}
+                    {slot?.endTime ? (
+                      <small>– {String(slot.endTime)}</small>
+                    ) : null}
+                  </time>
+                  <i />
+                  <div>
+                    <h3>{item.courseName}</h3>
+                    <p>
+                      {item.className} · {item.branch.name}
+                    </p>
+                    {slot?.room ? <small>{String(slot.room)}</small> : null}
+                  </div>
+                  <Status
+                    tone={item.dailyUpdateSubmitted ? "success" : "warning"}
+                  >
+                    {item.dailyUpdateSubmitted
+                      ? "Updated"
+                      : statusLabel(item.status)}
+                  </Status>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <Empty
+            iconName="event_busy"
+            title="No classes today"
+            text="There are no teaching sessions scheduled for today."
+          />
+        )}
+      </section>
+      <nav className="teacher-quick-grid" aria-label="Teacher quick actions">
+        <button onClick={() => go("attendance")}>
+          {icon("how_to_reg")}
+          <span>
+            <strong>Take attendance</strong>
+            <small>Assigned rosters</small>
+          </span>
+        </button>
+        <button onClick={() => go("syllabus")}>
+          {icon("menu_book")}
+          <span>
+            <strong>Update syllabus</strong>
+            <small>Daily progress</small>
+          </span>
+        </button>
+        <button onClick={() => go("homework")}>
+          {icon("assignment_add")}
+          <span>
+            <strong>Assign homework</strong>
+            <small>Text or file</small>
+          </span>
+        </button>
+        <button onClick={() => go("results")}>
+          {icon("analytics")}
+          <span>
+            <strong>Enter results</strong>
+            <small>Draft then share</small>
+          </span>
+        </button>
+      </nav>
+    </div>
+  );
 }
 
-function GeoAttendance({ data, reload }: { data: TeacherDashboard; reload: () => Promise<void> }) {
+function GeoAttendance({
+  data,
+  reload,
+}: {
+  data: TeacherDashboard;
+  reload: () => Promise<void>;
+}) {
   const { showToast } = useToast();
-  const [branchId, setBranchId] = useState(data.teacher.branches[0]?.id || '');
-  const [busy, setBusy] = useState<'IN' | 'OUT' | null>(null);
-  const [locationStatus, setLocationStatus] = useState('Location is requested only when you mark attendance.');
-  const selectedBranch = data.classes.find((item) => item.branch.id === branchId)?.branch;
+  const [branchId, setBranchId] = useState(data.teacher.branches[0]?.id || "");
+  const [busy, setBusy] = useState<"IN" | "OUT" | null>(null);
+  const [locationStatus, setLocationStatus] = useState(
+    "Location is requested only when you mark attendance.",
+  );
+  const selectedBranch = data.classes.find(
+    (item) => item.branch.id === branchId,
+  )?.branch;
 
-  const mark = async (stampType: 'IN' | 'OUT') => {
-    if (!branchId) return showToast('No assigned branch is available.', 'error');
-    if (!navigator.geolocation) return showToast('Location services are not supported by this browser.', 'error');
-    setBusy(stampType); setLocationStatus('Requesting a precise GPS reading…');
+  const mark = async (stampType: "IN" | "OUT") => {
+    if (!branchId)
+      return showToast("No assigned branch is available.", "error");
+    if (!navigator.geolocation)
+      return showToast(
+        "Location services are not supported by this browser.",
+        "error",
+      );
+    setBusy(stampType);
+    setLocationStatus("Requesting a precise GPS reading…");
     try {
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 20_000, maximumAge: 0 }));
+      const position = await new Promise<GeolocationPosition>(
+        (resolve, reject) =>
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 20_000,
+            maximumAge: 0,
+          }),
+      );
       const { latitude, longitude, accuracy } = position.coords;
-      setLocationStatus(`GPS accuracy ±${Math.round(accuracy)} m. Verifying the branch geofence…`);
-      const response = stampType === 'IN'
-        ? await api.attendance.markIn(branchId, latitude, longitude, accuracy)
-        : await api.attendance.markOut(branchId, latitude, longitude, accuracy);
-      showToast(response.message, 'success');
-      setLocationStatus(`${stampType === 'IN' ? 'Marked in' : 'Marked out'} successfully at ${new Date().toLocaleTimeString()}.`);
+      setLocationStatus(
+        `GPS accuracy ±${Math.round(accuracy)} m. Verifying the branch geofence…`,
+      );
+      const response =
+        stampType === "IN"
+          ? await api.attendance.markIn(branchId, latitude, longitude, accuracy)
+          : await api.attendance.markOut(
+              branchId,
+              latitude,
+              longitude,
+              accuracy,
+            );
+      showToast(response.message, "success");
+      setLocationStatus(
+        `${stampType === "IN" ? "Marked in" : "Marked out"} successfully at ${new Date().toLocaleTimeString()}.`,
+      );
       await reload();
     } catch (error) {
-      const geoError = typeof error === 'object' && error !== null && 'code' in error ? error as GeolocationPositionError : null;
+      const geoError =
+        typeof error === "object" && error !== null && "code" in error
+          ? (error as GeolocationPositionError)
+          : null;
       const message = geoError
-        ? geoError.code === geoError.PERMISSION_DENIED ? 'Location permission was denied. Allow precise location access and try again.' : geoError.code === geoError.TIMEOUT ? 'A precise location could not be obtained in time. Move to an open area and retry.' : 'Your current location could not be determined.'
-        : error instanceof Error ? error.message : 'Attendance could not be recorded.';
-      setLocationStatus(message); showToast(message, 'error');
-    } finally { setBusy(null); }
+        ? geoError.code === geoError.PERMISSION_DENIED
+          ? "Location permission was denied. Allow precise location access and try again."
+          : geoError.code === geoError.TIMEOUT
+            ? "A precise location could not be obtained in time. Move to an open area and retry."
+            : "Your current location could not be determined."
+        : error instanceof Error
+          ? error.message
+          : "Attendance could not be recorded.";
+      setLocationStatus(message);
+      showToast(message, "error");
+    } finally {
+      setBusy(null);
+    }
   };
 
-  if (!data.teacher.branches.length) return <Empty iconName="location_off" title="No assigned branch" text="A class and branch assignment is required before geo-attendance can be recorded." />;
-  return <div className="teacher-view"><section className="teacher-geo-card" aria-labelledby="geo-attendance-title"><div className="teacher-geo-card__top"><div><span className="teacher-eyebrow">LIVE GEOFENCE</span><h2 id="geo-attendance-title">Teacher attendance</h2><p>Your coordinates are verified by the server and stored with the attendance stamp.</p></div><span className={`teacher-geo-orbit${data.attendance.checkedIn ? ' is-live' : ''}`}>{icon(data.attendance.checkedIn ? 'location_on' : 'location_searching')}</span></div><label className="teacher-geofence" htmlFor="geo-branch"><span>Assigned branch</span><select id="geo-branch" value={branchId} disabled={Boolean(busy)} onChange={(event) => setBranchId(event.target.value)}>{data.teacher.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select><small>{selectedBranch?.address || 'Branch address unavailable'} · allowed radius {Math.round(selectedBranch?.radiusMeters || 0)} m</small></label><p className="teacher-geo-rule" role="status" aria-live="polite">{icon('my_location')}{locationStatus}</p><div className="teacher-form-actions"><button type="button" className="teacher-primary-cta" disabled={Boolean(busy) || data.attendance.checkedIn} onClick={() => void mark('IN')}>{busy === 'IN' ? 'Verifying…' : 'Mark IN'}</button><button type="button" className="teacher-secondary-cta" disabled={Boolean(busy) || !data.attendance.checkedIn} onClick={() => void mark('OUT')}>{busy === 'OUT' ? 'Verifying…' : 'Mark OUT'}</button></div></section><section className="teacher-section"><header><div><h2>Recent attendance stamps</h2><p>Server-verified IN, OUT, AUTO-OUT, and RE-IN events.</p></div><Status tone={data.attendance.checkedIn ? 'success' : 'info'}>{data.attendance.checkedIn ? 'Currently IN' : 'Currently OUT'}</Status></header>{data.stamps.length ? <div className="teacher-stamps">{data.stamps.map((stamp) => <article key={stamp.id}><i className={`is-${stamp.stampType.toLowerCase().replace('_', '-')}`} /><div><strong>{statusLabel(stamp.stampType)}</strong><small>{stamp.branchName} · GPS ±{Math.round(stamp.gpsAccuracy)} m</small></div><time>{new Date(stamp.timestamp).toLocaleString()}</time></article>)}</div> : <Empty iconName="history" title="No attendance stamps" text="Your first verified attendance event will appear here." />}</section></div>;
+  if (!data.teacher.branches.length)
+    return (
+      <Empty
+        iconName="location_off"
+        title="No assigned branch"
+        text="A class and branch assignment is required before geo-attendance can be recorded."
+      />
+    );
+  return (
+    <div className="teacher-view">
+      <section
+        className="teacher-geo-card"
+        aria-labelledby="geo-attendance-title"
+      >
+        <div className="teacher-geo-card__top">
+          <div>
+            <span className="teacher-eyebrow">LIVE GEOFENCE</span>
+            <h2 id="geo-attendance-title">Teacher attendance</h2>
+            <p>
+              Your coordinates are verified by the server and stored with the
+              attendance stamp.
+            </p>
+          </div>
+          <span
+            className={`teacher-geo-orbit${data.attendance.checkedIn ? " is-live" : ""}`}
+          >
+            {icon(
+              data.attendance.checkedIn ? "location_on" : "location_searching",
+            )}
+          </span>
+        </div>
+        <label className="teacher-geofence" htmlFor="geo-branch">
+          <span>Assigned branch</span>
+          <select
+            id="geo-branch"
+            value={branchId}
+            disabled={Boolean(busy)}
+            onChange={(event) => setBranchId(event.target.value)}
+          >
+            {data.teacher.branches.map((branch) => (
+              <option key={branch.id} value={branch.id}>
+                {branch.name}
+              </option>
+            ))}
+          </select>
+          <small>
+            {selectedBranch?.address || "Branch address unavailable"} · allowed
+            radius {Math.round(selectedBranch?.radiusMeters || 0)} m
+          </small>
+        </label>
+        <p className="teacher-geo-rule" role="status" aria-live="polite">
+          {icon("my_location")}
+          {locationStatus}
+        </p>
+        <div className="teacher-form-actions">
+          <button
+            type="button"
+            className="teacher-primary-cta"
+            disabled={Boolean(busy) || data.attendance.checkedIn}
+            onClick={() => void mark("IN")}
+          >
+            {busy === "IN" ? "Verifying…" : "Mark IN"}
+          </button>
+          <button
+            type="button"
+            className="teacher-secondary-cta"
+            disabled={Boolean(busy) || !data.attendance.checkedIn}
+            onClick={() => void mark("OUT")}
+          >
+            {busy === "OUT" ? "Verifying…" : "Mark OUT"}
+          </button>
+        </div>
+      </section>
+      <section className="teacher-section">
+        <header>
+          <div>
+            <h2>Recent attendance stamps</h2>
+            <p>Server-verified IN, OUT, AUTO-OUT, and RE-IN events.</p>
+          </div>
+          <Status tone={data.attendance.checkedIn ? "success" : "info"}>
+            {data.attendance.checkedIn ? "Currently IN" : "Currently OUT"}
+          </Status>
+        </header>
+        {data.stamps.length ? (
+          <div className="teacher-stamps">
+            {data.stamps.map((stamp) => (
+              <article key={stamp.id}>
+                <i
+                  className={`is-${stamp.stampType.toLowerCase().replace("_", "-")}`}
+                />
+                <div>
+                  <strong>{statusLabel(stamp.stampType)}</strong>
+                  <small>
+                    {stamp.branchName} · GPS ±{Math.round(stamp.gpsAccuracy)} m
+                  </small>
+                </div>
+                <time>{new Date(stamp.timestamp).toLocaleString()}</time>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <Empty
+            iconName="history"
+            title="No attendance stamps"
+            text="Your first verified attendance event will appear here."
+          />
+        )}
+      </section>
+    </div>
+  );
 }
 
 function Timetable({ data }: { data: TeacherDashboard }) {
-  const weeklySlots = data.classes.flatMap((item) => scheduleSlots(item.schedule).map((slot, index) => ({ item, slot, index })));
-  const week = currentWeek(); const dateFormat = new Intl.DateTimeFormat('en-NP', { day: 'numeric', month: 'short' }); const rangeFormat = new Intl.DateTimeFormat('en-NP', { day: 'numeric', month: 'short', year: 'numeric' });
-  return <div className="teacher-view"><section className="teacher-section"><header><div><span className="teacher-eyebrow">TODAY</span><h2>Today’s classes</h2><p>{data.todayClasses.length} scheduled session{data.todayClasses.length === 1 ? '' : 's'}</p></div></header>{data.todayClasses.length ? <div className="teacher-session-list">{data.todayClasses.map((item) => <article key={item.sessionId}><time>{scheduleSlots(item.schedule)[0]?.startTime || 'Today'}</time><i /><div><h3>{item.courseName}</h3><p>{item.className} · {item.branch.name}</p></div><Status tone={item.dailyUpdateSubmitted ? 'success' : 'warning'}>{item.dailyUpdateSubmitted ? 'Updated' : statusLabel(item.status)}</Status></article>)}</div> : <Empty iconName="event_busy" title="No class sessions today" text="Your next scheduled class will appear here." />}</section><div className="teacher-info">{icon('alt_route')}<span>Each timetable slot remains tied to its assigned branch. Geo validation will be added in the separate Geo Attendance module.</span></div><section className="teacher-section"><header><div><h2>Weekly teaching schedule</h2><p>{rangeFormat.format(week[0].date)} – {rangeFormat.format(week[6].date)} · {data.classes.length} assigned class{data.classes.length === 1 ? '' : 'es'}</p></div><Status tone="info">Current week</Status></header>{data.classes.length ? <div className="teacher-week-table-wrap"><table className="teacher-week-table"><caption className="sr-only">Teacher schedule for {rangeFormat.format(week[0].date)} through {rangeFormat.format(week[6].date)}</caption><thead><tr>{week.map(({ day, date, isToday }) => <th key={day} scope="col" className={isToday ? 'is-today' : ''}><span>{day}</span><time dateTime={date.toISOString().slice(0, 10)}>{dateFormat.format(date)}</time>{isToday ? <small>Today</small> : null}</th>)}</tr></thead><tbody><tr>{week.map(({ day, date, isToday }) => { const entries = weeklySlots.filter(({ slot }) => slot.day.toLowerCase() === day.slice(0, 3).toLowerCase()); return <td key={day} className={isToday ? 'is-today' : ''} aria-label={`${day}, ${rangeFormat.format(date)}`}>{entries.length ? <div className="teacher-week-day">{entries.map(({ item, slot, index }) => <article key={`${item.id}-${index}`}><time>{slot.startTime}–{slot.endTime}</time><strong>{item.subject}</strong><span>{item.name}</span><small>{slot.room || 'Room TBA'} · {item.branch.name}</small></article>)}</div> : <div className="teacher-day-empty"><span>{icon('event_available')}</span><small>No classes</small></div>}</td>; })}</tr></tbody></table></div> : <Empty iconName="calendar_month" title="No timetable assigned" text="Ask your Branch Admin to assign a class and schedule." />}</section></div>;
+  const weeklySlots = data.classes.flatMap((item) =>
+    scheduleSlots(item.schedule).map((slot, index) => ({ item, slot, index })),
+  );
+  const week = currentWeek();
+  const dateFormat = new Intl.DateTimeFormat("en-NP", {
+    day: "numeric",
+    month: "short",
+  });
+  const rangeFormat = new Intl.DateTimeFormat("en-NP", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  return (
+    <div className="teacher-view">
+      <section className="teacher-section">
+        <header>
+          <div>
+            <span className="teacher-eyebrow">TODAY</span>
+            <h2>Today’s classes</h2>
+            <p>
+              {data.todayClasses.length} scheduled session
+              {data.todayClasses.length === 1 ? "" : "s"}
+            </p>
+          </div>
+        </header>
+        {data.todayClasses.length ? (
+          <div className="teacher-session-list">
+            {data.todayClasses.map((item) => (
+              <article key={item.sessionId}>
+                <time>
+                  {scheduleSlots(item.schedule)[0]?.startTime || "Today"}
+                </time>
+                <i />
+                <div>
+                  <h3>{item.courseName}</h3>
+                  <p>
+                    {item.className} · {item.branch.name}
+                  </p>
+                </div>
+                <Status
+                  tone={item.dailyUpdateSubmitted ? "success" : "warning"}
+                >
+                  {item.dailyUpdateSubmitted
+                    ? "Updated"
+                    : statusLabel(item.status)}
+                </Status>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <Empty
+            iconName="event_busy"
+            title="No class sessions today"
+            text="Your next scheduled class will appear here."
+          />
+        )}
+      </section>
+      <div className="teacher-info">
+        {icon("alt_route")}
+        <span>
+          Each timetable slot remains tied to its assigned branch. Geo
+          validation will be added in the separate Geo Attendance module.
+        </span>
+      </div>
+      <section className="teacher-section">
+        <header>
+          <div>
+            <h2>Weekly teaching schedule</h2>
+            <p>
+              {rangeFormat.format(week[0].date)} –{" "}
+              {rangeFormat.format(week[6].date)} · {data.classes.length}{" "}
+              assigned class{data.classes.length === 1 ? "" : "es"}
+            </p>
+          </div>
+          <Status tone="info">Current week</Status>
+        </header>
+        {data.classes.length ? (
+          <div className="teacher-week-table-wrap">
+            <table className="teacher-week-table">
+              <caption className="sr-only">
+                Teacher schedule for {rangeFormat.format(week[0].date)} through{" "}
+                {rangeFormat.format(week[6].date)}
+              </caption>
+              <thead>
+                <tr>
+                  {week.map(({ day, date, isToday }) => (
+                    <th
+                      key={day}
+                      scope="col"
+                      className={isToday ? "is-today" : ""}
+                    >
+                      <span>{day}</span>
+                      <time dateTime={date.toISOString().slice(0, 10)}>
+                        {dateFormat.format(date)}
+                      </time>
+                      {isToday ? <small>Today</small> : null}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  {week.map(({ day, date, isToday }) => {
+                    const entries = weeklySlots.filter(
+                      ({ slot }) =>
+                        slot.day.toLowerCase() ===
+                        day.slice(0, 3).toLowerCase(),
+                    );
+                    return (
+                      <td
+                        key={day}
+                        className={isToday ? "is-today" : ""}
+                        aria-label={`${day}, ${rangeFormat.format(date)}`}
+                      >
+                        {entries.length ? (
+                          <div className="teacher-week-day">
+                            {entries.map(({ item, slot, index }) => (
+                              <article key={`${item.id}-${index}`}>
+                                <time>
+                                  {slot.startTime}–{slot.endTime}
+                                </time>
+                                <strong>{item.subject}</strong>
+                                <span>{item.name}</span>
+                                <small>
+                                  {slot.room || "Room TBA"} · {item.branch.name}
+                                </small>
+                              </article>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="teacher-day-empty">
+                            <span>{icon("event_available")}</span>
+                            <small>No classes</small>
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <Empty
+            iconName="calendar_month"
+            title="No timetable assigned"
+            text="Ask your Branch Admin to assign a class and schedule."
+          />
+        )}
+      </section>
+    </div>
+  );
 }
 
-function Attendance({ data, reload }: { data: TeacherDashboard; reload: () => Promise<void> }) {
-  const { showToast } = useToast(); const [classId, setClassId] = useState(data.classes[0]?.id || ''); const selected = data.classes.find((item) => item.id === classId);
-  const [states, setStates] = useState<Record<string, 'PRESENT' | 'ABSENT'>>({}); const [busy, setBusy] = useState(false);
-  useEffect(() => { if (selected) setStates(Object.fromEntries(selected.students.map((student) => [student.id, student.status === 'BLOCKED' ? 'ABSENT' : 'PRESENT']))); }, [selected]);
-  if (!selected) return <Empty iconName="groups" title="No assigned class" text="Attendance becomes available after a class is assigned." />;
-  const counts = selected.attendance.reduce<Record<string, number>>((result, item) => ({ ...result, [item.status]: (result[item.status] || 0) + 1 }), {}); const total = selected.attendance.length;
-  const submit = async () => { if (!data.attendance.checkedIn) return showToast('You must be present today before taking class attendance.', 'error'); setBusy(true); try { await api.teacher.saveClassAttendance(selected.id, dateInput(), selected.students.map((student) => ({ studentId: student.id, status: states[student.id] }))); showToast('Class attendance saved and student records updated.', 'success'); await reload(); } catch (error) { showToast(error instanceof Error ? error.message : 'Attendance failed.', 'error'); } finally { setBusy(false); } };
-  return <div className="teacher-view"><ClassPicker classes={data.classes} value={classId} onChange={setClassId} /><section className="teacher-stat-grid teacher-stat-grid--compact"><article><span>{icon('percent')}</span><div><small>Recorded attendance</small><strong>{total ? Math.round(((counts.PRESENT || 0) / total) * 100) : 0}%</strong></div></article><article><span>{icon('check_circle')}</span><div><small>Present records</small><strong>{counts.PRESENT || 0}</strong></div></article><article><span>{icon('cancel')}</span><div><small>Absent records</small><strong>{counts.ABSENT || 0}</strong></div></article><article><span>{icon('event_available')}</span><div><small>Excused records</small><strong>{counts.EXCUSED || 0}</strong></div></article></section><section className="teacher-section"><header><div><h2>{selected.name} roster</h2><p>{selected.subject} · {selected.branch.name} · {selected.students.length} students</p></div><Status>Today</Status></header><div className="teacher-roster">{selected.students.map((student) => <fieldset key={student.id} className={student.status === 'BLOCKED' ? 'is-locked' : ''}><legend className="sr-only">Attendance for {student.name}</legend><span className="teacher-avatar">{student.name.split(' ').map((part) => part[0]).join('').slice(0, 2)}</span><div><strong>{student.name}</strong><small>{student.status === 'BLOCKED' ? 'Fee-blocked · Present disabled' : 'Active enrollment'}</small></div><div className="teacher-attendance-options"><label><input type="radio" name={student.id} checked={states[student.id] === 'PRESENT'} disabled={student.status === 'BLOCKED'} onChange={() => setStates((old) => ({ ...old, [student.id]: 'PRESENT' }))} /><span>P</span></label><label><input type="radio" name={student.id} checked={states[student.id] === 'ABSENT'} onChange={() => setStates((old) => ({ ...old, [student.id]: 'ABSENT' }))} /><span>A</span></label></div></fieldset>)}</div><button className="teacher-primary-cta" type="button" disabled={busy} onClick={() => void submit()}>{busy ? 'Saving…' : 'Save attendance'}</button></section></div>;
+function Attendance({
+  data,
+  reload,
+}: {
+  data: TeacherDashboard;
+  reload: () => Promise<void>;
+}) {
+  const { showToast } = useToast();
+  const [classId, setClassId] = useState(data.classes[0]?.id || "");
+  const selected = data.classes.find((item) => item.id === classId);
+  const [states, setStates] = useState<Record<string, "PRESENT" | "ABSENT">>(
+    {},
+  );
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (selected)
+      setStates(
+        Object.fromEntries(
+          selected.students.map((student) => [
+            student.id,
+            student.status === "BLOCKED" ? "ABSENT" : "PRESENT",
+          ]),
+        ),
+      );
+  }, [selected]);
+  if (!selected)
+    return (
+      <Empty
+        iconName="groups"
+        title="No assigned class"
+        text="Attendance becomes available after a class is assigned."
+      />
+    );
+  const counts = selected.attendance.reduce<Record<string, number>>(
+    (result, item) => ({
+      ...result,
+      [item.status]: (result[item.status] || 0) + 1,
+    }),
+    {},
+  );
+  const total = selected.attendance.length;
+  const submit = async () => {
+    if (!data.attendance.checkedIn)
+      return showToast(
+        "You must be present today before taking class attendance.",
+        "error",
+      );
+    setBusy(true);
+    try {
+      await api.teacher.saveClassAttendance(
+        selected.id,
+        dateInput(),
+        selected.students.map((student) => ({
+          studentId: student.id,
+          status: states[student.id],
+        })),
+      );
+      showToast(
+        "Class attendance saved and student records updated.",
+        "success",
+      );
+      await reload();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Attendance failed.",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="teacher-view">
+      <ClassPicker
+        classes={data.classes}
+        value={classId}
+        onChange={setClassId}
+      />
+      <section className="teacher-stat-grid teacher-stat-grid--compact">
+        <article>
+          <span>{icon("percent")}</span>
+          <div>
+            <small>Recorded attendance</small>
+            <strong>
+              {total ? Math.round(((counts.PRESENT || 0) / total) * 100) : 0}%
+            </strong>
+          </div>
+        </article>
+        <article>
+          <span>{icon("check_circle")}</span>
+          <div>
+            <small>Present records</small>
+            <strong>{counts.PRESENT || 0}</strong>
+          </div>
+        </article>
+        <article>
+          <span>{icon("cancel")}</span>
+          <div>
+            <small>Absent records</small>
+            <strong>{counts.ABSENT || 0}</strong>
+          </div>
+        </article>
+        <article>
+          <span>{icon("event_available")}</span>
+          <div>
+            <small>Excused records</small>
+            <strong>{counts.EXCUSED || 0}</strong>
+          </div>
+        </article>
+      </section>
+      <section className="teacher-section">
+        <header>
+          <div>
+            <h2>{selected.name} roster</h2>
+            <p>
+              {selected.subject} · {selected.branch.name} ·{" "}
+              {selected.students.length} students
+            </p>
+          </div>
+          <Status>Today</Status>
+        </header>
+        <div className="teacher-roster">
+          {selected.students.map((student) => (
+            <fieldset
+              key={student.id}
+              className={student.status === "BLOCKED" ? "is-locked" : ""}
+            >
+              <legend className="sr-only">Attendance for {student.name}</legend>
+              <span className="teacher-avatar">
+                {student.name
+                  .split(" ")
+                  .map((part) => part[0])
+                  .join("")
+                  .slice(0, 2)}
+              </span>
+              <div>
+                <strong>{student.name}</strong>
+                <small>
+                  {student.status === "BLOCKED"
+                    ? "Fee-blocked · Present disabled"
+                    : "Active enrollment"}
+                </small>
+              </div>
+              <div className="teacher-attendance-options">
+                <label>
+                  <input
+                    type="radio"
+                    name={student.id}
+                    checked={states[student.id] === "PRESENT"}
+                    disabled={student.status === "BLOCKED"}
+                    onChange={() =>
+                      setStates((old) => ({ ...old, [student.id]: "PRESENT" }))
+                    }
+                  />
+                  <span>P</span>
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name={student.id}
+                    checked={states[student.id] === "ABSENT"}
+                    onChange={() =>
+                      setStates((old) => ({ ...old, [student.id]: "ABSENT" }))
+                    }
+                  />
+                  <span>A</span>
+                </label>
+              </div>
+            </fieldset>
+          ))}
+        </div>
+        <button
+          className="teacher-primary-cta"
+          type="button"
+          disabled={busy}
+          onClick={() => void submit()}
+        >
+          {busy ? "Saving…" : "Save attendance"}
+        </button>
+      </section>
+    </div>
+  );
 }
 
-function Syllabus({ data, reload }: { data: TeacherDashboard; reload: () => Promise<void> }) {
-  const { showToast } = useToast(); const [classId, setClassId] = useState(data.classes[0]?.id || ''); const selected = data.classes.find((item) => item.id === classId); const syllabus = selected?.syllabi[0]; const [subject, setSubject] = useState(selected?.subject || ''); const [chapters, setChapters] = useState<Array<{ id: string; persistedId?: string; title: string }>>([{ id: crypto.randomUUID(), title: '' }]); const [editing, setEditing] = useState(false); const [busy, setBusy] = useState(false);
-  const loadEditor = () => { setSubject(syllabus?.subject || selected?.subject || ''); setChapters(syllabus?.chapters.map((chapter) => ({ id: chapter.id, persistedId: chapter.id, title: chapter.title })) || [{ id: crypto.randomUUID(), title: '' }]); };
-  useEffect(() => { setEditing(false); setSubject(syllabus?.subject || selected?.subject || ''); setChapters(syllabus?.chapters.map((chapter) => ({ id: chapter.id, persistedId: chapter.id, title: chapter.title })) || [{ id: crypto.randomUUID(), title: '' }]); }, [classId, syllabus?.id]);
-  const save = async (event: React.FormEvent) => { event.preventDefault(); const validChapters = chapters.map((item) => ({ ...item, title: item.title.trim() })).filter((item) => item.title); if (!validChapters.length) return showToast('Add at least one chapter.', 'error'); setBusy(true); try { if (syllabus) await api.teacher.updateSyllabus(syllabus.id, { subject, chapters: validChapters.map((item) => ({ id: item.persistedId, title: item.title })) }); else await api.teacher.createSyllabus({ classId, subject, chapters: validChapters.map((item) => item.title) }); showToast(syllabus ? 'Syllabus updated and shared with students.' : 'Syllabus created and shared with students.', 'success'); setEditing(false); await reload(); } catch (error) { showToast(error instanceof Error ? error.message : 'Syllabus failed.', 'error'); } finally { setBusy(false); } };
-  if (!selected) return <Empty iconName="menu_book" title="No assigned subject" text="A class assignment is required before creating a syllabus." />;
-  const editor = <form className="teacher-form teacher-syllabus-builder" onSubmit={(event) => void save(event)} aria-busy={busy}><div className="teacher-syllabus-subject"><label htmlFor="syllabus-subject">Subject <span>*</span></label><input id="syllabus-subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="e.g. Mathematics" required /></div><fieldset><legend>Build your chapter list <span>*</span></legend><p>Type short chapter names in teaching order. You can add details as topics after saving.</p><div className="teacher-chapter-builder">{chapters.map((chapter, index) => <div key={chapter.id}><span>{String(index + 1).padStart(2, '0')}</span><label className="sr-only" htmlFor={`chapter-${chapter.id}`}>Chapter {index + 1} title</label><input id={`chapter-${chapter.id}`} value={chapter.title} onChange={(event) => setChapters((items) => items.map((item) => item.id === chapter.id ? { ...item, title: event.target.value } : item))} placeholder="Chapter name" /><button type="button" aria-label={`Remove chapter ${index + 1}`} disabled={chapters.length === 1} onClick={() => setChapters((items) => items.filter((item) => item.id !== chapter.id))}>{icon('close')}</button></div>)}</div><button type="button" className="teacher-add-chapter" onClick={() => setChapters((items) => [...items, { id: crypto.randomUUID(), title: '' }])}>{icon('add')}Add chapter</button></fieldset><div className="teacher-form-actions"><button className="teacher-primary-cta" disabled={busy}>{busy ? 'Saving…' : syllabus ? 'Save syllabus changes' : 'Save syllabus and continue'}</button>{syllabus ? <button type="button" className="teacher-secondary-action" disabled={busy} onClick={() => { loadEditor(); setEditing(false); }}>Cancel</button> : null}</div></form>;
-  const completeCount = syllabus?.chapters.filter((chapter) => chapter.status === 'COMPLETED').length || 0;
-  const progress = syllabus?.chapters.length ? Math.round((completeCount / syllabus.chapters.length) * 100) : 0;
-  return <div className="teacher-view"><ClassPicker classes={data.classes} value={classId} onChange={setClassId} />{!syllabus || editing ? <section className="teacher-section"><header><div><span className="teacher-eyebrow">{selected.name}</span><h2>{syllabus ? 'Edit syllabus' : 'Create subject syllabus'}</h2><p>{syllabus ? 'Keep the chapter list current for students and daily lesson logs.' : 'Create the teaching plan students will follow.'}</p></div></header>{editor}</section> : <><section className="teacher-syllabus-summary" aria-labelledby="syllabus-title"><div><span className="teacher-eyebrow">{selected.name} · {selected.branch.name}</span><h2 id="syllabus-title">{syllabus.subject}</h2><p>{completeCount} of {syllabus.chapters.length} chapters completed</p></div><div className="teacher-syllabus-progress" aria-label={`${progress}% of syllabus completed`}><strong>{progress}%</strong><div><span style={{ width: `${progress}%` }} /></div></div><button type="button" className="teacher-edit-syllabus" onClick={() => { loadEditor(); setEditing(true); }}>{icon('edit')}Edit plan</button></section><section className="teacher-section"><header><div><h2>Teaching plan</h2><p>Chapter progress updates automatically from the daily log.</p></div><Status tone={progress === 100 ? 'success' : 'info'}>{progress === 100 ? 'Complete' : `${syllabus.chapters.length - completeCount} remaining`}</Status></header><ol className="teacher-chapter-list">{syllabus.chapters.map((chapter) => <li key={chapter.id} className={`is-${chapter.status.toLowerCase().replace('_', '-')}`}><span className="teacher-chapter-number">{chapter.position}</span><div><h3>{chapter.title}</h3><small>{chapter.status === 'COMPLETED' ? 'Completed' : chapter.status === 'IN_PROGRESS' ? 'Currently teaching' : 'Not started'}</small></div><Status tone={chapter.status === 'COMPLETED' ? 'success' : chapter.status === 'IN_PROGRESS' ? 'warning' : 'info'}>{chapter.status === 'COMPLETED' ? 'Done' : chapter.status === 'IN_PROGRESS' ? 'In progress' : 'Upcoming'}</Status></li>)}</ol><div className="teacher-info teacher-syllabus-hint">{icon('edit_note')}<span>After class, open Daily class update, choose one chapter, and save what you covered.</span></div></section></>}</div>;
+function Syllabus({
+  data,
+  reload,
+}: {
+  data: TeacherDashboard;
+  reload: () => Promise<void>;
+}) {
+  const { showToast } = useToast();
+  const [classId, setClassId] = useState(data.classes[0]?.id || "");
+  const selected = data.classes.find((item) => item.id === classId);
+  const syllabus = selected?.syllabi[0];
+  const [subject, setSubject] = useState(selected?.subject || "");
+  const [chapters, setChapters] = useState<
+    Array<{ id: string; persistedId?: string; title: string }>
+  >([{ id: crypto.randomUUID(), title: "" }]);
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const loadEditor = () => {
+    setSubject(syllabus?.subject || selected?.subject || "");
+    setChapters(
+      syllabus?.chapters.map((chapter) => ({
+        id: chapter.id,
+        persistedId: chapter.id,
+        title: chapter.title,
+      })) || [{ id: crypto.randomUUID(), title: "" }],
+    );
+  };
+  useEffect(() => {
+    setEditing(false);
+    setSubject(syllabus?.subject || selected?.subject || "");
+    setChapters(
+      syllabus?.chapters.map((chapter) => ({
+        id: chapter.id,
+        persistedId: chapter.id,
+        title: chapter.title,
+      })) || [{ id: crypto.randomUUID(), title: "" }],
+    );
+  }, [classId, syllabus?.id]);
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const validChapters = chapters
+      .map((item) => ({ ...item, title: item.title.trim() }))
+      .filter((item) => item.title);
+    if (!validChapters.length)
+      return showToast("Add at least one chapter.", "error");
+    setBusy(true);
+    try {
+      if (syllabus)
+        await api.teacher.updateSyllabus(syllabus.id, {
+          subject,
+          chapters: validChapters.map((item) => ({
+            id: item.persistedId,
+            title: item.title,
+          })),
+        });
+      else
+        await api.teacher.createSyllabus({
+          classId,
+          subject,
+          chapters: validChapters.map((item) => item.title),
+        });
+      showToast(
+        syllabus
+          ? "Syllabus updated and shared with students."
+          : "Syllabus created and shared with students.",
+        "success",
+      );
+      setEditing(false);
+      await reload();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Syllabus failed.",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!selected)
+    return (
+      <Empty
+        iconName="menu_book"
+        title="No assigned subject"
+        text="A class assignment is required before creating a syllabus."
+      />
+    );
+  const editor = (
+    <form
+      className="teacher-form teacher-syllabus-builder"
+      onSubmit={(event) => void save(event)}
+      aria-busy={busy}
+    >
+      <div className="teacher-syllabus-subject">
+        <label htmlFor="syllabus-subject">
+          Subject <span>*</span>
+        </label>
+        <input
+          id="syllabus-subject"
+          value={subject}
+          onChange={(event) => setSubject(event.target.value)}
+          placeholder="e.g. Mathematics"
+          required
+        />
+      </div>
+      <fieldset>
+        <legend>
+          Build your chapter list <span>*</span>
+        </legend>
+        <p>
+          Type short chapter names in teaching order. You can add details as
+          topics after saving.
+        </p>
+        <div className="teacher-chapter-builder">
+          {chapters.map((chapter, index) => (
+            <div key={chapter.id}>
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <label className="sr-only" htmlFor={`chapter-${chapter.id}`}>
+                Chapter {index + 1} title
+              </label>
+              <input
+                id={`chapter-${chapter.id}`}
+                value={chapter.title}
+                onChange={(event) =>
+                  setChapters((items) =>
+                    items.map((item) =>
+                      item.id === chapter.id
+                        ? { ...item, title: event.target.value }
+                        : item,
+                    ),
+                  )
+                }
+                placeholder="Chapter name"
+              />
+              <button
+                type="button"
+                aria-label={`Remove chapter ${index + 1}`}
+                disabled={chapters.length === 1}
+                onClick={() =>
+                  setChapters((items) =>
+                    items.filter((item) => item.id !== chapter.id),
+                  )
+                }
+              >
+                {icon("close")}
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="teacher-add-chapter"
+          onClick={() =>
+            setChapters((items) => [
+              ...items,
+              { id: crypto.randomUUID(), title: "" },
+            ])
+          }
+        >
+          {icon("add")}Add chapter
+        </button>
+      </fieldset>
+      <div className="teacher-form-actions">
+        <button className="teacher-primary-cta" disabled={busy}>
+          {busy
+            ? "Saving…"
+            : syllabus
+              ? "Save syllabus changes"
+              : "Save syllabus and continue"}
+        </button>
+        {syllabus ? (
+          <button
+            type="button"
+            className="teacher-secondary-action"
+            disabled={busy}
+            onClick={() => {
+              loadEditor();
+              setEditing(false);
+            }}
+          >
+            Cancel
+          </button>
+        ) : null}
+      </div>
+    </form>
+  );
+  const completeCount =
+    syllabus?.chapters.filter((chapter) => chapter.status === "COMPLETED")
+      .length || 0;
+  const progress = syllabus?.chapters.length
+    ? Math.round((completeCount / syllabus.chapters.length) * 100)
+    : 0;
+  return (
+    <div className="teacher-view">
+      <ClassPicker
+        classes={data.classes}
+        value={classId}
+        onChange={setClassId}
+      />
+      {!syllabus || editing ? (
+        <section className="teacher-section">
+          <header>
+            <div>
+              <span className="teacher-eyebrow">{selected.name}</span>
+              <h2>{syllabus ? "Edit syllabus" : "Create subject syllabus"}</h2>
+              <p>
+                {syllabus
+                  ? "Keep the chapter list current for students and daily lesson logs."
+                  : "Create the teaching plan students will follow."}
+              </p>
+            </div>
+          </header>
+          {editor}
+        </section>
+      ) : (
+        <>
+          <section
+            className="teacher-syllabus-summary"
+            aria-labelledby="syllabus-title"
+          >
+            <div>
+              <span className="teacher-eyebrow">
+                {selected.name} · {selected.branch.name}
+              </span>
+              <h2 id="syllabus-title">{syllabus.subject}</h2>
+              <p>
+                {completeCount} of {syllabus.chapters.length} chapters completed
+              </p>
+            </div>
+            <div
+              className="teacher-syllabus-progress"
+              aria-label={`${progress}% of syllabus completed`}
+            >
+              <strong>{progress}%</strong>
+              <div>
+                <span style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+            <button
+              type="button"
+              className="teacher-edit-syllabus"
+              onClick={() => {
+                loadEditor();
+                setEditing(true);
+              }}
+            >
+              {icon("edit")}Edit plan
+            </button>
+          </section>
+          <section className="teacher-section">
+            <header>
+              <div>
+                <h2>Teaching plan</h2>
+                <p>
+                  Chapter progress updates automatically from the daily log.
+                </p>
+              </div>
+              <Status tone={progress === 100 ? "success" : "info"}>
+                {progress === 100
+                  ? "Complete"
+                  : `${syllabus.chapters.length - completeCount} remaining`}
+              </Status>
+            </header>
+            <ol className="teacher-chapter-list">
+              {syllabus.chapters.map((chapter) => (
+                <li
+                  key={chapter.id}
+                  className={`is-${chapter.status.toLowerCase().replace("_", "-")}`}
+                >
+                  <span className="teacher-chapter-number">
+                    {chapter.position}
+                  </span>
+                  <div>
+                    <h3>{chapter.title}</h3>
+                    <small>
+                      {chapter.status === "COMPLETED"
+                        ? "Completed"
+                        : chapter.status === "IN_PROGRESS"
+                          ? "Currently teaching"
+                          : "Not started"}
+                    </small>
+                  </div>
+                  <Status
+                    tone={
+                      chapter.status === "COMPLETED"
+                        ? "success"
+                        : chapter.status === "IN_PROGRESS"
+                          ? "warning"
+                          : "info"
+                    }
+                  >
+                    {chapter.status === "COMPLETED"
+                      ? "Done"
+                      : chapter.status === "IN_PROGRESS"
+                        ? "In progress"
+                        : "Upcoming"}
+                  </Status>
+                </li>
+              ))}
+            </ol>
+            <div className="teacher-info teacher-syllabus-hint">
+              {icon("edit_note")}
+              <span>
+                After class, open Daily class update, choose one chapter, and
+                save what you covered.
+              </span>
+            </div>
+          </section>
+        </>
+      )}
+    </div>
+  );
 }
 
-function DailyUpdate({ data, reload }: { data: TeacherDashboard; reload: () => Promise<void> }) {
-  const { showToast } = useToast(); const [classId, setClassId] = useState(data.classes[0]?.id || ''); const selected = data.classes.find((item) => item.id === classId); const [values, setValues] = useState<Record<string, string>>({}); const [busy, setBusy] = useState(false); const [chapterId, setChapterId] = useState(''); const [draftStatus, setDraftStatus] = useState<ChapterStatus>('IN_PROGRESS');
-  useEffect(() => { const first = selected?.syllabi.flatMap((item) => item.chapters).find((chapter) => chapter.status !== 'COMPLETED') || selected?.syllabi[0]?.chapters[0]; setChapterId(first?.id || ''); setDraftStatus(first?.status === 'LEFT' ? 'IN_PROGRESS' : first?.status || 'IN_PROGRESS'); }, [classId, selected?.syllabi]);
-  const selectedSyllabus = selected?.syllabi.find((item) => item.chapters.some((chapter) => chapter.id === chapterId)); const selectedChapter = selectedSyllabus?.chapters.find((chapter) => chapter.id === chapterId);
-  const updateChapter = async () => { if (!selectedSyllabus || !selectedChapter) return; setBusy(true); try { await api.teacher.updateSyllabusLog(selectedSyllabus.id, { chapterId: selectedChapter.id, status: draftStatus, notes: values[selectedChapter.id], logDate: dateInput() }); showToast('Daily progress saved and shared with students.', 'success'); setValues((old) => ({ ...old, [selectedChapter.id]: '' })); await reload(); } catch (error) { showToast(error instanceof Error ? error.message : 'Progress update failed.', 'error'); } finally { setBusy(false); } };
-  const submit = async (id: string) => { if (!values[id]?.trim()) return showToast('Enter what was covered.', 'error'); setBusy(true); try { await api.teacher.submitSessionUpdate(id, values[id]); showToast('Daily update submitted and session confirmed.', 'success'); await reload(); } catch (error) { showToast(error instanceof Error ? error.message : 'Update failed.', 'error'); } finally { setBusy(false); } };
-  if (!selected) return <Empty iconName="note_alt" title="No assigned class" text="Daily syllabus updates require an assigned class." />;
-  const allLogs = selected.syllabi.flatMap((syllabus) => syllabus.dailyLogs.map((log) => ({ ...log, subject: syllabus.subject, chapter: syllabus.chapters.find((chapter) => chapter.id === log.chapterId) }))).sort((a, b) => new Date(b.logDate).getTime() - new Date(a.logDate).getTime());
-  const chapters = selected.syllabi.flatMap((syllabus) => syllabus.chapters.map((chapter) => ({ ...chapter, subject: syllabus.subject, latest: syllabus.dailyLogs.find((log) => log.chapterId === chapter.id) })));
-  return <div className="teacher-view"><ClassPicker classes={data.classes} value={classId} onChange={setClassId} />{chapters.length ? <div className="teacher-daily-workspace"><section className="teacher-section teacher-chapter-picker"><header><div><span className="teacher-eyebrow">STEP 1</span><h2>Choose today’s chapter</h2><p>{chapters.filter((chapter) => chapter.status !== 'COMPLETED').length} chapters still in progress or upcoming</p></div></header><div role="list" className="teacher-daily-chapters">{chapters.map((chapter) => <button type="button" role="listitem" key={chapter.id} className={chapter.id === chapterId ? 'is-selected' : ''} aria-pressed={chapter.id === chapterId} onClick={() => { setChapterId(chapter.id); setDraftStatus(chapter.status === 'LEFT' ? 'IN_PROGRESS' : chapter.status); }}><span className={`teacher-progress-dot is-${chapter.status.toLowerCase().replace('_', '-')}`} /><span><strong>{chapter.position}. {chapter.title}</strong><small>{chapter.subject} · {chapter.latest ? `Updated ${new Date(chapter.latest.logDate).toLocaleDateString()}` : 'No update yet'}</small></span>{icon('chevron_right')}</button>)}</div></section><section className="teacher-section teacher-daily-editor"><header><div><span className="teacher-eyebrow">STEP 2</span><h2>Record class progress</h2><p>{selectedChapter ? `${selectedChapter.position}. ${selectedChapter.title}` : 'Select a chapter to continue'}</p></div><Status tone="info">Today</Status></header>{selectedChapter ? <form onSubmit={(event) => { event.preventDefault(); void updateChapter(); }} aria-busy={busy}><fieldset className="teacher-chapter-status"><legend>Progress after class</legend><button type="button" className="is-left" aria-pressed={draftStatus === 'LEFT'} disabled={busy} onClick={() => setDraftStatus('LEFT')}><i />Not started</button><button type="button" className="is-in-progress" aria-pressed={draftStatus === 'IN_PROGRESS'} disabled={busy} onClick={() => setDraftStatus('IN_PROGRESS')}><i />In progress</button><button type="button" className="is-completed" aria-pressed={draftStatus === 'COMPLETED'} disabled={busy} onClick={() => setDraftStatus('COMPLETED')}><i />Completed</button></fieldset><label htmlFor="daily-chapter-note">What did you cover? <span>(optional)</span></label><textarea id="daily-chapter-note" value={values[selectedChapter.id] || ''} onChange={(event) => setValues((old) => ({ ...old, [selectedChapter.id]: event.target.value }))} placeholder="Example: Completed examples 1–4 and assigned exercise 2." rows={4} /><button type="submit" className="teacher-primary-cta" disabled={busy}>{busy ? 'Saving update…' : 'Save daily update'}</button><p className="teacher-form-help">Students will see the new progress and note immediately.</p></form> : null}</section></div> : <section className="teacher-section"><Empty iconName="menu_book" title="Create a syllabus first" text="Add the subject and chapters in the Syllabus section before posting daily progress." /></section>}<section className="teacher-section"><header><div><h2>Recent daily updates</h2><p>{allLogs.length} saved {allLogs.length === 1 ? 'entry' : 'entries'} for {selected.name}</p></div></header>{allLogs.length ? <div className="teacher-daily-log-history">{allLogs.map((log) => <article key={log.id}><time dateTime={log.logDate}>{new Date(log.logDate).toLocaleDateString()}</time><div><strong>{log.chapter?.position}. {log.chapter?.title || 'Chapter'} <small>· {log.subject}</small></strong><p>{log.notes || 'No class note was added.'}</p></div><Status tone={log.status === 'COMPLETED' ? 'success' : log.status === 'IN_PROGRESS' ? 'warning' : 'info'}>{log.status === 'LEFT' ? 'Not started' : statusLabel(log.status)}</Status></article>)}</div> : <Empty iconName="history_edu" title="No daily updates yet" text="Your first saved chapter update will appear here." />}</section><section className="teacher-section"><header><div><h2>Pending class confirmations</h2><p>{data.pendingUpdates.length} update{data.pendingUpdates.length === 1 ? '' : 's'} pending</p></div></header>{data.pendingUpdates.length ? data.pendingUpdates.map((item) => <article className="teacher-update-card" key={item.sessionId}><div><div><span className="teacher-eyebrow">{new Date(item.date).toLocaleDateString()}</span><h3>{item.className} · {item.courseName}</h3></div><Status tone="warning">Update pending</Status></div><label htmlFor={`update-${item.sessionId}`}>Class summary for attendance confirmation</label><textarea id={`update-${item.sessionId}`} value={values[item.sessionId] || ''} onChange={(event) => setValues((old) => ({ ...old, [item.sessionId]: event.target.value }))} placeholder="Summarize the completed session" /><button type="button" className="teacher-primary-cta" disabled={busy} onClick={() => void submit(item.sessionId)}>Submit and confirm</button></article>) : <Empty iconName="task_alt" title="All confirmations complete" text="There are no pending class confirmations." />}</section></div>;
+function DailyUpdate({
+  data,
+  reload,
+}: {
+  data: TeacherDashboard;
+  reload: () => Promise<void>;
+}) {
+  const { showToast } = useToast();
+  const [classId, setClassId] = useState(data.classes[0]?.id || "");
+  const selected = data.classes.find((item) => item.id === classId);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [chapterId, setChapterId] = useState("");
+  const [draftStatus, setDraftStatus] = useState<ChapterStatus>("IN_PROGRESS");
+  useEffect(() => {
+    const first =
+      selected?.syllabi
+        .flatMap((item) => item.chapters)
+        .find((chapter) => chapter.status !== "COMPLETED") ||
+      selected?.syllabi[0]?.chapters[0];
+    setChapterId(first?.id || "");
+    setDraftStatus(
+      first?.status === "LEFT" ? "IN_PROGRESS" : first?.status || "IN_PROGRESS",
+    );
+  }, [classId, selected?.syllabi]);
+  const selectedSyllabus = selected?.syllabi.find((item) =>
+    item.chapters.some((chapter) => chapter.id === chapterId),
+  );
+  const selectedChapter = selectedSyllabus?.chapters.find(
+    (chapter) => chapter.id === chapterId,
+  );
+  const updateChapter = async () => {
+    if (!selectedSyllabus || !selectedChapter) return;
+    setBusy(true);
+    try {
+      await api.teacher.updateSyllabusLog(selectedSyllabus.id, {
+        chapterId: selectedChapter.id,
+        status: draftStatus,
+        notes: values[selectedChapter.id],
+        logDate: dateInput(),
+      });
+      showToast("Daily progress saved and shared with students.", "success");
+      setValues((old) => ({ ...old, [selectedChapter.id]: "" }));
+      await reload();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Progress update failed.",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const submit = async (id: string) => {
+    if (!values[id]?.trim())
+      return showToast("Enter what was covered.", "error");
+    setBusy(true);
+    try {
+      await api.teacher.submitSessionUpdate(id, values[id]);
+      showToast("Daily update submitted and session confirmed.", "success");
+      await reload();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Update failed.",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!selected)
+    return (
+      <Empty
+        iconName="note_alt"
+        title="No assigned class"
+        text="Daily syllabus updates require an assigned class."
+      />
+    );
+  const allLogs = selected.syllabi
+    .flatMap((syllabus) =>
+      syllabus.dailyLogs.map((log) => ({
+        ...log,
+        subject: syllabus.subject,
+        chapter: syllabus.chapters.find(
+          (chapter) => chapter.id === log.chapterId,
+        ),
+      })),
+    )
+    .sort(
+      (a, b) => new Date(b.logDate).getTime() - new Date(a.logDate).getTime(),
+    );
+  const chapters = selected.syllabi.flatMap((syllabus) =>
+    syllabus.chapters.map((chapter) => ({
+      ...chapter,
+      subject: syllabus.subject,
+      latest: syllabus.dailyLogs.find((log) => log.chapterId === chapter.id),
+    })),
+  );
+  return (
+    <div className="teacher-view">
+      <ClassPicker
+        classes={data.classes}
+        value={classId}
+        onChange={setClassId}
+      />
+      {chapters.length ? (
+        <div className="teacher-daily-workspace">
+          <section className="teacher-section teacher-chapter-picker">
+            <header>
+              <div>
+                <span className="teacher-eyebrow">STEP 1</span>
+                <h2>Choose today’s chapter</h2>
+                <p>
+                  {
+                    chapters.filter((chapter) => chapter.status !== "COMPLETED")
+                      .length
+                  }{" "}
+                  chapters still in progress or upcoming
+                </p>
+              </div>
+            </header>
+            <div role="list" className="teacher-daily-chapters">
+              {chapters.map((chapter) => (
+                <button
+                  type="button"
+                  role="listitem"
+                  key={chapter.id}
+                  className={chapter.id === chapterId ? "is-selected" : ""}
+                  aria-pressed={chapter.id === chapterId}
+                  onClick={() => {
+                    setChapterId(chapter.id);
+                    setDraftStatus(
+                      chapter.status === "LEFT"
+                        ? "IN_PROGRESS"
+                        : chapter.status,
+                    );
+                  }}
+                >
+                  <span
+                    className={`teacher-progress-dot is-${chapter.status.toLowerCase().replace("_", "-")}`}
+                  />
+                  <span>
+                    <strong>
+                      {chapter.position}. {chapter.title}
+                    </strong>
+                    <small>
+                      {chapter.subject} ·{" "}
+                      {chapter.latest
+                        ? `Updated ${new Date(chapter.latest.logDate).toLocaleDateString()}`
+                        : "No update yet"}
+                    </small>
+                  </span>
+                  {icon("chevron_right")}
+                </button>
+              ))}
+            </div>
+          </section>
+          <section className="teacher-section teacher-daily-editor">
+            <header>
+              <div>
+                <span className="teacher-eyebrow">STEP 2</span>
+                <h2>Record class progress</h2>
+                <p>
+                  {selectedChapter
+                    ? `${selectedChapter.position}. ${selectedChapter.title}`
+                    : "Select a chapter to continue"}
+                </p>
+              </div>
+              <Status tone="info">Today</Status>
+            </header>
+            {selectedChapter ? (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void updateChapter();
+                }}
+                aria-busy={busy}
+              >
+                <fieldset className="teacher-chapter-status">
+                  <legend>Progress after class</legend>
+                  <button
+                    type="button"
+                    className="is-left"
+                    aria-pressed={draftStatus === "LEFT"}
+                    disabled={busy}
+                    onClick={() => setDraftStatus("LEFT")}
+                  >
+                    <i />
+                    Not started
+                  </button>
+                  <button
+                    type="button"
+                    className="is-in-progress"
+                    aria-pressed={draftStatus === "IN_PROGRESS"}
+                    disabled={busy}
+                    onClick={() => setDraftStatus("IN_PROGRESS")}
+                  >
+                    <i />
+                    In progress
+                  </button>
+                  <button
+                    type="button"
+                    className="is-completed"
+                    aria-pressed={draftStatus === "COMPLETED"}
+                    disabled={busy}
+                    onClick={() => setDraftStatus("COMPLETED")}
+                  >
+                    <i />
+                    Completed
+                  </button>
+                </fieldset>
+                <label htmlFor="daily-chapter-note">
+                  What did you cover? <span>(optional)</span>
+                </label>
+                <textarea
+                  id="daily-chapter-note"
+                  value={values[selectedChapter.id] || ""}
+                  onChange={(event) =>
+                    setValues((old) => ({
+                      ...old,
+                      [selectedChapter.id]: event.target.value,
+                    }))
+                  }
+                  placeholder="Example: Completed examples 1–4 and assigned exercise 2."
+                  rows={4}
+                />
+                <button
+                  type="submit"
+                  className="teacher-primary-cta"
+                  disabled={busy}
+                >
+                  {busy ? "Saving update…" : "Save daily update"}
+                </button>
+                <p className="teacher-form-help">
+                  Students will see the new progress and note immediately.
+                </p>
+              </form>
+            ) : null}
+          </section>
+        </div>
+      ) : (
+        <section className="teacher-section">
+          <Empty
+            iconName="menu_book"
+            title="Create a syllabus first"
+            text="Add the subject and chapters in the Syllabus section before posting daily progress."
+          />
+        </section>
+      )}
+      <section className="teacher-section">
+        <header>
+          <div>
+            <h2>Recent daily updates</h2>
+            <p>
+              {allLogs.length} saved{" "}
+              {allLogs.length === 1 ? "entry" : "entries"} for {selected.name}
+            </p>
+          </div>
+        </header>
+        {allLogs.length ? (
+          <div className="teacher-daily-log-history">
+            {allLogs.map((log) => (
+              <article key={log.id}>
+                <time dateTime={log.logDate}>
+                  {new Date(log.logDate).toLocaleDateString()}
+                </time>
+                <div>
+                  <strong>
+                    {log.chapter?.position}. {log.chapter?.title || "Chapter"}{" "}
+                    <small>· {log.subject}</small>
+                  </strong>
+                  <p>{log.notes || "No class note was added."}</p>
+                </div>
+                <Status
+                  tone={
+                    log.status === "COMPLETED"
+                      ? "success"
+                      : log.status === "IN_PROGRESS"
+                        ? "warning"
+                        : "info"
+                  }
+                >
+                  {log.status === "LEFT"
+                    ? "Not started"
+                    : statusLabel(log.status)}
+                </Status>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <Empty
+            iconName="history_edu"
+            title="No daily updates yet"
+            text="Your first saved chapter update will appear here."
+          />
+        )}
+      </section>
+      <section className="teacher-section">
+        <header>
+          <div>
+            <h2>Pending class confirmations</h2>
+            <p>
+              {data.pendingUpdates.length} update
+              {data.pendingUpdates.length === 1 ? "" : "s"} pending
+            </p>
+          </div>
+        </header>
+        {data.pendingUpdates.length ? (
+          data.pendingUpdates.map((item) => (
+            <article className="teacher-update-card" key={item.sessionId}>
+              <div>
+                <div>
+                  <span className="teacher-eyebrow">
+                    {new Date(item.date).toLocaleDateString()}
+                  </span>
+                  <h3>
+                    {item.className} · {item.courseName}
+                  </h3>
+                </div>
+                <Status tone="warning">Update pending</Status>
+              </div>
+              <label htmlFor={`update-${item.sessionId}`}>
+                Class summary for attendance confirmation
+              </label>
+              <textarea
+                id={`update-${item.sessionId}`}
+                value={values[item.sessionId] || ""}
+                onChange={(event) =>
+                  setValues((old) => ({
+                    ...old,
+                    [item.sessionId]: event.target.value,
+                  }))
+                }
+                placeholder="Summarize the completed session"
+              />
+              <button
+                type="button"
+                className="teacher-primary-cta"
+                disabled={busy}
+                onClick={() => void submit(item.sessionId)}
+              >
+                Submit and confirm
+              </button>
+            </article>
+          ))
+        ) : (
+          <Empty
+            iconName="task_alt"
+            title="All confirmations complete"
+            text="There are no pending class confirmations."
+          />
+        )}
+      </section>
+    </div>
+  );
 }
 
-function TopicSyllabus({ data, reload }: { data: TeacherDashboard; reload: () => Promise<void> }) {
-  const { showToast } = useToast(); const [classId, setClassId] = useState(data.classes[0]?.id || ''); const [drafts, setDrafts] = useState<Record<string, string>>({}); const [busy, setBusy] = useState(false);
-  const selected = data.classes.find((item) => item.id === classId); const syllabus = selected?.syllabi[0];
-  if (!selected) return <Empty iconName="menu_book" title="No assigned subject" text="A class assignment is required before creating a syllabus." />;
+function TopicSyllabus({
+  data,
+  reload,
+}: {
+  data: TeacherDashboard;
+  reload: () => Promise<void>;
+}) {
+  const { showToast } = useToast();
+  const [classId, setClassId] = useState(data.classes[0]?.id || "");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const selected = data.classes.find((item) => item.id === classId);
+  const syllabus = selected?.syllabi[0];
+  if (!selected)
+    return (
+      <Empty
+        iconName="menu_book"
+        title="No assigned subject"
+        text="A class assignment is required before creating a syllabus."
+      />
+    );
   if (!syllabus) return <Syllabus data={data} reload={reload} />;
-  const add = async (chapterId: string) => { const title = drafts[chapterId]?.trim(); if (!title) return showToast('Enter a topic title.', 'error'); setBusy(true); try { await api.teacher.createSyllabusTopic(syllabus.id, { chapterId, title }); setDrafts((old) => ({ ...old, [chapterId]: '' })); showToast('Topic added and shared.', 'success'); await reload(); } catch (error) { showToast(error instanceof Error ? error.message : 'Topic could not be added.', 'error'); } finally { setBusy(false); } };
-  const rename = async (topicId: string, current: string) => { const title = drafts[topicId]?.trim() || current; setBusy(true); try { await api.teacher.updateSyllabusTopic(syllabus.id, topicId, title); showToast('Topic updated.', 'success'); await reload(); } catch (error) { showToast(error instanceof Error ? error.message : 'Topic could not be updated.', 'error'); } finally { setBusy(false); } };
-  const remove = async (topicId: string) => { setBusy(true); try { await api.teacher.deleteSyllabusTopic(syllabus.id, topicId); showToast('Topic removed.', 'success'); await reload(); } catch (error) { showToast(error instanceof Error ? error.message : 'Topic could not be removed.', 'error'); } finally { setBusy(false); } };
-  return <div className="teacher-view"><ClassPicker classes={data.classes} value={classId} onChange={setClassId} /><Syllabus data={data} reload={reload} /><section className="teacher-section"><header><div><h2>Chapter topics</h2><p>Create, rename, and remove topics. Topics with progress history remain protected.</p></div></header><div className="teacher-topic-editor">{syllabus.chapters.map((chapter) => <section key={chapter.id}><h3>{chapter.position}. {chapter.title}</h3>{chapter.topics.length ? <div>{chapter.topics.map((topic) => <form key={topic.id} onSubmit={(event) => { event.preventDefault(); void rename(topic.id, topic.title); }}><label className="sr-only" htmlFor={`topic-${topic.id}`}>Topic title</label><input id={`topic-${topic.id}`} value={drafts[topic.id] ?? topic.title} onChange={(event) => setDrafts((old) => ({ ...old, [topic.id]: event.target.value }))} /><Status tone={topic.status === 'COMPLETED' ? 'success' : topic.status === 'IN_PROGRESS' ? 'warning' : 'error'}>{topic.status === 'LEFT' ? 'Left to start' : statusLabel(topic.status)}</Status><button type="submit" disabled={busy}>{icon('save')}Save</button><button type="button" disabled={busy} aria-label={`Delete ${topic.title}`} onClick={() => void remove(topic.id)}>{icon('delete')}</button></form>)}</div> : <p>No topics yet.</p>}<form className="teacher-topic-add" onSubmit={(event) => { event.preventDefault(); void add(chapter.id); }}><label htmlFor={`new-topic-${chapter.id}`}>New topic</label><input id={`new-topic-${chapter.id}`} value={drafts[chapter.id] || ''} onChange={(event) => setDrafts((old) => ({ ...old, [chapter.id]: event.target.value }))} placeholder="e.g. Linear equations" /><button type="submit" disabled={busy}>{icon('add')}Add topic</button></form></section>)}</div></section></div>;
+  const add = async (chapterId: string) => {
+    const title = drafts[chapterId]?.trim();
+    if (!title) return showToast("Enter a topic title.", "error");
+    setBusy(true);
+    try {
+      await api.teacher.createSyllabusTopic(syllabus.id, { chapterId, title });
+      setDrafts((old) => ({ ...old, [chapterId]: "" }));
+      showToast("Topic added and shared.", "success");
+      await reload();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Topic could not be added.",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const rename = async (topicId: string, current: string) => {
+    const title = drafts[topicId]?.trim() || current;
+    setBusy(true);
+    try {
+      await api.teacher.updateSyllabusTopic(syllabus.id, topicId, title);
+      showToast("Topic updated.", "success");
+      await reload();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Topic could not be updated.",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async (topicId: string) => {
+    setBusy(true);
+    try {
+      await api.teacher.deleteSyllabusTopic(syllabus.id, topicId);
+      showToast("Topic removed.", "success");
+      await reload();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Topic could not be removed.",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="teacher-view">
+      <ClassPicker
+        classes={data.classes}
+        value={classId}
+        onChange={setClassId}
+      />
+      <Syllabus data={data} reload={reload} />
+      <section className="teacher-section">
+        <header>
+          <div>
+            <h2>Chapter topics</h2>
+            <p>
+              Create, rename, and remove topics. Topics with progress history
+              remain protected.
+            </p>
+          </div>
+        </header>
+        <div className="teacher-topic-editor">
+          {syllabus.chapters.map((chapter) => (
+            <section key={chapter.id}>
+              <h3>
+                {chapter.position}. {chapter.title}
+              </h3>
+              {chapter.topics.length ? (
+                <div>
+                  {chapter.topics.map((topic) => (
+                    <form
+                      key={topic.id}
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void rename(topic.id, topic.title);
+                      }}
+                    >
+                      <label className="sr-only" htmlFor={`topic-${topic.id}`}>
+                        Topic title
+                      </label>
+                      <input
+                        id={`topic-${topic.id}`}
+                        value={drafts[topic.id] ?? topic.title}
+                        onChange={(event) =>
+                          setDrafts((old) => ({
+                            ...old,
+                            [topic.id]: event.target.value,
+                          }))
+                        }
+                      />
+                      <Status
+                        tone={
+                          topic.status === "COMPLETED"
+                            ? "success"
+                            : topic.status === "IN_PROGRESS"
+                              ? "warning"
+                              : "error"
+                        }
+                      >
+                        {topic.status === "LEFT"
+                          ? "Left to start"
+                          : statusLabel(topic.status)}
+                      </Status>
+                      <button type="submit" disabled={busy}>
+                        {icon("save")}Save
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-label={`Delete ${topic.title}`}
+                        onClick={() => void remove(topic.id)}
+                      >
+                        {icon("delete")}
+                      </button>
+                    </form>
+                  ))}
+                </div>
+              ) : (
+                <p>No topics yet.</p>
+              )}
+              <form
+                className="teacher-topic-add"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void add(chapter.id);
+                }}
+              >
+                <label htmlFor={`new-topic-${chapter.id}`}>New topic</label>
+                <input
+                  id={`new-topic-${chapter.id}`}
+                  value={drafts[chapter.id] || ""}
+                  onChange={(event) =>
+                    setDrafts((old) => ({
+                      ...old,
+                      [chapter.id]: event.target.value,
+                    }))
+                  }
+                  placeholder="e.g. Linear equations"
+                />
+                <button type="submit" disabled={busy}>
+                  {icon("add")}Add topic
+                </button>
+              </form>
+            </section>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
 }
 
 function recommendedTopic(klass?: TeacherClass) {
-  const topics = klass?.syllabi.flatMap((syllabus) => syllabus.chapters.flatMap((chapter) => chapter.topics)) || [];
-  return topics.find((topic) => topic.status === 'IN_PROGRESS') || topics.find((topic) => topic.status === 'LEFT') || topics[0];
+  const topics =
+    klass?.syllabi.flatMap((syllabus) =>
+      syllabus.chapters.flatMap((chapter) => chapter.topics),
+    ) || [];
+  return (
+    topics.find((topic) => topic.status === "IN_PROGRESS") ||
+    topics.find((topic) => topic.status === "LEFT") ||
+    topics[0]
+  );
 }
 
-function TopicDailyUpdate({ data, reload }: { data: TeacherDashboard; reload: () => Promise<void> }) {
-  const initialTopic = recommendedTopic(data.classes[0]); const initialTodayLog = initialTopic?.logs.find((log) => log.logDate.slice(0, 10) === dateInput());
-  const { showToast } = useToast(); const [classId, setClassIdState] = useState(data.classes[0]?.id || ''); const [notes, setNotes] = useState<Record<string, string>>(initialTopic && initialTodayLog ? { [initialTopic.id]: initialTodayLog.notes || '' } : {}); const [busy, setBusy] = useState(false); const [topicId, setTopicId] = useState(initialTopic?.id || ''); const [draftStatus, setDraftStatus] = useState<ChapterStatus>(initialTopic?.status === 'LEFT' ? 'IN_PROGRESS' : initialTopic?.status || 'IN_PROGRESS'); const [saved, setSaved] = useState<{ topicId: string; status: ChapterStatus; at: string } | null>(null); const selected = data.classes.find((item) => item.id === classId);
-  const topics = selected?.syllabi.flatMap((syllabus) => syllabus.chapters.flatMap((chapter) => chapter.topics.map((topic) => ({ ...topic, syllabusId: syllabus.id, subject: syllabus.subject, chapterTitle: chapter.title, chapterPosition: chapter.position })))) || [];
+function TopicDailyUpdate({
+  data,
+  reload,
+}: {
+  data: TeacherDashboard;
+  reload: () => Promise<void>;
+}) {
+  const initialTopic = recommendedTopic(data.classes[0]);
+  const initialTodayLog = initialTopic?.logs.find(
+    (log) => log.logDate.slice(0, 10) === dateInput(),
+  );
+  const { showToast } = useToast();
+  const [classId, setClassIdState] = useState(data.classes[0]?.id || "");
+  const [notes, setNotes] = useState<Record<string, string>>(
+    initialTopic && initialTodayLog
+      ? { [initialTopic.id]: initialTodayLog.notes || "" }
+      : {},
+  );
+  const [busy, setBusy] = useState(false);
+  const [topicId, setTopicId] = useState(initialTopic?.id || "");
+  const [draftStatus, setDraftStatus] = useState<ChapterStatus>(
+    initialTopic?.status === "LEFT"
+      ? "IN_PROGRESS"
+      : initialTopic?.status || "IN_PROGRESS",
+  );
+  const [saved, setSaved] = useState<{
+    topicId: string;
+    status: ChapterStatus;
+    at: string;
+  } | null>(null);
+  const selected = data.classes.find((item) => item.id === classId);
+  const topics =
+    selected?.syllabi.flatMap((syllabus) =>
+      syllabus.chapters.flatMap((chapter) =>
+        chapter.topics.map((topic) => ({
+          ...topic,
+          syllabusId: syllabus.id,
+          subject: syllabus.subject,
+          chapterTitle: chapter.title,
+          chapterPosition: chapter.position,
+        })),
+      ),
+    ) || [];
   const activeTopic = topics.find((topic) => topic.id === topicId);
-  const activeTodayLog = activeTopic?.logs.find((log) => log.logDate.slice(0, 10) === dateInput());
-  const chooseTopic = (topic: typeof topics[number]) => { const todayLog = topic.logs.find((log) => log.logDate.slice(0, 10) === dateInput()); setTopicId(topic.id); setDraftStatus(topic.status === 'LEFT' && !todayLog ? 'IN_PROGRESS' : topic.status); setNotes((old) => ({ ...old, [topic.id]: todayLog?.notes || old[topic.id] || '' })); setSaved(null); };
-  const setClassId = (nextClassId: string) => { const next = recommendedTopic(data.classes.find((item) => item.id === nextClassId)); const todayLog = next?.logs.find((log) => log.logDate.slice(0, 10) === dateInput()); setClassIdState(nextClassId); setTopicId(next?.id || ''); setDraftStatus(next?.status === 'LEFT' && !todayLog ? 'IN_PROGRESS' : next?.status || 'IN_PROGRESS'); setNotes((old) => next && todayLog ? { ...old, [next.id]: todayLog.notes || '' } : old); setSaved(null); };
-  if (!selected) return <Empty iconName="note_alt" title="No assigned class" text="Daily updates require an assigned class." />;
-  const update = async () => { if (!activeTopic) return; setBusy(true); try { const result = await api.teacher.updateTopicLog(activeTopic.syllabusId, { topicId: activeTopic.id, status: draftStatus, notes: notes[activeTopic.id], logDate: dateInput() }); setSaved({ topicId: activeTopic.id, status: result.topic?.status ?? result.log.status ?? draftStatus, at: result.log.updatedAt ?? new Date().toISOString() }); showToast(activeTodayLog ? 'Today’s progress was updated.' : 'Today’s lesson progress was published.', 'success'); await reload(); } catch (error) { showToast(error instanceof Error ? error.message : 'Topic progress failed.', 'error'); } finally { setBusy(false); } };
-  const completeCount = topics.filter((topic) => topic.status === 'COMPLETED').length;
-  return <div className="teacher-view"><section className="teacher-daily-toolbar"><ClassPicker classes={data.classes} value={classId} onChange={setClassId} /><div><span>Today</span><strong>{new Date().toLocaleDateString('en-NP', { weekday: 'short', day: 'numeric', month: 'short' })}</strong></div></section>{topics.length ? <><section className="teacher-daily-overview" aria-label="Syllabus progress"><div><span>{icon('auto_stories')}</span><p><small>Subject</small><strong>{activeTopic?.subject || selected.subject}</strong></p></div><div><span>{icon('pending_actions')}</span><p><small>Topics remaining</small><strong>{topics.length - completeCount}</strong></p></div><div><span>{icon('task_alt')}</span><p><small>Completed</small><strong>{completeCount} / {topics.length}</strong></p></div></section><div className="teacher-topic-log-layout"><section className="teacher-topic-queue" aria-labelledby="topic-queue-title"><header><div><span className="teacher-eyebrow">LESSON QUEUE</span><h2 id="topic-queue-title">Choose a topic</h2></div><span>{topics.length} total</span></header><div>{topics.map((topic) => <button type="button" key={topic.id} className={topic.id === topicId ? 'is-active' : ''} aria-pressed={topic.id === topicId} onClick={() => chooseTopic(topic)}><span className={`teacher-progress-dot is-${topic.status.toLowerCase().replace('_', '-')}`} /><span><strong>{topic.title}</strong><small>Ch. {topic.chapterPosition} · {topic.chapterTitle}{topic.logs.some((log) => log.logDate.slice(0, 10) === dateInput()) ? ' · Updated today' : ''}</small></span><Status tone={topic.status === 'COMPLETED' ? 'success' : topic.status === 'IN_PROGRESS' ? 'warning' : 'info'}>{topic.status === 'COMPLETED' ? 'Done' : topic.status === 'IN_PROGRESS' ? 'Active' : 'Next'}</Status></button>)}</div></section><section className="teacher-topic-log-card" aria-labelledby="topic-log-title"><header><span className="teacher-eyebrow">{activeTodayLog ? 'EDIT TODAY’S UPDATE' : 'TODAY’S UPDATE'}</span><h2 id="topic-log-title">{activeTopic?.title}</h2><p>{activeTopic?.subject} · Chapter {activeTopic?.chapterPosition}: {activeTopic?.chapterTitle}</p></header>{activeTopic ? <form onSubmit={(event) => { event.preventDefault(); void update(); }} aria-busy={busy}><fieldset><legend>How far did the class get?</legend><label><input type="radio" name="topic-status" value="LEFT" checked={draftStatus === 'LEFT'} disabled={busy} onChange={() => setDraftStatus('LEFT')} /><span>{icon('radio_button_unchecked')}<strong>Not started</strong><small>Reset if this was marked by mistake</small></span></label><label><input type="radio" name="topic-status" value="IN_PROGRESS" checked={draftStatus === 'IN_PROGRESS'} disabled={busy} onChange={() => setDraftStatus('IN_PROGRESS')} /><span>{icon('play_circle')}<strong>In progress</strong><small>More teaching is still needed</small></span></label><label><input type="radio" name="topic-status" value="COMPLETED" checked={draftStatus === 'COMPLETED'} disabled={busy} onChange={() => setDraftStatus('COMPLETED')} /><span>{icon('check_circle')}<strong>Completed</strong><small>This topic is finished</small></span></label></fieldset><label className="teacher-topic-note" htmlFor="active-topic-note"><span>Lesson note <small>Optional</small></span><textarea id="active-topic-note" value={notes[activeTopic.id] || ''} disabled={busy} onChange={(event) => setNotes((old) => ({ ...old, [activeTopic.id]: event.target.value }))} placeholder="What was covered, assigned, or needs revision?" rows={4} /></label>{saved?.topicId === activeTopic.id ? <p className="teacher-save-confirmation" role="status">{icon('cloud_done')} Saved as {saved.status === 'LEFT' ? 'not started' : statusLabel(saved.status).toLowerCase()} at {new Date(saved.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. You can change it again.</p> : activeTodayLog ? <p className="teacher-save-confirmation is-neutral">{icon('history')} This topic already has an update for today. Saving again will replace today’s progress and note.</p> : null}<div className="teacher-topic-log-actions"><p>{icon('visibility')}Saved to the class record and visible to enrolled students</p><button type="submit" className="teacher-primary-cta" disabled={busy}>{busy ? 'Saving…' : activeTodayLog ? 'Update saved progress' : 'Publish update'}{icon('arrow_forward')}</button></div></form> : null}</section></div></> : <section className="teacher-section"><Empty iconName="format_list_bulleted_add" title="No topics ready to update" text="Create your syllabus and add topics before recording a daily lesson." /></section>}</div>;
+  const activeTodayLog = activeTopic?.logs.find(
+    (log) => log.logDate.slice(0, 10) === dateInput(),
+  );
+  const chooseTopic = (topic: (typeof topics)[number]) => {
+    const todayLog = topic.logs.find(
+      (log) => log.logDate.slice(0, 10) === dateInput(),
+    );
+    setTopicId(topic.id);
+    setDraftStatus(
+      topic.status === "LEFT" && !todayLog ? "IN_PROGRESS" : topic.status,
+    );
+    setNotes((old) => ({
+      ...old,
+      [topic.id]: todayLog?.notes || old[topic.id] || "",
+    }));
+    setSaved(null);
+  };
+  const setClassId = (nextClassId: string) => {
+    const next = recommendedTopic(
+      data.classes.find((item) => item.id === nextClassId),
+    );
+    const todayLog = next?.logs.find(
+      (log) => log.logDate.slice(0, 10) === dateInput(),
+    );
+    setClassIdState(nextClassId);
+    setTopicId(next?.id || "");
+    setDraftStatus(
+      next?.status === "LEFT" && !todayLog
+        ? "IN_PROGRESS"
+        : next?.status || "IN_PROGRESS",
+    );
+    setNotes((old) =>
+      next && todayLog ? { ...old, [next.id]: todayLog.notes || "" } : old,
+    );
+    setSaved(null);
+  };
+  if (!selected)
+    return (
+      <Empty
+        iconName="note_alt"
+        title="No assigned class"
+        text="Daily updates require an assigned class."
+      />
+    );
+  const update = async () => {
+    if (!activeTopic) return;
+    if (activeTodayLog)
+      return showToast(
+        "Today’s update is already published. The next update can be created on the next day.",
+        "error",
+      );
+    setBusy(true);
+    try {
+      const result = await api.teacher.updateTopicLog(activeTopic.syllabusId, {
+        topicId: activeTopic.id,
+        status: draftStatus,
+        notes: notes[activeTopic.id],
+        logDate: dateInput(),
+      });
+      setSaved({
+        topicId: activeTopic.id,
+        status: result.topic?.status ?? result.log.status ?? draftStatus,
+        at: result.log.updatedAt ?? new Date().toISOString(),
+      });
+      showToast("Today’s lesson progress was published.", "success");
+      await reload();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Topic progress failed.",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const completeCount = topics.filter(
+    (topic) => topic.status === "COMPLETED",
+  ).length;
+  return (
+    <div className="teacher-view">
+      <section className="teacher-daily-toolbar">
+        <ClassPicker
+          classes={data.classes}
+          value={classId}
+          onChange={setClassId}
+        />
+        <div>
+          <span>Today</span>
+          <strong>
+            {new Date().toLocaleDateString("en-NP", {
+              weekday: "short",
+              day: "numeric",
+              month: "short",
+            })}
+          </strong>
+        </div>
+      </section>
+      {topics.length ? (
+        <>
+          <section
+            className="teacher-daily-overview"
+            aria-label="Syllabus progress"
+          >
+            <div>
+              <span>{icon("auto_stories")}</span>
+              <p>
+                <small>Subject</small>
+                <strong>{activeTopic?.subject || selected.subject}</strong>
+              </p>
+            </div>
+            <div>
+              <span>{icon("pending_actions")}</span>
+              <p>
+                <small>Topics remaining</small>
+                <strong>{topics.length - completeCount}</strong>
+              </p>
+            </div>
+            <div>
+              <span>{icon("task_alt")}</span>
+              <p>
+                <small>Completed</small>
+                <strong>
+                  {completeCount} / {topics.length}
+                </strong>
+              </p>
+            </div>
+          </section>
+          <div className="teacher-topic-log-layout">
+            <section
+              className="teacher-topic-queue"
+              aria-labelledby="topic-queue-title"
+            >
+              <header>
+                <div>
+                  <span className="teacher-eyebrow">LESSON QUEUE</span>
+                  <h2 id="topic-queue-title">Choose a topic</h2>
+                </div>
+                <span>{topics.length} total</span>
+              </header>
+              <div>
+                {topics.map((topic) => (
+                  <button
+                    type="button"
+                    key={topic.id}
+                    className={topic.id === topicId ? "is-active" : ""}
+                    aria-pressed={topic.id === topicId}
+                    onClick={() => chooseTopic(topic)}
+                  >
+                    <span
+                      className={`teacher-progress-dot is-${topic.status.toLowerCase().replace("_", "-")}`}
+                    />
+                    <span>
+                      <strong>{topic.title}</strong>
+                      <small>
+                        Ch. {topic.chapterPosition} · {topic.chapterTitle}
+                        {topic.logs.some(
+                          (log) => log.logDate.slice(0, 10) === dateInput(),
+                        )
+                          ? " · Updated today"
+                          : ""}
+                      </small>
+                    </span>
+                    <Status
+                      tone={
+                        topic.status === "COMPLETED"
+                          ? "success"
+                          : topic.status === "IN_PROGRESS"
+                            ? "warning"
+                            : "info"
+                      }
+                    >
+                      {topic.status === "COMPLETED"
+                        ? "Done"
+                        : topic.status === "IN_PROGRESS"
+                          ? "Active"
+                          : "Next"}
+                    </Status>
+                  </button>
+                ))}
+              </div>
+            </section>
+            <section
+              className="teacher-topic-log-card"
+              aria-labelledby="topic-log-title"
+            >
+              <header>
+                <span className="teacher-eyebrow">
+                  {activeTodayLog ? "PUBLISHED TODAY" : "TODAY’S UPDATE"}
+                </span>
+                <h2 id="topic-log-title">{activeTopic?.title}</h2>
+                <p>
+                  {activeTopic?.subject} · Chapter{" "}
+                  {activeTopic?.chapterPosition}: {activeTopic?.chapterTitle}
+                </p>
+              </header>
+              {activeTopic ? (
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void update();
+                  }}
+                  aria-busy={busy}
+                >
+                  <fieldset disabled={busy || Boolean(activeTodayLog)}>
+                    <legend>How far did the class get?</legend>
+                    <label>
+                      <input
+                        type="radio"
+                        name="topic-status"
+                        value="LEFT"
+                        checked={draftStatus === "LEFT"}
+                        disabled={busy || Boolean(activeTodayLog)}
+                        onChange={() => setDraftStatus("LEFT")}
+                      />
+                      <span>
+                        {icon("radio_button_unchecked")}
+                        <strong>Not started</strong>
+                        <small>Reset if this was marked by mistake</small>
+                      </span>
+                    </label>
+                    <label>
+                      <input
+                        type="radio"
+                        name="topic-status"
+                        value="IN_PROGRESS"
+                        checked={draftStatus === "IN_PROGRESS"}
+                        disabled={busy || Boolean(activeTodayLog)}
+                        onChange={() => setDraftStatus("IN_PROGRESS")}
+                      />
+                      <span>
+                        {icon("play_circle")}
+                        <strong>In progress</strong>
+                        <small>More teaching is still needed</small>
+                      </span>
+                    </label>
+                    <label>
+                      <input
+                        type="radio"
+                        name="topic-status"
+                        value="COMPLETED"
+                        checked={draftStatus === "COMPLETED"}
+                        disabled={busy || Boolean(activeTodayLog)}
+                        onChange={() => setDraftStatus("COMPLETED")}
+                      />
+                      <span>
+                        {icon("check_circle")}
+                        <strong>Completed</strong>
+                        <small>This topic is finished</small>
+                      </span>
+                    </label>
+                  </fieldset>
+                  <label
+                    className="teacher-topic-note"
+                    htmlFor="active-topic-note"
+                  >
+                    <span>
+                      Lesson note <small>Optional</small>
+                    </span>
+                    <textarea
+                      id="active-topic-note"
+                      value={notes[activeTopic.id] || ""}
+                      disabled={busy || Boolean(activeTodayLog)}
+                      onChange={(event) =>
+                        setNotes((old) => ({
+                          ...old,
+                          [activeTopic.id]: event.target.value,
+                        }))
+                      }
+                      placeholder="What was covered, assigned, or needs revision?"
+                      rows={4}
+                    />
+                  </label>
+                  {saved?.topicId === activeTopic.id ? (
+                    <p className="teacher-save-confirmation" role="status">
+                      {icon("cloud_done")} Saved as{" "}
+                      {saved.status === "LEFT"
+                        ? "not started"
+                        : statusLabel(saved.status).toLowerCase()}{" "}
+                      at{" "}
+                      {new Date(saved.at).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                      . This entry is now locked.
+                    </p>
+                  ) : activeTodayLog ? (
+                    <p className="teacher-save-confirmation is-neutral">
+                      {icon("lock")} Today’s update is published and cannot be
+                      changed. You can create the next log on the next day.
+                    </p>
+                  ) : null}
+                  <div className="teacher-topic-log-actions">
+                    <p>
+                      {icon("visibility")}Saved to the class record and visible
+                      to enrolled students
+                    </p>
+                    <button
+                      type="submit"
+                      className="teacher-primary-cta"
+                      disabled={busy || Boolean(activeTodayLog)}
+                    >
+                      {busy
+                        ? "Saving…"
+                        : activeTodayLog
+                          ? "Published today"
+                          : "Publish update"}
+                      {icon(activeTodayLog ? "lock" : "arrow_forward")}
+                    </button>
+                  </div>
+                </form>
+              ) : null}
+            </section>
+          </div>
+        </>
+      ) : (
+        <section className="teacher-section">
+          <Empty
+            iconName="format_list_bulleted_add"
+            title="No topics ready to update"
+            text="Create your syllabus and add topics before recording a daily lesson."
+          />
+        </section>
+      )}
+    </div>
+  );
 }
 
-function Homework({ data, reload }: { data: TeacherDashboard; reload: () => Promise<void> }) {
-  const { showToast } = useToast(); const [classIds, setClassIds] = useState<string[]>(data.classes[0] ? [data.classes[0].id] : []); const [file, setFile] = useState<File>(); const [busy, setBusy] = useState(false);
-  const [openedHomework, setOpenedHomework] = useState<{ item: TeacherClass['homework'][number]; klass: TeacherClass } | null>(null);
+function Homework({
+  data,
+  reload,
+}: {
+  data: TeacherDashboard;
+  reload: () => Promise<void>;
+}) {
+  const { showToast } = useToast();
+  const [classIds, setClassIds] = useState<string[]>(
+    data.classes[0] ? [data.classes[0].id] : [],
+  );
+  const [file, setFile] = useState<File>();
+  const [busy, setBusy] = useState(false);
+  const [openedHomework, setOpenedHomework] = useState<{
+    item: TeacherClass["homework"][number];
+    klass: TeacherClass;
+  } | null>(null);
   const homeworkDialogRef = useRef<HTMLDialogElement>(null);
-  const selected = data.classes.filter((item) => classIds.includes(item.id)); const primary = selected[0] ?? data.classes[0];
+  const selected = data.classes.filter((item) => classIds.includes(item.id));
+  const primary = selected[0] ?? data.classes[0];
   useEffect(() => {
     const dialog = homeworkDialogRef.current;
     if (openedHomework && dialog && !dialog.open) dialog.showModal();
   }, [openedHomework]);
-  const closeHomework = () => { homeworkDialogRef.current?.close(); setOpenedHomework(null); };
-  const submit = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!selected.length) return showToast('Select at least one class.', 'error'); const formElement = event.currentTarget; const form = new FormData(formElement); setBusy(true); try { const contentUrl = await fileData(file); await Promise.all(selected.map((item) => api.teacher.createHomework({ classId: item.id, subject: item.subject, title: String(form.get('title')), description: String(form.get('description') || ''), deadline: String(form.get('deadline')), contentUrl }))); showToast(`Homework assigned to ${selected.length} class${selected.length === 1 ? '' : 'es'}.`, 'success'); formElement.reset(); setFile(undefined); await reload(); } catch (error) { showToast(error instanceof Error ? error.message : 'Homework failed.', 'error'); } finally { setBusy(false); } };
-  if (!primary) return <Empty iconName="assignment" title="No assigned class" text="Homework requires an active class assignment." />;
-  const recent = data.classes.flatMap((klass) => klass.homework.map((item) => ({ item, klass })));
-  return <div className="teacher-view">
-    <section className="teacher-section"><header><div><h2>Assign homework</h2><p>Select one or more assigned classes for the same homework.</p></div></header><form className="teacher-form" onSubmit={(event) => void submit(event)} aria-busy={busy}><fieldset className="teacher-class-checklist"><legend>Classes <span>*</span></legend>{data.classes.map((item) => <label key={item.id}><input type="checkbox" checked={classIds.includes(item.id)} onChange={(event) => setClassIds((old) => event.target.checked ? [...old, item.id] : old.filter((id) => id !== item.id))} /><span><strong>{item.name}</strong><small>{item.subject} · {item.branch.name} · {item.students.length} students</small></span></label>)}</fieldset><label htmlFor="homework-title">Title <span>*</span></label><input id="homework-title" name="title" required /><label htmlFor="homework-description">Text questions or instructions</label><textarea id="homework-description" name="description" /><label htmlFor="homework-file">Attachment (optional, maximum 120 KB)</label><input id="homework-file" type="file" accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png" onChange={(event) => setFile(event.target.files?.[0])} /><label htmlFor="homework-deadline">Due date <span>*</span></label><input id="homework-deadline" name="deadline" type="date" min={dateInput()} required /><button className="teacher-primary-cta" disabled={busy || !selected.length}>{busy ? 'Assigning…' : `Assign to ${selected.length || 0} class${selected.length === 1 ? '' : 'es'}`}</button></form></section>
-    <section className="teacher-section"><header><div><h2>Recent assignments</h2><p>Open an assignment to review its complete instructions and attachment.</p></div></header>{recent.length ? <div className="teacher-history-list teacher-homework-history">{recent.map(({ item, klass }) => <button type="button" key={`${klass.id}-${item.id}`} onClick={() => setOpenedHomework({ item, klass })} aria-label={`Open ${item.title} homework details`}><div><strong>{item.title}</strong><small>{klass.name} · {item.subject} · Due {new Date(item.deadline).toLocaleDateString()}</small></div><Status tone={new Date(item.deadline) < new Date() ? 'error' : 'info'}>{new Date(item.deadline) < new Date() ? 'Closed' : 'Active'}</Status>{icon('chevron_right')}</button>)}</div> : <Empty iconName="assignment_add" title="No homework assigned" text="Your first assignment will appear here." />}</section>
-    {openedHomework ? <dialog ref={homeworkDialogRef} className="teacher-homework-dialog" aria-labelledby="teacher-homework-dialog-title" onClose={() => setOpenedHomework(null)} onClick={(event) => { if (event.target === event.currentTarget) closeHomework(); }}><div className="teacher-homework-dialog__head"><div><span className="teacher-eyebrow">HOMEWORK DETAILS</span><h2 id="teacher-homework-dialog-title">{openedHomework.item.title}</h2><p>{openedHomework.klass.name} · {openedHomework.item.subject}</p></div><button type="button" aria-label="Close homework details" onClick={closeHomework}>{icon('close')}</button></div><dl className="teacher-homework-dialog__meta"><div><dt>Due date</dt><dd>{new Date(openedHomework.item.deadline).toLocaleDateString()}</dd></div><div><dt>Published</dt><dd>{new Date(openedHomework.item.createdAt).toLocaleString()}</dd></div><div><dt>Status</dt><dd>{new Date(openedHomework.item.deadline) < new Date() ? 'Closed' : 'Active'}</dd></div></dl><section><h3>Instructions</h3><p>{openedHomework.item.description?.trim() || 'No additional instructions were provided.'}</p></section><div className="teacher-homework-dialog__actions">{openedHomework.item.contentUrl ? <a href={openedHomework.item.contentUrl} target="_blank" rel="noreferrer">Attached File</a> : <span>No Attached File</span>}<button type="button" onClick={closeHomework}>Close</button></div></dialog> : null}
-  </div>;
+  const closeHomework = () => {
+    homeworkDialogRef.current?.close();
+    setOpenedHomework(null);
+  };
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selected.length)
+      return showToast("Select at least one class.", "error");
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    setBusy(true);
+    try {
+      const contentUrl = await fileData(file);
+      await Promise.all(
+        selected.map((item) =>
+          api.teacher.createHomework({
+            classId: item.id,
+            subject: item.subject,
+            title: String(form.get("title")),
+            description: String(form.get("description") || ""),
+            deadline: String(form.get("deadline")),
+            contentUrl,
+          }),
+        ),
+      );
+      showToast(
+        `Homework assigned to ${selected.length} class${selected.length === 1 ? "" : "es"}.`,
+        "success",
+      );
+      formElement.reset();
+      setFile(undefined);
+      await reload();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Homework failed.",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!primary)
+    return (
+      <Empty
+        iconName="assignment"
+        title="No assigned class"
+        text="Homework requires an active class assignment."
+      />
+    );
+  const recent = data.classes.flatMap((klass) =>
+    klass.homework.map((item) => ({ item, klass })),
+  );
+  return (
+    <div className="teacher-view">
+      <section className="teacher-section">
+        <header>
+          <div>
+            <h2>Assign homework</h2>
+            <p>Select one or more assigned classes for the same homework.</p>
+          </div>
+        </header>
+        <form
+          className="teacher-form"
+          onSubmit={(event) => void submit(event)}
+          aria-busy={busy}
+        >
+          <fieldset className="teacher-class-checklist">
+            <legend>
+              Classes <span>*</span>
+            </legend>
+            {data.classes.map((item) => (
+              <label key={item.id}>
+                <input
+                  type="checkbox"
+                  checked={classIds.includes(item.id)}
+                  onChange={(event) =>
+                    setClassIds((old) =>
+                      event.target.checked
+                        ? [...old, item.id]
+                        : old.filter((id) => id !== item.id),
+                    )
+                  }
+                />
+                <span>
+                  <strong>{item.name}</strong>
+                  <small>
+                    {item.subject} · {item.branch.name} · {item.students.length}{" "}
+                    students
+                  </small>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+          <label htmlFor="homework-title">
+            Title <span>*</span>
+          </label>
+          <input id="homework-title" name="title" required />
+          <label htmlFor="homework-description">
+            Text questions or instructions
+          </label>
+          <textarea id="homework-description" name="description" />
+          <label htmlFor="homework-file">
+            Attachment (optional, maximum 120 KB)
+          </label>
+          <input
+            id="homework-file"
+            type="file"
+            accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
+            onChange={(event) => setFile(event.target.files?.[0])}
+          />
+          <label htmlFor="homework-deadline">
+            Due date <span>*</span>
+          </label>
+          <input
+            id="homework-deadline"
+            name="deadline"
+            type="date"
+            min={dateInput()}
+            required
+          />
+          <button
+            className="teacher-primary-cta"
+            disabled={busy || !selected.length}
+          >
+            {busy
+              ? "Assigning…"
+              : `Assign to ${selected.length || 0} class${selected.length === 1 ? "" : "es"}`}
+          </button>
+        </form>
+      </section>
+      <section className="teacher-section">
+        <header>
+          <div>
+            <h2>Recent assignments</h2>
+            <p>
+              Open an assignment to review its complete instructions and
+              attachment.
+            </p>
+          </div>
+        </header>
+        {recent.length ? (
+          <div className="teacher-history-list teacher-homework-history">
+            {recent.map(({ item, klass }) => (
+              <button
+                type="button"
+                key={`${klass.id}-${item.id}`}
+                onClick={() => setOpenedHomework({ item, klass })}
+                aria-label={`Open ${item.title} homework details`}
+              >
+                <div>
+                  <strong>{item.title}</strong>
+                  <small>
+                    {klass.name} · {item.subject} · Due{" "}
+                    {new Date(item.deadline).toLocaleDateString()}
+                  </small>
+                </div>
+                <Status
+                  tone={new Date(item.deadline) < new Date() ? "error" : "info"}
+                >
+                  {new Date(item.deadline) < new Date() ? "Closed" : "Active"}
+                </Status>
+                {icon("chevron_right")}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <Empty
+            iconName="assignment_add"
+            title="No homework assigned"
+            text="Your first assignment will appear here."
+          />
+        )}
+      </section>
+      {openedHomework ? (
+        <dialog
+          ref={homeworkDialogRef}
+          className="teacher-homework-dialog"
+          aria-labelledby="teacher-homework-dialog-title"
+          onClose={() => setOpenedHomework(null)}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) closeHomework();
+          }}
+        >
+          <div className="teacher-homework-dialog__head">
+            <div>
+              <span className="teacher-eyebrow">HOMEWORK DETAILS</span>
+              <h2 id="teacher-homework-dialog-title">
+                {openedHomework.item.title}
+              </h2>
+              <p>
+                {openedHomework.klass.name} · {openedHomework.item.subject}
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Close homework details"
+              onClick={closeHomework}
+            >
+              {icon("close")}
+            </button>
+          </div>
+          <dl className="teacher-homework-dialog__meta">
+            <div>
+              <dt>Due date</dt>
+              <dd>
+                {new Date(openedHomework.item.deadline).toLocaleDateString()}
+              </dd>
+            </div>
+            <div>
+              <dt>Published</dt>
+              <dd>
+                {new Date(openedHomework.item.createdAt).toLocaleString()}
+              </dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd>
+                {new Date(openedHomework.item.deadline) < new Date()
+                  ? "Closed"
+                  : "Active"}
+              </dd>
+            </div>
+          </dl>
+          <section>
+            <h3>Instructions</h3>
+            <p>
+              {openedHomework.item.description?.trim() ||
+                "No additional instructions were provided."}
+            </p>
+          </section>
+          <div className="teacher-homework-dialog__actions">
+            {openedHomework.item.contentUrl ? (
+              <a
+                href={openedHomework.item.contentUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Attached File
+              </a>
+            ) : (
+              <span>No Attached File</span>
+            )}
+            <button type="button" onClick={closeHomework}>
+              Close
+            </button>
+          </div>
+        </dialog>
+      ) : null}
+    </div>
+  );
 }
 
-function Results({ data, reload }: { data: TeacherDashboard; reload: () => Promise<void> }) {
-  const { showToast } = useToast(); const [classId, setClassId] = useState(data.classes[0]?.id || ''); const selected = data.classes.find((item) => item.id === classId); const [scores, setScores] = useState<Record<string, string>>({}); const [files, setFiles] = useState<Record<string, File | undefined>>({}); const [busy, setBusy] = useState(false);
-  useEffect(() => { setScores({}); setFiles({}); }, [classId]);
-  const submit = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!selected) return; const formElement = event.currentTarget; const form = new FormData(formElement); const maximum = Number(form.get('maximum')); const numericMarks = selected.students.map((student) => ({ studentId: student.id, score: Number(scores[student.id]) })).filter((item) => Number.isFinite(item.score)); if (numericMarks.length !== selected.students.length) return showToast('Enter marks for every student.', 'error'); setBusy(true); try { const marks = await Promise.all(numericMarks.map(async (mark) => ({ ...mark, resultSheetUrl: await fileData(files[mark.studentId]) }))); await api.teacher.saveResultDraft({ classId, subject: selected.subject, assessment: String(form.get('assessment')), maximum, passMarks: Number(form.get('passMarks')), testDate: String(form.get('testDate')), marks }); showToast('Result drafts and individual mark sheets saved.', 'success'); setScores({}); setFiles({}); formElement.reset(); await reload(); } catch (error) { showToast(error instanceof Error ? error.message : 'Result failed.', 'error'); } finally { setBusy(false); } };
-  const share = async (ids: string[], assessment: string) => { setBusy(true); try { await api.teacher.shareResults(ids); showToast(`${assessment} shared with ${ids.length} student${ids.length === 1 ? '' : 's'}.`, 'success'); await reload(); } catch (error) { showToast(error instanceof Error ? error.message : 'Sharing failed.', 'error'); } finally { setBusy(false); } };
-  if (!selected) return <Empty iconName="analytics" title="No assigned class" text="Results require an active class assignment." />;
-  const classResults = data.results.filter((item) => selected.students.some((student) => student.id === item.studentId));
-  const resultGroups = Array.from(classResults.reduce((groups, result) => {
-    const key = `${result.assessment}::${result.testDate.slice(0, 10)}`;
-    const group = groups.get(key) ?? { assessment: result.assessment, testDate: result.testDate, results: [] as typeof classResults };
-    group.results.push(result); groups.set(key, group); return groups;
-  }, new Map<string, { assessment: string; testDate: string; results: typeof classResults }>()).values());
-  return <div className="teacher-view"><ClassPicker classes={data.classes} value={classId} onChange={setClassId} /><section className="teacher-section"><header><div><h2>New result draft</h2><p>Enter each student’s mark and attach their own mark sheet.</p></div><Status tone="warning">Draft first</Status></header><form className="teacher-form" onSubmit={(event) => void submit(event)} aria-busy={busy}><div className="teacher-form-grid"><div><label htmlFor="assessment">Assessment</label><input id="assessment" name="assessment" required /></div><div><label htmlFor="test-date">Test date</label><input id="test-date" name="testDate" type="date" defaultValue={dateInput()} required /></div><div><label htmlFor="full-marks">Full marks</label><input id="full-marks" name="maximum" type="number" min="1" step="0.01" required /></div><div><label htmlFor="pass-marks">Pass marks</label><input id="pass-marks" name="passMarks" type="number" min="0" step="0.01" required /></div></div><fieldset className="teacher-student-results"><legend>Student marks and mark sheets</legend><p>Each attachment is saved only to that student’s result. PDF or image, maximum 120 KB.</p>{selected.students.map((student) => <div className="teacher-student-result-row" key={student.id}><div><strong>{student.name}</strong><small>{statusLabel(student.status)}</small></div><label htmlFor={`score-${student.id}`}>Marks<input id={`score-${student.id}`} type="number" min="0" max={Number.MAX_SAFE_INTEGER} step="0.01" value={scores[student.id] || ''} onChange={(event) => setScores((old) => ({ ...old, [student.id]: event.target.value }))} required /></label><label htmlFor={`result-file-${student.id}`}>Mark sheet <span>(optional)</span><input id={`result-file-${student.id}`} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setFiles((old) => ({ ...old, [student.id]: event.target.files?.[0] }))} /></label></div>)}</fieldset><button className="teacher-primary-cta" disabled={busy}>{busy ? 'Saving…' : 'Save result drafts'}</button></form></section><section className="teacher-section"><header><div><h2>Result history</h2><p>Publish every student in a grade and assessment with one action.</p></div></header>{resultGroups.length ? <div className="teacher-result-groups">{resultGroups.map((group) => { const drafts = group.results.filter((result) => !result.publishedAt); return <section key={`${group.assessment}-${group.testDate}`} className="teacher-result-group"><header><div><span className="teacher-eyebrow">{new Date(group.testDate).toLocaleDateString()}</span><h3>{group.assessment}</h3><p>{selected.name} · {group.results.length} student result{group.results.length === 1 ? '' : 's'} · {drafts.length} draft{drafts.length === 1 ? '' : 's'}</p></div>{drafts.length ? <button type="button" className="teacher-share-all" disabled={busy} onClick={() => void share(drafts.map((result) => result.id), group.assessment)}>{icon('group_send')}Share all {drafts.length} results</button> : <Status tone="success">All shared</Status>}</header><div className="teacher-result-history">{group.results.map((result) => <article key={result.id}><div><h3>{result.studentName}</h3><p>{result.score}/{result.maximum} · Pass {result.passMarks ?? '—'} · Percentile {result.percentile ?? '—'} · {result.resultSheetUrl ? 'Mark sheet attached' : 'No mark sheet'}</p></div>{result.publishedAt ? <Status tone="success">Shared</Status> : <button type="button" disabled={busy} onClick={() => void share([result.id], result.assessment)}>Share one</button>}</article>)}</div></section>; })}</div> : <Empty iconName="query_stats" title="No results entered" text="Saved drafts and shared results appear here." />}</section></div>;
+function Results({
+  data,
+  reload,
+}: {
+  data: TeacherDashboard;
+  reload: () => Promise<void>;
+}) {
+  const { showToast } = useToast();
+  const [classId, setClassId] = useState(data.classes[0]?.id || "");
+  const selected = data.classes.find((item) => item.id === classId);
+  const [scores, setScores] = useState<Record<string, string>>({});
+  const [files, setFiles] = useState<Record<string, File | undefined>>({});
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    setScores({});
+    setFiles({});
+  }, [classId]);
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selected) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const maximum = Number(form.get("maximum"));
+    const numericMarks = selected.students
+      .map((student) => ({
+        studentId: student.id,
+        score: Number(scores[student.id]),
+      }))
+      .filter((item) => Number.isFinite(item.score));
+    if (numericMarks.length !== selected.students.length)
+      return showToast("Enter marks for every student.", "error");
+    setBusy(true);
+    try {
+      const marks = await Promise.all(
+        numericMarks.map(async (mark) => ({
+          ...mark,
+          resultSheetUrl: await fileData(files[mark.studentId]),
+        })),
+      );
+      await api.teacher.saveResultDraft({
+        classId,
+        subject: selected.subject,
+        assessment: String(form.get("assessment")),
+        maximum,
+        passMarks: Number(form.get("passMarks")),
+        testDate: String(form.get("testDate")),
+        marks,
+      });
+      showToast("Result drafts and individual mark sheets saved.", "success");
+      setScores({});
+      setFiles({});
+      formElement.reset();
+      await reload();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Result failed.",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const share = async (ids: string[], assessment: string) => {
+    setBusy(true);
+    try {
+      await api.teacher.shareResults(ids);
+      showToast(
+        `${assessment} shared with ${ids.length} student${ids.length === 1 ? "" : "s"}.`,
+        "success",
+      );
+      await reload();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Sharing failed.",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!selected)
+    return (
+      <Empty
+        iconName="analytics"
+        title="No assigned class"
+        text="Results require an active class assignment."
+      />
+    );
+  const classResults = data.results.filter((item) =>
+    selected.students.some((student) => student.id === item.studentId),
+  );
+  const resultGroups = Array.from(
+    classResults
+      .reduce((groups, result) => {
+        const key = `${result.assessment}::${result.testDate.slice(0, 10)}`;
+        const group = groups.get(key) ?? {
+          assessment: result.assessment,
+          testDate: result.testDate,
+          results: [] as typeof classResults,
+        };
+        group.results.push(result);
+        groups.set(key, group);
+        return groups;
+      }, new Map<string, { assessment: string; testDate: string; results: typeof classResults }>())
+      .values(),
+  );
+  return (
+    <div className="teacher-view">
+      <ClassPicker
+        classes={data.classes}
+        value={classId}
+        onChange={setClassId}
+      />
+      <section className="teacher-section">
+        <header>
+          <div>
+            <h2>New result draft</h2>
+            <p>Enter each student’s mark and attach their own mark sheet.</p>
+          </div>
+          <Status tone="warning">Draft first</Status>
+        </header>
+        <form
+          className="teacher-form"
+          onSubmit={(event) => void submit(event)}
+          aria-busy={busy}
+        >
+          <div className="teacher-form-grid">
+            <div>
+              <label htmlFor="assessment">Assessment</label>
+              <input id="assessment" name="assessment" required />
+            </div>
+            <div>
+              <label htmlFor="test-date">Test date</label>
+              <input
+                id="test-date"
+                name="testDate"
+                type="date"
+                defaultValue={dateInput()}
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="full-marks">Full marks</label>
+              <input
+                id="full-marks"
+                name="maximum"
+                type="number"
+                min="1"
+                step="0.01"
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="pass-marks">Pass marks</label>
+              <input
+                id="pass-marks"
+                name="passMarks"
+                type="number"
+                min="0"
+                step="0.01"
+                required
+              />
+            </div>
+          </div>
+          <fieldset className="teacher-student-results">
+            <legend>Student marks and mark sheets</legend>
+            <p>
+              Each attachment is saved only to that student’s result. PDF or
+              image, maximum 120 KB.
+            </p>
+            {selected.students.map((student) => (
+              <div className="teacher-student-result-row" key={student.id}>
+                <div>
+                  <strong>{student.name}</strong>
+                  <small>{statusLabel(student.status)}</small>
+                </div>
+                <label htmlFor={`score-${student.id}`}>
+                  Marks
+                  <input
+                    id={`score-${student.id}`}
+                    type="number"
+                    min="0"
+                    max={Number.MAX_SAFE_INTEGER}
+                    step="0.01"
+                    value={scores[student.id] || ""}
+                    onChange={(event) =>
+                      setScores((old) => ({
+                        ...old,
+                        [student.id]: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </label>
+                <label htmlFor={`result-file-${student.id}`}>
+                  Mark sheet <span>(optional)</span>
+                  <input
+                    id={`result-file-${student.id}`}
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    onChange={(event) =>
+                      setFiles((old) => ({
+                        ...old,
+                        [student.id]: event.target.files?.[0],
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+            ))}
+          </fieldset>
+          <button className="teacher-primary-cta" disabled={busy}>
+            {busy ? "Saving…" : "Save result drafts"}
+          </button>
+        </form>
+      </section>
+      <section className="teacher-section">
+        <header>
+          <div>
+            <h2>Result history</h2>
+            <p>
+              Publish every student in a grade and assessment with one action.
+            </p>
+          </div>
+        </header>
+        {resultGroups.length ? (
+          <div className="teacher-result-groups">
+            {resultGroups.map((group) => {
+              const drafts = group.results.filter(
+                (result) => !result.publishedAt,
+              );
+              return (
+                <section
+                  key={`${group.assessment}-${group.testDate}`}
+                  className="teacher-result-group"
+                >
+                  <header>
+                    <div>
+                      <span className="teacher-eyebrow">
+                        {new Date(group.testDate).toLocaleDateString()}
+                      </span>
+                      <h3>{group.assessment}</h3>
+                      <p>
+                        {selected.name} · {group.results.length} student result
+                        {group.results.length === 1 ? "" : "s"} ·{" "}
+                        {drafts.length} draft{drafts.length === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    {drafts.length ? (
+                      <button
+                        type="button"
+                        className="teacher-share-all"
+                        disabled={busy}
+                        onClick={() =>
+                          void share(
+                            drafts.map((result) => result.id),
+                            group.assessment,
+                          )
+                        }
+                      >
+                        {icon("group_send")}Share all {drafts.length} results
+                      </button>
+                    ) : (
+                      <Status tone="success">All shared</Status>
+                    )}
+                  </header>
+                  <div className="teacher-result-history">
+                    {group.results.map((result) => (
+                      <article key={result.id}>
+                        <div>
+                          <h3>{result.studentName}</h3>
+                          <p>
+                            {result.score}/{result.maximum} · Pass{" "}
+                            {result.passMarks ?? "—"} · Percentile{" "}
+                            {result.percentile ?? "—"} ·{" "}
+                            {result.resultSheetUrl
+                              ? "Mark sheet attached"
+                              : "No mark sheet"}
+                          </p>
+                        </div>
+                        {result.publishedAt ? (
+                          <Status tone="success">Shared</Status>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              void share([result.id], result.assessment)
+                            }
+                          >
+                            Share one
+                          </button>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        ) : (
+          <Empty
+            iconName="query_stats"
+            title="No results entered"
+            text="Saved drafts and shared results appear here."
+          />
+        )}
+      </section>
+    </div>
+  );
 }
 
-function AdminCreatedResults({ data, reload }: { data: TeacherDashboard; reload: () => Promise<void> }) {
-  const { showToast } = useToast(); const [definitionId, setDefinitionId] = useState(data.resultDefinitions[0]?.id || ''); const [scores, setScores] = useState<Record<string, string>>({}); const [files, setFiles] = useState<Record<string, File | undefined>>({}); const [busy, setBusy] = useState(false); const definition = data.resultDefinitions.find((item) => item.id === definitionId); const selected = data.classes.find((item) => item.id === definition?.classId);
-  const save = async (publishNow: boolean) => { if (!definition || !selected) return showToast('Select an available result.', 'error'); const maximum = Number((document.getElementById('admin-result-maximum') as HTMLInputElement)?.value); const passMarks = Number((document.getElementById('admin-result-pass') as HTMLInputElement)?.value); const marks = selected.students.map((student) => ({ studentId: student.id, score: Number(scores[student.id]), resultSheetUrl: undefined as string | undefined })); if (!(maximum > 0) || passMarks < 0 || passMarks > maximum || marks.some((mark) => !Number.isFinite(mark.score) || mark.score < 0 || mark.score > maximum)) return showToast('Enter valid marks for every student and ensure pass marks do not exceed full marks.', 'error'); const missingSheets = selected.students.filter((student) => !files[student.id]); if (missingSheets.length) return showToast(`Upload an individual result sheet for every student. Missing: ${missingSheets.map((student) => student.name).join(', ')}.`, 'error'); setBusy(true); try { const prepared = await Promise.all(marks.map(async (mark) => ({ ...mark, resultSheetUrl: await fileData(files[mark.studentId]) }))); const result = await api.teacher.saveResultDraft({ resultDefinitionId: definition.id, classId: selected.id, subject: definition.subject, assessment: definition.title, maximum, passMarks, testDate: definition.testDate, marks: prepared }); if (publishNow) await api.teacher.shareResults(result.resultIds); showToast(publishNow ? 'Results published to students.' : 'Result saved as a private draft.', 'success'); setScores({}); setFiles({}); await reload(); } catch (error) { showToast(error instanceof Error ? error.message : 'Result could not be saved.', 'error'); } finally { setBusy(false); } };
-  const eventResults = data.results.filter((item) => item.resultDefinitionId === definitionId);
-  const deleteDraft = async (resultId: string) => { setBusy(true); try { await api.teacher.deleteResultDraft(resultId); showToast('Result draft deleted.', 'success'); await reload(); } catch (error) { showToast(error instanceof Error ? error.message : 'Draft could not be deleted.', 'error'); } finally { setBusy(false); } };
-  if (!data.resultDefinitions.length) return <div className="teacher-view"><Empty iconName="pending_actions" title="No result is available" text="Your Branch Admin or Tenant Admin must create a result before marks can be entered." /></div>;
-  return <div className="teacher-view"><label className="teacher-picker" htmlFor="result-definition"><span>Available result</span><select id="result-definition" value={definitionId} onChange={(event) => { setDefinitionId(event.target.value); setScores({}); setFiles({}); }}>{data.resultDefinitions.map((item) => { const klass = data.classes.find((entry) => entry.id === item.classId); return <option key={item.id} value={item.id}>{item.title} · {item.subject} · {klass?.name || 'Assigned class'}</option>; })}</select></label>{selected && definition ? <><section className="teacher-section"><header><div><h2>{definition.title}</h2><p>{selected.name} · {definition.subject} · {new Date(definition.testDate).toLocaleDateString()}</p></div><Status tone="info">Managed result event</Status></header><div className="teacher-form"><div className="teacher-form-grid"><div><label htmlFor="admin-result-maximum">Full marks</label><input id="admin-result-maximum" inputMode="decimal" required /></div><div><label htmlFor="admin-result-pass">Pass marks</label><input id="admin-result-pass" inputMode="decimal" required /></div></div><fieldset className="teacher-student-results"><legend>Student marks and individual result sheets</legend><p>Enter marks and upload a PDF or image separately for every student. All sheets are required before saving.</p>{selected.students.map((student) => { const maximum = Number((document.getElementById('admin-result-maximum') as HTMLInputElement)?.value || 0); const score = Number(scores[student.id]); const percentage = maximum > 0 && Number.isFinite(score) ? Math.round(score / maximum * 10000) / 100 : null; return <div className="teacher-student-result-row" key={student.id}><div><strong>{student.name}</strong><small>{percentage == null ? 'Percentage calculated after marks' : `${percentage}% obtained`}</small></div><label htmlFor={`admin-score-${student.id}`}>Marks<input id={`admin-score-${student.id}`} inputMode="decimal" value={scores[student.id] || ''} onChange={(event) => setScores((old) => ({ ...old, [student.id]: event.target.value }))} required /></label><label htmlFor={`admin-sheet-${student.id}`}>Result sheet *<input id={`admin-sheet-${student.id}`} type="file" accept=".pdf,.jpg,.jpeg,.png" required onChange={(event) => setFiles((old) => ({ ...old, [student.id]: event.target.files?.[0] }))} /></label></div>; })}</fieldset><div className="teacher-form-actions"><button type="button" className="teacher-secondary-action" disabled={busy} onClick={() => void save(false)}>Save or update draft</button><button type="button" className="teacher-primary-cta" disabled={busy} onClick={() => void save(true)}>{busy ? 'Publishing…' : 'Publish now'}</button></div></div></section><section className="teacher-section"><header><div><h2>Saved results</h2><p>Drafts stay private until you publish them. Published results are locked.</p></div></header>{eventResults.length ? <div className="teacher-result-history">{eventResults.map((result) => <article key={result.id}><div><h3>{result.studentName}</h3><p>{result.score}/{result.maximum} · Pass {result.passMarks ?? '—'} · {result.resultSheetUrl ? 'Result sheet attached' : 'Result sheet missing'}</p></div>{result.publishedAt ? <Status tone="success">Published</Status> : <button type="button" disabled={busy} onClick={() => void deleteDraft(result.id)}>Delete draft</button>}</article>)}</div> : <Empty iconName="draft" title="No marks saved" text="Enter marks above and save them as drafts." />}</section></> : null}</div>;
+function AdminCreatedResults({
+  data,
+  reload,
+}: {
+  data: TeacherDashboard;
+  reload: () => Promise<void>;
+}) {
+  const { showToast } = useToast();
+  const [definitionId, setDefinitionId] = useState(
+    data.resultDefinitions[0]?.id || "",
+  );
+  const [scores, setScores] = useState<Record<string, string>>({});
+  const [files, setFiles] = useState<Record<string, File | undefined>>({});
+  const [busy, setBusy] = useState(false);
+  const definition = data.resultDefinitions.find(
+    (item) => item.id === definitionId,
+  );
+  const selected = data.classes.find((item) => item.id === definition?.classId);
+  const save = async (publishNow: boolean) => {
+    if (!definition || !selected)
+      return showToast("Select an available result.", "error");
+    const maximum = Number(
+      (document.getElementById("admin-result-maximum") as HTMLInputElement)
+        ?.value,
+    );
+    const passMarks = Number(
+      (document.getElementById("admin-result-pass") as HTMLInputElement)?.value,
+    );
+    const marks = selected.students.map((student) => ({
+      studentId: student.id,
+      score: Number(scores[student.id]),
+      resultSheetUrl: undefined as string | undefined,
+    }));
+    if (
+      !(maximum > 0) ||
+      passMarks < 0 ||
+      passMarks > maximum ||
+      marks.some(
+        (mark) =>
+          !Number.isFinite(mark.score) ||
+          mark.score < 0 ||
+          mark.score > maximum,
+      )
+    )
+      return showToast(
+        "Enter valid marks for every student and ensure pass marks do not exceed full marks.",
+        "error",
+      );
+    const missingSheets = selected.students.filter(
+      (student) => !files[student.id],
+    );
+    if (missingSheets.length)
+      return showToast(
+        `Upload an individual result sheet for every student. Missing: ${missingSheets.map((student) => student.name).join(", ")}.`,
+        "error",
+      );
+    setBusy(true);
+    try {
+      const prepared = await Promise.all(
+        marks.map(async (mark) => ({
+          ...mark,
+          resultSheetUrl: await fileData(files[mark.studentId]),
+        })),
+      );
+      const result = await api.teacher.saveResultDraft({
+        resultDefinitionId: definition.id,
+        classId: selected.id,
+        subject: definition.subject,
+        assessment: definition.title,
+        maximum,
+        passMarks,
+        testDate: definition.testDate,
+        marks: prepared,
+      });
+      if (publishNow) await api.teacher.shareResults(result.resultIds);
+      showToast(
+        publishNow
+          ? "Results published to students."
+          : "Result saved as a private draft.",
+        "success",
+      );
+      setScores({});
+      setFiles({});
+      await reload();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Result could not be saved.",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const eventResults = data.results.filter(
+    (item) => item.resultDefinitionId === definitionId,
+  );
+  const deleteDraft = async (resultId: string) => {
+    setBusy(true);
+    try {
+      await api.teacher.deleteResultDraft(resultId);
+      showToast("Result draft deleted.", "success");
+      await reload();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Draft could not be deleted.",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!data.resultDefinitions.length)
+    return (
+      <div className="teacher-view">
+        <Empty
+          iconName="pending_actions"
+          title="No result is available"
+          text="Your Branch Admin or Tenant Admin must create a result before marks can be entered."
+        />
+      </div>
+    );
+  return (
+    <div className="teacher-view">
+      <label className="teacher-picker" htmlFor="result-definition">
+        <span>Available result</span>
+        <select
+          id="result-definition"
+          value={definitionId}
+          onChange={(event) => {
+            setDefinitionId(event.target.value);
+            setScores({});
+            setFiles({});
+          }}
+        >
+          {data.resultDefinitions.map((item) => {
+            const klass = data.classes.find(
+              (entry) => entry.id === item.classId,
+            );
+            return (
+              <option key={item.id} value={item.id}>
+                {item.title} · {item.subject} ·{" "}
+                {klass?.name || "Assigned class"}
+              </option>
+            );
+          })}
+        </select>
+      </label>
+      {selected && definition ? (
+        <>
+          <section className="teacher-section">
+            <header>
+              <div>
+                <h2>{definition.title}</h2>
+                <p>
+                  {selected.name} · {definition.subject} ·{" "}
+                  {new Date(definition.testDate).toLocaleDateString()}
+                </p>
+              </div>
+              <Status tone="info">Managed result event</Status>
+            </header>
+            <div className="teacher-form">
+              <div className="teacher-form-grid">
+                <div>
+                  <label htmlFor="admin-result-maximum">Full marks</label>
+                  <input
+                    id="admin-result-maximum"
+                    inputMode="decimal"
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="admin-result-pass">Pass marks</label>
+                  <input id="admin-result-pass" inputMode="decimal" required />
+                </div>
+              </div>
+              <fieldset className="teacher-student-results">
+                <legend>Student marks and individual result sheets</legend>
+                <p>
+                  Enter marks and upload a PDF or image separately for every
+                  student. All sheets are required before saving.
+                </p>
+                {selected.students.map((student) => {
+                  const maximum = Number(
+                    (
+                      document.getElementById(
+                        "admin-result-maximum",
+                      ) as HTMLInputElement
+                    )?.value || 0,
+                  );
+                  const score = Number(scores[student.id]);
+                  const percentage =
+                    maximum > 0 && Number.isFinite(score)
+                      ? Math.round((score / maximum) * 10000) / 100
+                      : null;
+                  return (
+                    <div
+                      className="teacher-student-result-row"
+                      key={student.id}
+                    >
+                      <div>
+                        <strong>{student.name}</strong>
+                        <small>
+                          {percentage == null
+                            ? "Percentage calculated after marks"
+                            : `${percentage}% obtained`}
+                        </small>
+                      </div>
+                      <label htmlFor={`admin-score-${student.id}`}>
+                        Marks
+                        <input
+                          id={`admin-score-${student.id}`}
+                          inputMode="decimal"
+                          value={scores[student.id] || ""}
+                          onChange={(event) =>
+                            setScores((old) => ({
+                              ...old,
+                              [student.id]: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </label>
+                      <label htmlFor={`admin-sheet-${student.id}`}>
+                        Result sheet *
+                        <input
+                          id={`admin-sheet-${student.id}`}
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png"
+                          required
+                          onChange={(event) =>
+                            setFiles((old) => ({
+                              ...old,
+                              [student.id]: event.target.files?.[0],
+                            }))
+                          }
+                        />
+                      </label>
+                    </div>
+                  );
+                })}
+              </fieldset>
+              <div className="teacher-form-actions">
+                <button
+                  type="button"
+                  className="teacher-secondary-action"
+                  disabled={busy}
+                  onClick={() => void save(false)}
+                >
+                  Save or update draft
+                </button>
+                <button
+                  type="button"
+                  className="teacher-primary-cta"
+                  disabled={busy}
+                  onClick={() => void save(true)}
+                >
+                  {busy ? "Publishing…" : "Publish now"}
+                </button>
+              </div>
+            </div>
+          </section>
+          <section className="teacher-section">
+            <header>
+              <div>
+                <h2>Saved results</h2>
+                <p>
+                  Drafts stay private until you publish them. Published results
+                  are locked.
+                </p>
+              </div>
+            </header>
+            {eventResults.length ? (
+              <div className="teacher-result-history">
+                {eventResults.map((result) => (
+                  <article key={result.id}>
+                    <div>
+                      <h3>{result.studentName}</h3>
+                      <p>
+                        {result.score}/{result.maximum} · Pass{" "}
+                        {result.passMarks ?? "—"} ·{" "}
+                        {result.resultSheetUrl
+                          ? "Result sheet attached"
+                          : "Result sheet missing"}
+                      </p>
+                    </div>
+                    {result.publishedAt ? (
+                      <Status tone="success">Published</Status>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void deleteDraft(result.id)}
+                      >
+                        Delete draft
+                      </button>
+                    )}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <Empty
+                iconName="draft"
+                title="No marks saved"
+                text="Enter marks above and save them as drafts."
+              />
+            )}
+          </section>
+        </>
+      ) : null}
+    </div>
+  );
 }
 
 function Profile({ data }: { data: TeacherDashboard }) {
-  const rows = [['Full name', data.teacher.name], ['Email', data.teacher.email], ['Designation', data.teacher.designation], ['Contract', data.teacher.contractType || 'Not recorded'], ['Joining date', data.teacher.joiningDate ? new Date(data.teacher.joiningDate).toLocaleDateString() : 'Not recorded'], ['Branches', data.teacher.branches.map((item) => item.name).join(', ') || 'Not assigned']];
-  return <div className="teacher-view"><section className="teacher-profile-hero"><span className="teacher-profile-avatar">{data.teacher.name.split(' ').map((item) => item[0]).join('').slice(0, 2)}</span><div><span className="teacher-eyebrow">TEACHER RECORD</span><h2>{data.teacher.name}</h2><p>{data.teacher.designation}</p></div><Status tone="success">Active</Status></section><section className="teacher-section"><header><div><h2>Profile details</h2><p>Contact an administrator to correct institutional records.</p></div></header><dl className="teacher-detail-grid">{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></section><section className="teacher-section"><header><div><h2>Own performance summary</h2></div><strong className="teacher-score-total">{data.statistics.updateCompliance}%</strong></header><div className="teacher-performance"><div><span>Attendance rate<small>Geo-verified presence</small></span><b>{data.statistics.attendanceRate}%</b><i><span style={{ width: `${data.statistics.attendanceRate}%` }} /></i></div><div><span>Update compliance<small>Confirmed daily logs</small></span><b>{data.statistics.updateCompliance}%</b><i><span style={{ width: `${data.statistics.updateCompliance}%` }} /></i></div></div></section><section className="teacher-section"><header><div><h2>Attendance stamp history</h2><p>IN, OUT, AUTO-OUT, and RE-IN remain separate.</p></div></header>{data.stamps.length ? <div className="teacher-stamps">{data.stamps.map((stamp) => <article key={stamp.id}><i className={`is-${stamp.stampType.toLowerCase().replace('_', '-')}`} /><div><strong>{statusLabel(stamp.stampType)}</strong><small>{stamp.branchName} · GPS ±{Math.round(stamp.gpsAccuracy)} m</small></div><time>{new Date(stamp.timestamp).toLocaleString()}</time></article>)}</div> : <Empty iconName="location_off" title="No attendance stamps" text="Geo-attendance history appears after your first Mark IN." />}</section></div>;
+  const rows = [
+    ["Full name", data.teacher.name],
+    ["Email", data.teacher.email],
+    ["Designation", data.teacher.designation],
+    ["Contract", data.teacher.contractType || "Not recorded"],
+    [
+      "Joining date",
+      data.teacher.joiningDate
+        ? new Date(data.teacher.joiningDate).toLocaleDateString()
+        : "Not recorded",
+    ],
+    [
+      "Branches",
+      data.teacher.branches.map((item) => item.name).join(", ") ||
+        "Not assigned",
+    ],
+  ];
+  return (
+    <div className="teacher-view">
+      <section className="teacher-profile-hero">
+        <span className="teacher-profile-avatar">
+          {data.teacher.name
+            .split(" ")
+            .map((item) => item[0])
+            .join("")
+            .slice(0, 2)}
+        </span>
+        <div>
+          <span className="teacher-eyebrow">TEACHER RECORD</span>
+          <h2>{data.teacher.name}</h2>
+          <p>{data.teacher.designation}</p>
+        </div>
+        <Status tone="success">Active</Status>
+      </section>
+      <section className="teacher-section">
+        <header>
+          <div>
+            <h2>Profile details</h2>
+            <p>Contact an administrator to correct institutional records.</p>
+          </div>
+        </header>
+        <dl className="teacher-detail-grid">
+          {rows.map(([label, value]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+      <section className="teacher-section">
+        <header>
+          <div>
+            <h2>Own performance summary</h2>
+          </div>
+          <strong className="teacher-score-total">
+            {data.statistics.updateCompliance}%
+          </strong>
+        </header>
+        <div className="teacher-performance">
+          <div>
+            <span>
+              Attendance rate<small>Geo-verified presence</small>
+            </span>
+            <b>{data.statistics.attendanceRate}%</b>
+            <i>
+              <span style={{ width: `${data.statistics.attendanceRate}%` }} />
+            </i>
+          </div>
+          <div>
+            <span>
+              Update compliance<small>Confirmed daily logs</small>
+            </span>
+            <b>{data.statistics.updateCompliance}%</b>
+            <i>
+              <span style={{ width: `${data.statistics.updateCompliance}%` }} />
+            </i>
+          </div>
+        </div>
+      </section>
+      <section className="teacher-section">
+        <header>
+          <div>
+            <h2>Attendance stamp history</h2>
+            <p>IN, OUT, AUTO-OUT, and RE-IN remain separate.</p>
+          </div>
+        </header>
+        {data.stamps.length ? (
+          <div className="teacher-stamps">
+            {data.stamps.map((stamp) => (
+              <article key={stamp.id}>
+                <i
+                  className={`is-${stamp.stampType.toLowerCase().replace("_", "-")}`}
+                />
+                <div>
+                  <strong>{statusLabel(stamp.stampType)}</strong>
+                  <small>
+                    {stamp.branchName} · GPS ±{Math.round(stamp.gpsAccuracy)} m
+                  </small>
+                </div>
+                <time>{new Date(stamp.timestamp).toLocaleString()}</time>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <Empty
+            iconName="location_off"
+            title="No attendance stamps"
+            text="Geo-attendance history appears after your first Mark IN."
+          />
+        )}
+      </section>
+    </div>
+  );
 }
 
 function SecurityView() {
-  return <div className="teacher-view">
-    <ChangePasswordForm className="teacher-section" />
-  </div>;
+  return (
+    <div className="teacher-view">
+      <ChangePasswordForm className="teacher-section" />
+    </div>
+  );
 }
 
-function Leave({ data, reload }: { data: TeacherDashboard; reload: () => Promise<void> }) {
-  const { showToast } = useToast(); const [busy, setBusy] = useState(false); const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null); const branch = data.teacher.branches[0];
+function Leave({
+  data,
+  reload,
+}: {
+  data: TeacherDashboard;
+  reload: () => Promise<void>;
+}) {
+  const { showToast } = useToast();
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState<{
+    tone: "success" | "error";
+    message: string;
+  } | null>(null);
+  const branch = data.teacher.branches[0];
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (busy) return;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    if (!branch) return showToast('No assigned branch is available.', 'error');
-    const startDate = String(form.get('startDate')); const endDate = String(form.get('endDate')); const reason = String(form.get('reason')).trim();
-    if (endDate < startDate) { setFeedback({ tone: 'error', message: 'End date must be on or after the start date.' }); return; }
-    setBusy(true); setFeedback(null);
+    if (!branch) return showToast("No assigned branch is available.", "error");
+    const startDate = String(form.get("startDate"));
+    const endDate = String(form.get("endDate"));
+    const reason = String(form.get("reason")).trim();
+    if (endDate < startDate) {
+      setFeedback({
+        tone: "error",
+        message: "End date must be on or after the start date.",
+      });
+      return;
+    }
+    setBusy(true);
+    setFeedback(null);
     try {
-      await api.teacher.requestLeave({ branchId: branch.id, leaveType: String(form.get('leaveType')), startDate, endDate, reason });
+      await api.teacher.requestLeave({
+        branchId: branch.id,
+        leaveType: String(form.get("leaveType")),
+        startDate,
+        endDate,
+        reason,
+      });
       await reload();
       formElement.reset();
-      setFeedback({ tone: 'success', message: 'Request submitted. Track its approval below.' });
-      showToast('Leave request submitted for approval.', 'success');
+      setFeedback({
+        tone: "success",
+        message: "Request submitted. Track its approval below.",
+      });
+      showToast("Leave request submitted for approval.", "success");
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Leave request failed.';
-      setFeedback({ tone: 'error', message }); showToast(message, 'error');
-    } finally { setBusy(false); }
+      const message =
+        error instanceof Error ? error.message : "Leave request failed.";
+      setFeedback({ tone: "error", message });
+      showToast(message, "error");
+    } finally {
+      setBusy(false);
+    }
   };
-  const leaveState = (status: string) => status === 'PENDING' ? { label: 'Awaiting branch review', tone: 'warning' as const } : status === 'APPROVED_LEVEL1' ? { label: 'Awaiting final tenant approval', tone: 'warning' as const } : status === 'APPROVED_LEVEL2' ? { label: 'Approved', tone: 'success' as const } : { label: 'Rejected', tone: 'error' as const };
-  return <div className="teacher-view"><section className="teacher-section"><header><div><h2>New leave request</h2><p>{branch?.name || 'No branch assigned'} · Casual, sick and early-out requests need branch approval. Long sick leave also needs final tenant approval.</p></div></header><form className="teacher-form" onSubmit={(event) => void submit(event)} aria-busy={busy}><label htmlFor="leave-type">Leave type</label><select id="leave-type" name="leaveType" disabled={busy}><option value="CASUAL">Casual leave</option><option value="SICK">Sick leave</option><option value="EARLY_OUT">Early-out</option><option value="LONG_SICK">Long sick leave — two approvals</option></select><div className="teacher-form-grid"><div><label htmlFor="leave-start">Start</label><input id="leave-start" name="startDate" type="date" min={dateInput()} required disabled={busy} /></div><div><label htmlFor="leave-end">End</label><input id="leave-end" name="endDate" type="date" min={dateInput()} required disabled={busy} /></div></div><label htmlFor="leave-reason">Reason</label><textarea id="leave-reason" name="reason" maxLength={2000} required disabled={busy} />{feedback ? <div className={`teacher-form-feedback is-${feedback.tone}`} role={feedback.tone === 'error' ? 'alert' : 'status'}>{feedback.message}</div> : null}<button type="submit" className="teacher-primary-cta" disabled={busy || !branch}>{busy ? 'Submitting request…' : 'Submit leave request'}</button></form></section><section className="teacher-section"><header><div><h2>Request history</h2><p>Every request and approval step appears here.</p></div></header>{data.leaves.length ? <div className="teacher-history-list">{data.leaves.map((leave) => { const state = leaveState(leave.status); return <article key={leave.id}><div><strong>{statusLabel(leave.leaveType)}</strong><small>{new Date(leave.startDate).toLocaleDateString()}–{new Date(leave.endDate).toLocaleDateString()} · {leave.reason}</small>{leave.status === 'APPROVED_LEVEL1' ? <small>Branch approved · waiting for Tenant Admin</small> : null}</div><Status tone={state.tone}>{state.label}</Status></article>; })}</div> : <Empty iconName="event_available" title="No leave requests" text="Your submitted requests and approval decisions will appear here." />}</section></div>;
+  const leaveState = (status: string) =>
+    status === "PENDING"
+      ? { label: "Awaiting branch review", tone: "warning" as const }
+      : status === "APPROVED_LEVEL1"
+        ? { label: "Awaiting final tenant approval", tone: "warning" as const }
+        : status === "APPROVED_LEVEL2"
+          ? { label: "Approved", tone: "success" as const }
+          : { label: "Rejected", tone: "error" as const };
+  return (
+    <div className="teacher-view">
+      <section className="teacher-section">
+        <header>
+          <div>
+            <h2>New leave request</h2>
+            <p>
+              {branch?.name || "No branch assigned"} · Casual, sick and
+              early-out requests need branch approval. Long sick leave also
+              needs final tenant approval.
+            </p>
+          </div>
+        </header>
+        <form
+          className="teacher-form"
+          onSubmit={(event) => void submit(event)}
+          aria-busy={busy}
+        >
+          <label htmlFor="leave-type">Leave type</label>
+          <select id="leave-type" name="leaveType" disabled={busy}>
+            <option value="CASUAL">Casual leave</option>
+            <option value="SICK">Sick leave</option>
+            <option value="EARLY_OUT">Early-out</option>
+            <option value="LONG_SICK">Long sick leave — two approvals</option>
+          </select>
+          <div className="teacher-form-grid">
+            <div>
+              <label htmlFor="leave-start">Start</label>
+              <input
+                id="leave-start"
+                name="startDate"
+                type="date"
+                min={dateInput()}
+                required
+                disabled={busy}
+              />
+            </div>
+            <div>
+              <label htmlFor="leave-end">End</label>
+              <input
+                id="leave-end"
+                name="endDate"
+                type="date"
+                min={dateInput()}
+                required
+                disabled={busy}
+              />
+            </div>
+          </div>
+          <label htmlFor="leave-reason">Reason</label>
+          <textarea
+            id="leave-reason"
+            name="reason"
+            maxLength={2000}
+            required
+            disabled={busy}
+          />
+          {feedback ? (
+            <div
+              className={`teacher-form-feedback is-${feedback.tone}`}
+              role={feedback.tone === "error" ? "alert" : "status"}
+            >
+              {feedback.message}
+            </div>
+          ) : null}
+          <button
+            type="submit"
+            className="teacher-primary-cta"
+            disabled={busy || !branch}
+          >
+            {busy ? "Submitting request…" : "Submit leave request"}
+          </button>
+        </form>
+      </section>
+      <section className="teacher-section">
+        <header>
+          <div>
+            <h2>Request history</h2>
+            <p>Every request and approval step appears here.</p>
+          </div>
+        </header>
+        {data.leaves.length ? (
+          <div className="teacher-history-list">
+            {data.leaves.map((leave) => {
+              const state = leaveState(leave.status);
+              return (
+                <article key={leave.id}>
+                  <div>
+                    <strong>{statusLabel(leave.leaveType)}</strong>
+                    <small>
+                      {new Date(leave.startDate).toLocaleDateString()}–
+                      {new Date(leave.endDate).toLocaleDateString()} ·{" "}
+                      {leave.reason}
+                    </small>
+                    {leave.status === "APPROVED_LEVEL1" ? (
+                      <small>Branch approved · waiting for Tenant Admin</small>
+                    ) : null}
+                  </div>
+                  <Status tone={state.tone}>{state.label}</Status>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <Empty
+            iconName="event_available"
+            title="No leave requests"
+            text="Your submitted requests and approval decisions will appear here."
+          />
+        )}
+      </section>
+    </div>
+  );
 }
 
 function Salary({ data }: { data: TeacherDashboard }) {
-  const next = data.payrolls.find((item) => item.status === 'PENDING');
-  return <div className="teacher-view">{next ? <section className="teacher-salary-hero"><div><span className="teacher-eyebrow">UPCOMING SALARY</span><strong>{money(next.netPayable)}</strong><p>{payrollPeriod(next.month, next.year)} · Payment date pending approval</p></div>{icon('account_balance_wallet')}</section> : <div className="teacher-info">{icon('info')}<span>No upcoming salary calculation has been issued yet.</span></div>}<section className="teacher-section"><header><div><h2>Salary history</h2><p>Base salary, deductions, bonuses, and settlement status.</p></div></header>{data.payrolls.length ? <div className="teacher-table-wrap"><table className="teacher-table"><thead><tr><th>Period</th><th>Base</th><th>Deductions</th><th>Bonuses</th><th>Net payable</th><th>Status</th><th>Paid date</th></tr></thead><tbody>{data.payrolls.map((payroll) => <tr key={payroll.id}><td>{payrollPeriod(payroll.month, payroll.year)}</td><td>{money(payroll.baseSalary)}</td><td>{money(payroll.attendanceDeductions)}</td><td>{money(payroll.bonuses)}</td><td><strong>{money(payroll.netPayable)}</strong></td><td><Status tone={payroll.status === 'MANUALLY_PAID' ? 'success' : 'warning'}>{statusLabel(payroll.status)}</Status></td><td>{payroll.paymentDate ? toDualDateLabel(payroll.paymentDate) : 'Upcoming'}</td></tr>)}</tbody></table></div> : <Empty iconName="receipt_long" title="No salary slips issued" text="Payroll history appears after the first salary calculation." />}</section></div>;
+  const next = data.payrolls.find((item) => item.status === "PENDING");
+  return (
+    <div className="teacher-view">
+      {next ? (
+        <section className="teacher-salary-hero">
+          <div>
+            <span className="teacher-eyebrow">UPCOMING SALARY</span>
+            <strong>{money(next.netPayable)}</strong>
+            <p>
+              {payrollPeriod(next.month, next.year)} · Payment date pending
+              approval
+            </p>
+          </div>
+          {icon("account_balance_wallet")}
+        </section>
+      ) : (
+        <div className="teacher-info">
+          {icon("info")}
+          <span>No upcoming salary calculation has been issued yet.</span>
+        </div>
+      )}
+      <section className="teacher-section">
+        <header>
+          <div>
+            <h2>Salary history</h2>
+            <p>Base salary, deductions, bonuses, and settlement status.</p>
+          </div>
+        </header>
+        {data.payrolls.length ? (
+          <div className="teacher-table-wrap">
+            <table className="teacher-table">
+              <thead>
+                <tr>
+                  <th>Period</th>
+                  <th>Base</th>
+                  <th>Deductions</th>
+                  <th>Bonuses</th>
+                  <th>Net payable</th>
+                  <th>Status</th>
+                  <th>Paid date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.payrolls.map((payroll) => (
+                  <tr key={payroll.id}>
+                    <td>{payrollPeriod(payroll.month, payroll.year)}</td>
+                    <td>{money(payroll.baseSalary)}</td>
+                    <td>{money(payroll.attendanceDeductions)}</td>
+                    <td>{money(payroll.bonuses)}</td>
+                    <td>
+                      <strong>{money(payroll.netPayable)}</strong>
+                    </td>
+                    <td>
+                      <Status
+                        tone={
+                          payroll.status === "MANUALLY_PAID"
+                            ? "success"
+                            : "warning"
+                        }
+                      >
+                        {statusLabel(payroll.status)}
+                      </Status>
+                    </td>
+                    <td>
+                      {payroll.paymentDate
+                        ? toDualDateLabel(payroll.paymentDate)
+                        : "Upcoming"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <Empty
+            iconName="receipt_long"
+            title="No salary slips issued"
+            text="Payroll history appears after the first salary calculation."
+          />
+        )}
+      </section>
+    </div>
+  );
 }
 
 function DetailedSalary({ data }: { data: TeacherDashboard }) {
-  const latest = data.payrolls[0]; const projectionDate = new Date(); projectionDate.setMonth(projectionDate.getMonth() + 1); const projection = latest ? { ...latest, id: 'projection', month: projectionDate.getMonth() + 1, year: projectionDate.getFullYear(), paymentDate: null, status: 'PROJECTED' } : null; const slips = projection ? [projection, ...data.payrolls] : data.payrolls; const [selectedId, setSelectedId] = useState(slips[0]?.id || ''); const selected = slips.find((item) => item.id === selectedId);
-  return <div className="teacher-view"><section className="teacher-section"><header><div><h2>Salary slips</h2><p>Open past, current, or one-month-ahead projected details.</p></div></header>{slips.length ? <div className="teacher-slip-layout"><div className="teacher-slip-list">{slips.map((slip) => <button type="button" key={slip.id} className={selectedId === slip.id ? 'is-active' : ''} onClick={() => setSelectedId(slip.id)}><span><strong>{payrollPeriod(slip.month, slip.year)}</strong><small>{slip.id === 'projection' ? 'One-month projection' : statusLabel(slip.status)}</small></span><b>{money(slip.netPayable)}</b>{icon('chevron_right')}</button>)}</div>{selected ? <article className="teacher-slip-detail"><span className="teacher-eyebrow">{selected.id === 'projection' ? 'PROJECTED SLIP' : 'SALARY SLIP'}</span><h3>{payrollPeriod(selected.month, selected.year)}</h3><dl><div><dt>Period</dt><dd>{payrollPeriod(selected.month, selected.year)}</dd></div><div><dt>Regular-class base salary</dt><dd>{money(selected.baseSalary)}</dd></div><div><dt>Attendance deductions</dt><dd>− {money(selected.attendanceDeductions)}</dd></div><div><dt>Bonuses</dt><dd>+ {money(selected.bonuses)}</dd></div><div><dt>Net payable</dt><dd><strong>{money(selected.netPayable)}</strong></dd></div><div><dt>Status</dt><dd>{statusLabel(selected.status)}</dd></div><div><dt>Paid date</dt><dd>{selected.paymentDate ? toDualDateLabel(selected.paymentDate) : selected.id === 'projection' ? 'Projection only' : 'Not paid yet'}</dd></div></dl>{selected.id === 'projection' ? <div className="teacher-info">{icon('info')}<span>This projection uses the latest issued base salary, deductions, and bonus. The final slip may change after attendance and Branch Admin adjustments.</span></div> : null}</article> : null}</div> : <Empty iconName="receipt_long" title="No salary slips issued" text="Salary history and the next projection appear after the first payroll calculation." />}</section></div>;
+  const latest = data.payrolls[0];
+  const projectionDate = new Date();
+  projectionDate.setMonth(projectionDate.getMonth() + 1);
+  const projection = latest
+    ? {
+        ...latest,
+        id: "projection",
+        month: projectionDate.getMonth() + 1,
+        year: projectionDate.getFullYear(),
+        paymentDate: null,
+        status: "PROJECTED",
+      }
+    : null;
+  const slips = projection ? [projection, ...data.payrolls] : data.payrolls;
+  const [selectedId, setSelectedId] = useState(slips[0]?.id || "");
+  const selected = slips.find((item) => item.id === selectedId);
+  return (
+    <div className="teacher-view">
+      <section className="teacher-section">
+        <header>
+          <div>
+            <h2>Salary slips</h2>
+            <p>Open past, current, or one-month-ahead projected details.</p>
+          </div>
+        </header>
+        {slips.length ? (
+          <div className="teacher-slip-layout">
+            <div className="teacher-slip-list">
+              {slips.map((slip) => (
+                <button
+                  type="button"
+                  key={slip.id}
+                  className={selectedId === slip.id ? "is-active" : ""}
+                  onClick={() => setSelectedId(slip.id)}
+                >
+                  <span>
+                    <strong>{payrollPeriod(slip.month, slip.year)}</strong>
+                    <small>
+                      {slip.id === "projection"
+                        ? "One-month projection"
+                        : statusLabel(slip.status)}
+                    </small>
+                  </span>
+                  <b>{money(slip.netPayable)}</b>
+                  {icon("chevron_right")}
+                </button>
+              ))}
+            </div>
+            {selected ? (
+              <article className="teacher-slip-detail">
+                <span className="teacher-eyebrow">
+                  {selected.id === "projection"
+                    ? "PROJECTED SLIP"
+                    : "SALARY SLIP"}
+                </span>
+                <h3>{payrollPeriod(selected.month, selected.year)}</h3>
+                <dl>
+                  <div>
+                    <dt>Period</dt>
+                    <dd>{payrollPeriod(selected.month, selected.year)}</dd>
+                  </div>
+                  <div>
+                    <dt>Regular-class base salary</dt>
+                    <dd>{money(selected.baseSalary)}</dd>
+                  </div>
+                  <div>
+                    <dt>Attendance deductions</dt>
+                    <dd>− {money(selected.attendanceDeductions)}</dd>
+                  </div>
+                  <div>
+                    <dt>Bonuses</dt>
+                    <dd>+ {money(selected.bonuses)}</dd>
+                  </div>
+                  <div>
+                    <dt>Net payable</dt>
+                    <dd>
+                      <strong>{money(selected.netPayable)}</strong>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Status</dt>
+                    <dd>{statusLabel(selected.status)}</dd>
+                  </div>
+                  <div>
+                    <dt>Paid date</dt>
+                    <dd>
+                      {selected.paymentDate
+                        ? toDualDateLabel(selected.paymentDate)
+                        : selected.id === "projection"
+                          ? "Projection only"
+                          : "Not paid yet"}
+                    </dd>
+                  </div>
+                </dl>
+                {selected.id === "projection" ? (
+                  <div className="teacher-info">
+                    {icon("info")}
+                    <span>
+                      This projection uses the latest issued base salary,
+                      deductions, and bonus. The final slip may change after
+                      attendance and Branch Admin adjustments.
+                    </span>
+                  </div>
+                ) : null}
+              </article>
+            ) : null}
+          </div>
+        ) : (
+          <Empty
+            iconName="receipt_long"
+            title="No salary slips issued"
+            text="Salary history and the next projection appear after the first payroll calculation."
+          />
+        )}
+      </section>
+    </div>
+  );
 }
 
 // Kept temporarily for compatibility while the topic/result/slip workflows replace these views.
 void [DailyUpdate, Results, Salary];
 
 export function TeacherPortal() {
-  const location = useLocation(); const navigate = useNavigate(); const raw = location.pathname.split('/')[2] || 'dashboard'; const view: TeacherView = raw in VIEW_COPY ? raw as TeacherView : 'dashboard';
-  const [data, setData] = useState<TeacherDashboard | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState('');
-  const load = async () => { setLoading(true); setError(''); try { setData(await api.teacher.getDashboard()); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load your teacher workspace.'); } finally { setLoading(false); } };
-  useEffect(() => { void load(); }, []);
-  const go = (next: TeacherView) => navigate(`/teacher/${next}`); const copy = VIEW_COPY[view];
-  const content = (() => { if (!data) return null; if (view === 'calendar') return <AcademicCalendarView viewerRole="Teacher" />; if (view === 'dashboard') return <><Dashboard data={data} go={go} /><AcademicCalendarView viewerRole="Teacher" upcoming calendarPath="/teacher/calendar" /></>; if (view === 'timetable') return <Timetable data={data} />; if (view === 'geo-attendance') return <GeoAttendance data={data} reload={load} />; if (view === 'attendance') return <Attendance data={data} reload={load} />; if (view === 'syllabus') return <TopicSyllabus data={data} reload={load} />; if (view === 'daily-update-log') return <TopicDailyUpdate data={data} reload={load} />; if (view === 'homework') return <Homework data={data} reload={load} />; if (view === 'results') return <AdminCreatedResults data={data} reload={load} />; if (view === 'profile') return <Profile data={data} />; if (view === 'leave-requests') return <Leave data={data} reload={load} />; if (view === 'security') return <SecurityView />; return <DetailedSalary data={data} />; })();
-  return <main className="teacher-portal"><header className="teacher-page-head"><div><span className="teacher-eyebrow">TEACHER WORKSPACE</span><h1>{copy[0]}</h1><p>{copy[1]}</p></div>{data ? <Status>Teacher portal</Status> : null}</header>{loading ? <div className="teacher-skeleton" aria-busy="true" aria-label="Loading teacher workspace"><i /><i /><i /></div> : error ? <div className="teacher-error" role="alert">{icon('cloud_off')}<div><strong>Couldn’t load the Teacher portal</strong><p>{error}</p></div><button type="button" onClick={() => void load()}>Try again</button></div> : content}</main>;
+  const location = useLocation();
+  const navigate = useNavigate();
+  const raw = location.pathname.split("/")[2] || "dashboard";
+  const view: TeacherView =
+    raw in VIEW_COPY ? (raw as TeacherView) : "dashboard";
+  const [data, setData] = useState<TeacherDashboard | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setData(await api.teacher.getDashboard());
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not load your teacher workspace.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    void load();
+  }, []);
+  const go = (next: TeacherView) => navigate(`/teacher/${next}`);
+  const copy = VIEW_COPY[view];
+  const content = (() => {
+    if (!data) return null;
+    if (view === "calendar")
+      return <AcademicCalendarView viewerRole="Teacher" />;
+    if (view === "dashboard")
+      return (
+        <>
+          <Dashboard data={data} go={go} />
+          <AcademicCalendarView
+            viewerRole="Teacher"
+            upcoming
+            calendarPath="/teacher/calendar"
+          />
+        </>
+      );
+    if (view === "timetable") return <Timetable data={data} />;
+    if (view === "geo-attendance")
+      return <GeoAttendance data={data} reload={load} />;
+    if (view === "attendance") return <Attendance data={data} reload={load} />;
+    if (view === "syllabus") return <TopicSyllabus data={data} reload={load} />;
+    if (view === "daily-update-log")
+      return <TopicDailyUpdate data={data} reload={load} />;
+    if (view === "homework") return <Homework data={data} reload={load} />;
+    if (view === "results")
+      return <AdminCreatedResults data={data} reload={load} />;
+    if (view === "profile") return <Profile data={data} />;
+    if (view === "leave-requests") return <Leave data={data} reload={load} />;
+    if (view === "security") return <SecurityView />;
+    return <DetailedSalary data={data} />;
+  })();
+  return (
+    <main className="teacher-portal">
+      <header className="teacher-page-head">
+        <div>
+          <span className="teacher-eyebrow">TEACHER WORKSPACE</span>
+          <h1>{copy[0]}</h1>
+          <p>{copy[1]}</p>
+        </div>
+        {data ? <Status>Teacher portal</Status> : null}
+      </header>
+      {loading ? (
+        <div
+          className="teacher-skeleton"
+          aria-busy="true"
+          aria-label="Loading teacher workspace"
+        >
+          <i />
+          <i />
+          <i />
+        </div>
+      ) : error ? (
+        <div className="teacher-error" role="alert">
+          {icon("cloud_off")}
+          <div>
+            <strong>Couldn’t load the Teacher portal</strong>
+            <p>{error}</p>
+          </div>
+          <button type="button" onClick={() => void load()}>
+            Try again
+          </button>
+        </div>
+      ) : (
+        content
+      )}
+    </main>
+  );
 }
