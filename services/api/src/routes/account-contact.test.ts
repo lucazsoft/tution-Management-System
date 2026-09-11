@@ -41,7 +41,7 @@ async function main() {
   const body = { password: 'CorrectPassword!', phone: '9800000000' };
   assert.equal((await invoke('/mobile/start', body)).status, 401);
   actor = { id: 'admin', tenantId: 'tenant', roles: [{ roleName: 'Branch Admin', branchId: 'branch' }] };
-  assert.equal((await invoke('/mobile/start', body)).status, 403);
+  assert.equal((await invoke('/mobile/start', { ...body, password: 'wrong' })).status, 403);
   actor.roles = [{ roleName: 'Tenant Admin', branchId: null }];
   assert.equal((await invoke('/mobile/start', { ...body, password: 'wrong' })).status, 403);
   process.env.SMS_PROVIDER = 'MOCK';
@@ -73,6 +73,16 @@ async function main() {
   await invoke('/mobile/start', { password: 'CorrectPassword!', verifyExisting: true });
   record.expiresAt = new Date(0);
   assert.equal((await invoke('/mobile/confirm', { challengeId: 'challenge', currentCode: codes[0] })).status, 400);
+  for (const role of ['Tenant Admin', 'Branch Admin', 'Accountant', 'Teacher', 'Parent', 'Student']) {
+    actor.roles = [{ roleName: role, branchId: role === 'Tenant Admin' ? null : 'branch' }];
+    codes.length = 0; revoked = false;
+    assert.equal((await invoke('/mobile/start', { password: 'CorrectPassword!', verifyExisting: true })).status, 200);
+    actor.id = 'other';
+    assert.equal((await invoke('/mobile/confirm', { challengeId: 'challenge', currentCode: codes[0] })).status, 400);
+    actor.id = 'admin';
+    assert.equal((await invoke('/mobile/confirm', { challengeId: 'challenge', currentCode: codes[0] })).status, 200);
+    assert.equal(revoked, true);
+  }
   phone = '';
   assert.equal((await invoke('/mobile/start', { password: 'CorrectPassword!', verifyExisting: true })).status, 409);
   assert.equal((await invoke('/mobile', {})).payload.recoveryRequired, true);

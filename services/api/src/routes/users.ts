@@ -220,7 +220,7 @@ router.get('/me/account', authMiddleware, async (req: TenantRequest, res: Respon
     .map(assignment => ({ id: assignment.id, name: assignment.role.name, branchId: assignment.branchId, branchName: assignment.branch?.name ?? null }));
   const tenantAdmin = isTenantAdmin(req.user!);
   return res.json({ ...profile, roles, mobileVerified, mobileVerifiedAt: mobileVerified ? securityMobileVerifiedAt : null,
-    capabilities: { manageInstitution: tenantAdmin, manageSecurityMobile: tenantAdmin } });
+    capabilities: { manageInstitution: tenantAdmin, manageSecurityMobile: true } });
   } catch { return res.status(500).json({ error: 'Unable to load or save your account. Please try again.' }); }
 });
 router.patch('/me/account', authMiddleware, async (req: TenantRequest, res: Response) => {

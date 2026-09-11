@@ -43,6 +43,9 @@ jobs:
       - name: Shared account menu browser regression
         run: npm run test:account-menu --workspace=web
 
+      - name: Two-step settings browser regression
+        run: npm run test:two-step-settings --workspace=web
+
       - name: API build
         run: npm run build --workspace=@tms/api
 
@@ -65,6 +68,9 @@ jobs:
 
       - name: Account profile ownership regression tests
         run: npm run test:account-profile --workspace=@tms/api
+
+      - name: Two-step setup security regression
+        run: npm run test:two-step-setup --workspace=@tms/api
 
       - name: Account contact security regression tests
         run: npm run test:account-contact --workspace=@tms/api

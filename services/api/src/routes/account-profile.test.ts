@@ -28,7 +28,7 @@ async function main() {
     const response = await invoke('get');
     assert.equal(response.status, 200);
     assert.deepEqual(response.payload.roles, [{ id: 'assignment', name: role, branchId: 'branch', branchName: 'North branch' }]);
-    assert.deepEqual(response.payload.capabilities, { manageInstitution: false, manageSecurityMobile: false });
+    assert.deepEqual(response.payload.capabilities, { manageInstitution: false, manageSecurityMobile: true });
     assert.equal((await invoke('patch', '/me/account', { firstName: 'New', lastName: 'Name' })).status, 200);
     assert.deepEqual(updates.at(-1).where, { id: 'admin', tenantId: 'tenant' });
     assert.equal((await invoke('patch', '/me/account', { firstName: 'New', lastName: 'Name', id: 'victim' })).status, 400);

@@ -1,3 +1,4 @@
+import { authClient } from '../../features/auth/auth-client';
 import { useState } from 'react';
 import { CountdownTimer } from '../../components/ui/CountdownTimer';
 import { OTPInput } from '../../components/ui/OTPInput';
@@ -15,6 +16,8 @@ const TWO_FACTOR_DURATION_SECONDS = 5 * 60;
 export function TwoFactorPage() {
   const { user, verify2FA } = useAuth();
   const { showToast } = useToast();
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const [recovery, setRecovery] = useState(false);
   const [otp, setOtp] = useState<string[]>(Array(6).fill(''));
   const [trustDevice, setTrustDevice] = useState(false);
   const [attemptsRemaining, setAttemptsRemaining] = useState(3);
@@ -89,7 +92,7 @@ export function TwoFactorPage() {
         <div className="auth-step-shell">
           <div className="auth-form-heading">
             <h1 className="auth-form-title">Two-Factor Authentication</h1>
-            <p className="auth-form-subtitle">A verification code has been sent by SMS.</p>
+            <p className="auth-form-subtitle">Enter your SMS code, or use a saved recovery code if you cannot receive SMS.</p>
           </div>
 
           <div className="auth-otp-message">Delivery target: {destinationHint}</div>
@@ -101,7 +104,13 @@ export function TwoFactorPage() {
             {attemptsRemaining} attempts remaining
           </div>
 
-          <div className="auth-form">
+          <button type="button" className="auth-link-button" disabled={isSubmitting} onClick={() => { setRecovery(value => !value); setStatusMessage(''); }}>{recovery ? 'Use SMS code' : 'Use a recovery code'}</button>
+          {recovery ? <form className="auth-form" onSubmit={async event => {
+            event.preventDefault(); if (isSubmitting) return; setIsSubmitting(true); setStatusMessage('');
+            try { const result = await authClient.twoFactor.verifyBackupCode({ code: recoveryCode.trim() }); if (result.error) throw new Error(result.error.message || 'Invalid recovery code.'); setRecoveryCode(''); await verify2FA(); }
+            catch (cause) { setStatusMessage(cause instanceof Error ? cause.message : 'Unable to verify recovery code.'); }
+            finally { setIsSubmitting(false); }
+          }}><label>Recovery code<input required autoComplete="off" disabled={isSubmitting} value={recoveryCode} onChange={event => setRecoveryCode(event.target.value)} /></label>{statusMessage && <p role="alert">{statusMessage}</p>}<button type="submit" className="auth-submit-btn" disabled={isSubmitting}>Verify recovery code</button></form> : <div className="auth-form">
             <OTPInput
               value={otp}
               onChange={(nextOtp: string[]) => {
@@ -172,7 +181,7 @@ export function TwoFactorPage() {
                 'Verify'
               )}
             </button>
-          </div>
+          </div>}
         </div>
       </div>
     </div>

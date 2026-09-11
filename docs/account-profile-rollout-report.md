@@ -16,11 +16,11 @@ This unifies personal account access; it does not replace every student, employe
 | Role | My account | Security | Shared dropdown | Edit own name | Verify/change mobile | Institution controls |
 | --- | --- | --- | --- | --- | --- | --- |
 | Tenant Admin | `/tenant/account` | `/tenant/security` | Yes | Yes | Yes, through protected SMS flow | Yes |
-| Branch Admin | `/branch/account` | `/branch/security` | Yes | Yes | Not enabled | No |
-| Accountant | `/staff/account` | `/staff/security` | Yes | Yes | Not enabled | No |
-| Teacher | `/teacher/account` | `/teacher/security` | Yes | Yes | Not enabled | No |
-| Parent | `/parent/account` | `/parent/security` | Yes | Yes | Not enabled | No |
-| Student | `/student/account` | `/student/security` | Yes | Yes | Not enabled | No |
+| Branch Admin | `/branch/account` | `/branch/security` | Yes | Yes | Yes, through protected SMS flow | No |
+| Accountant | `/staff/account` | `/staff/security` | Yes | Yes | Yes, through protected SMS flow | No |
+| Teacher | `/teacher/account` | `/teacher/security` | Yes | Yes | Yes, through protected SMS flow | No |
+| Parent | `/parent/account` | `/parent/security` | Yes | Yes | Yes, through protected SMS flow | No |
+| Student | `/student/account` | `/student/security` | Yes | Yes | Yes, through protected SMS flow | No |
 
 Capabilities are returned by the API for the signed-in user. The table describes each role in isolation; a user with a tenant-wide Tenant Admin assignment may receive that assignment’s capabilities.
 
@@ -62,7 +62,8 @@ A missing phone is explained as missing contact information. A saved phone is no
 | Administrative access | Existing API role restrictions remain; hiding menu items is not the authorization mechanism. |
 | Mobile trust | Verification belongs to the exact verified destination and cannot transfer to a different saved phone. |
 | Payment SMS | Successful confirmation records mobile verification; code binding includes user, institution, branch, action, settings, and destination. |
-| Mobile changes | Tenant Admin flow requires current password, applicable SMS codes, expiration and attempt checks, and revokes sessions after completion. |
+| Mobile changes | Every tenant-scoped role uses the same own-account flow. It requires the current password, applicable SMS codes, expiration and attempt checks, and revokes sessions after completion. |
+| Two-step setup | Enabling requires the current password, an active own account, an exact verified security mobile, configured SMS delivery, and SMS confirmation. Recovery codes are displayed for the user to save. Disabling requires the current password. |
 | Password changes | Existing authentication service verifies the current password. The UI now sends `revokeOtherSessions: true`. |
 | Password feedback | Form reference is saved before the asynchronous request; success clears fields without the former false reset error. |
 | CI | Account-profile ownership tests now run alongside existing account-contact and authentication SMS tests. |
@@ -86,14 +87,10 @@ Browser checks used mocked API responses. They verify frontend behavior, not pro
 
 ## Remaining differences and work
 
-1. **Mobile self-service for other roles:** verification and number changes remain Tenant Admin-only. Extending them requires a separate security change, including handling users without a personal number.
-2. **Two-step setup:** account pages display status but do not provide an enable/disable setup flow.
-3. **Email verification:** status is displayed; this rollout does not introduce an email verification or email-change workflow.
-4. **Teacher’s old profile:** `/teacher/profile` still exists with employment, attendance, and performance information. Its My Profile label can still be confused with My account.
-5. **Parent’s old profile:** `/parent/profile` still exists with contact and linked-student information. Renaming it and removing duplicated personal details remains proposed work.
-6. **Administrative profile drawers:** UserProfileDrawer and student record views have not been rebuilt around the shared account card. They serve selected-person administrative workflows rather than signed-in personal settings.
-7. **Unsaved name edits:** browser unload protection exists; internal navigation does not yet provide an unsaved-change confirmation.
-8. **Repeatable dropdown tests:** `apps/web/tests/account-menu.js` now covers all nine shell roles. Run `npm run test:account-menu --workspace=web`; it starts its own development server on port 5192. The CI workflow runs this suite after the web build. Tests mock authentication and API responses; they do not validate production authorization or sign-out session deletion.
+1. **Email verification:** status is displayed; this rollout does not introduce an email verification or email-change workflow.
+2. **Administrative profile drawers:** UserProfileDrawer and student record views have not been rebuilt around the shared account card. They serve selected-person administrative workflows rather than signed-in personal settings.
+3. **Unsaved name edits:** browser unload protection exists; internal navigation does not yet provide an unsaved-change confirmation.
+4. **Live delivery validation:** browser tests mock SMS. A deployment smoke test must still confirm the configured SMS provider and multi-device session revocation.
 
 ## Other roles outside this rollout
 
@@ -128,12 +125,12 @@ This Markdown report accompanies the local follow-up regression coverage. Tempor
 ## Recommended next steps
 
 1. Push the shared dropdown commit and this report, then verify the deployed menu for each role.
-2. Rename and simplify the older Teacher and Parent profile screens to remove duplicate personal-account entry points.
-3. Monitor the newly added shared-menu browser regression in CI.
-4. Implement non-Tenant Admin mobile self-service and two-step setup as separately tested security work.
+2. Verify mobile changes and two-step setup with the production SMS provider for each role.
+3. Monitor the shared-menu and two-step browser regressions in CI.
+4. Plan email verification and email-change self-service as separate security work.
 
 
-## Follow-up validation � account dropdown
+## Follow-up validation — account dropdown
 
 The repository now contains a nine-role TestCafe suite checking:
 

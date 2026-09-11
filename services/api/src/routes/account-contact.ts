@@ -4,7 +4,6 @@ import crypto from 'node:crypto';
 import prisma from '../utils/db';
 import { authMiddleware } from '../middleware/auth';
 import { TenantRequest } from '../middleware/tenant';
-import { isTenantAdmin } from '../utils/access-control';
 import { consumePersistentRateLimit } from '../utils/persistent-rate-limit';
 import { generateOtpCode, hashCode } from '../utils/otp';
 import { getSmsSender, normaliseAakashPhoneNumber } from '../utils/sms';
@@ -16,7 +15,6 @@ const binding = (tenant: string, user: string, oldPhone: string, newPhone: strin
   JSON.stringify({ tenant, user, oldPhone, newPhone, credential: hashCode(passwordHash) });
 
 router.get('/mobile', authMiddleware, async (req: TenantRequest, res) => {
-  if (!isTenantAdmin(req.user!)) return res.status(403).json({ error: 'Tenant Admin access required.' });
   try {
     const user = await prisma.user.findFirst({ where: { id: req.user!.id, tenantId: req.tenantId! } });
     if (!user) return res.status(404).json({ error: 'Account not found.' });
@@ -29,7 +27,6 @@ router.get('/mobile', authMiddleware, async (req: TenantRequest, res) => {
 });
 
 router.post('/mobile/start', authMiddleware, async (req: TenantRequest, res) => {
-  if (!isTenantAdmin(req.user!)) return res.status(403).json({ error: 'Tenant Admin access required.' });
   try {
     const limit = await consumePersistentRateLimit(`contact-change:${req.tenantId}:${req.user!.id}`, 15 * 60_000, 5);
     if (!limit.allowed) return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
@@ -60,7 +57,6 @@ router.post('/mobile/start', authMiddleware, async (req: TenantRequest, res) => 
 });
 
 router.post('/mobile/confirm', authMiddleware, async (req: TenantRequest, res) => {
-  if (!isTenantAdmin(req.user!)) return res.status(403).json({ error: 'Tenant Admin access required.' });
   const { challengeId, currentCode, newCode } = req.body ?? {};
   if (typeof challengeId !== 'string' || typeof currentCode !== 'string' || !/^\d{6}$/.test(currentCode) || (newCode !== undefined && (typeof newCode !== 'string' || !/^\d{6}$/.test(newCode)))) return res.status(400).json({ error: 'Enter the six-digit verification codes.' });
   try {

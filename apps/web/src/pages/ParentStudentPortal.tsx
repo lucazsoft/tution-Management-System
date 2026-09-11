@@ -45,7 +45,7 @@ const VIEW_COPY: Record<ParentView, [string, string]> = {
   certificates: ['Certificates', 'Permanent issued-document history for the selected child.'],
   calendar: ['Academic calendar', 'Exams, holidays, ceremonies, and fee deadlines.'],
   notifications: ['Notifications', 'Push and SMS activity scoped to the selected child.'],
-  profile: ['My profile', 'Your contact information and linked student accounts.'],
+  profile: ['Linked students', 'Student accounts connected to your parent account.'],
   security: ['Security', 'Manage your account password and security settings.'],
 };
 
@@ -215,8 +215,8 @@ function FeesView({ child }: { child: ParentChild }) {
 }
 
 function ProfileView() {
-  const { profile, children } = useParentData();
-  return <div className="parent-view"><section className="parent-card parent-profile-card"><div className="parent-profile-identity"><span className="parent-profile-avatar" aria-hidden="true">{profile.initials || icon('person')}</span><div><span className="parent-eyebrow">PARENT ACCOUNT</span><h2>{profile.name}</h2><p>Your institution manages these details. Contact the branch office if anything needs correcting.</p></div><ParentStatus label={profile.status === 'ACTIVE' ? 'Active' : profile.status.toLowerCase()} tone={profile.status === 'ACTIVE' ? 'success' : 'warning'} iconName={profile.status === 'ACTIVE' ? 'verified' : 'schedule'} /></div><dl className="parent-profile-details"><div><dt>{icon('call')}Phone number</dt><dd>{profile.phone || 'Not provided'}</dd></div><div><dt>{icon('mail')}Email address</dt><dd>{profile.email || 'Not provided'}</dd><small>{profile.emailVerified ? 'Verified email' : 'Email verification pending'}</small></div><div><dt>{icon('badge')}Account role</dt><dd>Parent</dd></div><div><dt>{icon('calendar_month')}Member since</dt><dd>{profile.memberSince}</dd></div></dl></section><section className="parent-card"><SectionHeader title="Linked students" description={`${children.length} student account${children.length === 1 ? '' : 's'} connected to your profile.`} /><div className="parent-profile-children">{children.map((child) => <article key={child.id}><span aria-hidden="true">{child.initials}</span><div><h3>{child.name}</h3><p>{child.grade} · {child.branch}</p><small>Roll {child.rollNumber}</small></div><ParentStatus label={child.blocked ? 'Blocked' : 'Active'} tone={child.blocked ? 'error' : 'success'} iconName={child.blocked ? 'lock' : 'verified'} /></article>)}</div></section></div>;
+  const { children } = useParentData();
+  return <div className="parent-view"><section className="parent-card"><SectionHeader title="Linked students" description={`${children.length} student account${children.length === 1 ? '' : 's'} connected to your profile.`} /><div className="parent-profile-children">{children.map((child) => <article key={child.id}><span aria-hidden="true">{child.initials}</span><div><h3>{child.name}</h3><p>{child.grade} · {child.branch}</p><small>Roll {child.rollNumber}</small></div><ParentStatus label={child.blocked ? 'Blocked' : 'Active'} tone={child.blocked ? 'error' : 'success'} iconName={child.blocked ? 'lock' : 'verified'} /></article>)}</div></section></div>;
 }
 function CertificatesView({ child }: { child: ParentChild }) {
   const { certificates } = useParentData();

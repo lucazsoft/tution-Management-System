@@ -13,6 +13,7 @@
     "prisma:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "test:petty-cash": "ts-node src/routes/petty-cash.test.ts",
+    "test:two-step-setup": "ts-node src/middleware/two-step-setup.test.ts",
     "test:account-contact": "ts-node src/routes/account-contact.test.ts",
     "test:account-profile": "ts-node src/routes/account-profile.test.ts",
     "test:user-management-access": "ts-node src/routes/user-management-access.test.ts",

@@ -84,7 +84,7 @@ export const DASHBOARD_NAVIGATION: Record<DashboardRole, DashboardNavItem[]> = {
     { section: 'Classroom', label: 'Daily Update Log', icon: 'note_alt', path: '/teacher/daily-update-log' },
     { section: 'Classroom', label: 'Homework', icon: 'assignment', path: '/teacher/homework' },
     { section: 'Classroom', label: 'Results', icon: 'task', path: '/teacher/results' },
-    { section: 'Personal', label: 'My Profile', icon: 'person', path: '/teacher/profile' },
+    { section: 'Personal', label: 'Employment & attendance', icon: 'badge', path: '/teacher/profile' },
     { section: 'Personal', label: 'Leave Requests', icon: 'time_to_leave', path: '/teacher/leave-requests' },
     { section: 'Personal', label: 'Salary Slips', icon: 'receipt_long', path: '/teacher/salary-slips' },
   ],
@@ -111,7 +111,7 @@ export const DASHBOARD_NAVIGATION: Record<DashboardRole, DashboardNavItem[]> = {
     { section: 'Records', label: 'Fees & Payment', icon: 'payments', path: '/parent/fees' },
     { section: 'Records', label: 'Certificates', icon: 'workspace_premium', path: '/parent/certificates' },
     { section: 'Calendar', label: 'Academic Calendar', icon: 'date_range', path: '/parent/calendar' },
-    { section: 'Settings', label: 'Profile', icon: 'person', path: '/parent/profile' },
+    { section: 'Settings', label: 'Linked students', icon: 'family_restroom', path: '/parent/profile' },
   ],
   receptionist: [
     { section: 'Front desk', label: "Today's desk", icon: 'desk', path: '/staff/reception' },
