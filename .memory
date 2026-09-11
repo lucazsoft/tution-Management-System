@@ -1,10 +1,42 @@
 # TMS Working Memory
 
-Last reconciled: 2026-08-28
+Last reconciled: 2026-09-11
 Repository: `https://github.com/lucazsoft/tution-Management-System/`
-Branch: `main`
+Branch: `ui_enhance`
 Repository baseline: `a39b2ff Merge pull request #1 from lucazsoft/staging`
-Worktree at reconciliation: deployment-hardening changes in progress
+Worktree at reconciliation: teacher daily-progress persistence and UI changes in progress
+
+## Teacher daily progress integration (2026-09-11)
+
+- A follow-up compatibility fix handles rolling deployments where the web app
+  reaches an older API instance that returns only `{ message, log }`. The UI
+  now derives confirmation from `topic.status` when available and safely falls
+  back to the persisted log/draft status and client timestamp, preventing the
+  `Cannot read properties of undefined (reading 'status')` failure.
+- The Teacher portal Daily Update Log now keeps the selected topic visible after
+  saving instead of automatically jumping to the next incomplete topic. This
+  makes the persisted completion state immediately visible and lets a teacher
+  correct it again.
+- Selecting a topic with an update for the current day restores its saved note
+  and status. The form explicitly switches to edit mode and saves again through
+  the same production API contract; today's unique topic/date log is updated
+  rather than duplicated.
+- Save controls remain disabled while the request is in flight. Successful
+  saves show an accessible inline confirmation with the authoritative status
+  and server timestamp, as well as the existing toast. Class changes select the
+  appropriate active/upcoming topic without interfering with post-save state.
+- `POST /api/teacher/syllabus/:syllabusId/topic-log` continues to enforce
+  teacher, class, tenant, syllabus, and topic ownership. Its transaction now
+  returns the persisted log, topic status, and recalculated chapter status, and
+  invalid dates return 400 instead of falling through as server errors.
+- Progress is production-persisted in `TopicProgressLog` via the existing
+  `(topicId, logDate)` upsert and synchronized to `SyllabusTopic` and
+  `SyllabusChapter`; students and Branch Admins consume those same records.
+- Verification on 2026-09-11: API `npm run build` passed after regenerating the
+  current Prisma client and installing declared dependencies. Web
+  `npm run build` passed with the existing 586 KiB entrypoint-size warning.
+  Web `npm run lint` passed with pre-existing warnings and no new Daily Update
+  Log warning. `git diff --check` passed apart from line-ending notices.
 
 ## Deployment hardening (2026-08-28)
 

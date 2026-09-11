@@ -12,7 +12,7 @@ export interface TeacherClass {
   attendance: Array<{ id: string; studentId: string; date: string; status: string }>;
   syllabi: Array<{
     id: string; subject: string;
-    chapters: Array<{ id: string; title: string; position: number; status: ChapterStatus; topics: Array<{ id: string; title: string; position: number; status: ChapterStatus; logs: Array<{ id: string; status: ChapterStatus; notes?: string | null; logDate: string }> }> }>;
+    chapters: Array<{ id: string; title: string; position: number; status: ChapterStatus; topics: Array<{ id: string; title: string; position: number; status: ChapterStatus; logs: Array<{ id: string; status: ChapterStatus; notes?: string | null; logDate: string; updatedAt?: string }> }> }>;
     dailyLogs: Array<{ id: string; chapterId: string; logDate: string; status: ChapterStatus; notes?: string | null }>;
   }>;
   homework: Array<{ id: string; subject: string; title: string; description?: string | null; contentUrl?: string | null; deadline: string; createdAt: string }>;
