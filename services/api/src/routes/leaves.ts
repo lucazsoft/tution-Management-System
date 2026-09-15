@@ -5,6 +5,7 @@ import { authMiddleware, hasPermission } from '../middleware/auth';
 import { LeaveType, LeaveStatus } from '@tms/types';
 import { MockSmsSender } from '../utils/notifications';
 import { PushNotificationService } from '../services/push-notification';
+import { recordNotification } from '../services/notification-records';
 import { canAccessBranch, hasBranchPermission, isTenantAdmin } from '../utils/access-control';
 
 const router = Router();
@@ -158,6 +159,17 @@ router.post(
         'Leave Request Submitted',
         `Your request for ${leaveType} leave starting ${startDate} is pending approval.`
       );
+      // Persistent inbox record. Fail-open: never rolls back the saved leave.
+      await recordNotification(prisma, {
+        tenantId,
+        userId: requesterUserId,
+        branchId,
+        category: 'LEAVE',
+        title: 'Leave Request Submitted',
+        body: `Your request for ${leaveType} leave starting ${startDate} is pending approval.`,
+        destination: 'leave',
+        entityId: leave.id,
+      });
       if (targetStudent) {
         const branchAdmins = await prisma.user.findMany({
           where: {
@@ -170,12 +182,25 @@ router.post(
           .map((enrollment) => enrollment.class.teacherId)
           .filter((id): id is string => Boolean(id));
         const recipients = [...new Set([...branchAdmins.map((admin) => admin.id), ...teacherIds])];
-        await Promise.all(recipients.map((userId) => PushNotificationService.sendPush(
-          tenantId,
-          userId,
-          'Student leave requested',
-          `A linked parent requested ${leaveType} leave from ${startDate} to ${endDate}.`,
-        )));
+        await Promise.all(recipients.map(async (userId) => {
+          await PushNotificationService.sendPush(
+            tenantId,
+            userId,
+            'Student leave requested',
+            `A linked parent requested ${leaveType} leave from ${startDate} to ${endDate}.`,
+          );
+          // Persistent inbox record. Fail-open: never rolls back the saved leave.
+          await recordNotification(prisma, {
+            tenantId,
+            userId,
+            branchId,
+            category: 'LEAVE',
+            title: 'Student leave requested',
+            body: `A linked parent requested ${leaveType} leave from ${startDate} to ${endDate}.`,
+            destination: 'leave',
+            entityId: leave.id,
+          });
+        }));
       }
 
       return res.status(201).json({ message: 'Leave request submitted successfully.', leave });
@@ -247,6 +272,17 @@ router.post(
         `Leave Request Update`,
         `Your request has been ${newStatus.toLowerCase()}.`
       );
+      // Persistent inbox record. Fail-open: never rolls back the saved decision.
+      await recordNotification(prisma, {
+        tenantId: req.tenantId!,
+        userId: leave.userId,
+        branchId: leave.branchId,
+        category: 'LEAVE',
+        title: 'Leave Request Update',
+        body: `Your request has been ${newStatus.toLowerCase()}.`,
+        destination: 'leave',
+        entityId: leave.id,
+      });
 
       return res.status(200).json({
         message: `Leave request successfully updated. Status: ${newStatus}`,

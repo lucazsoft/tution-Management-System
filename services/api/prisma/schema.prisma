@@ -271,6 +271,7 @@ model Tenant {
   devicePushTokens          DevicePushToken[]
   socialMediaPosts          SocialMediaPost[]
   socialPublishAttempts     SocialPublishAttempt[]
+  notifications             Notification[]
 }
 
 // 2. Branch / Center
@@ -297,6 +298,7 @@ model Branch {
   maintenanceTasks   MaintenanceTask[]
   teacherAttendance  TeacherAttendance[]
   paymentSettings    BranchPaymentSettings?
+  notifications      Notification[]
   // Phase 2 relations
   academicEvents     AcademicEvent[]
   certificates       Certificate[]
@@ -351,6 +353,7 @@ model User {
   admissionLoginDeliveries AdmissionLoginDelivery[] @relation("AdmissionLoginRecipientUser")
   authoredBroadcasts       Broadcast[]              @relation("BroadcastAuthor")
   devicePushTokens         DevicePushToken[]
+  notifications            Notification[]
 
   // Better Auth support
   name             String
@@ -374,6 +377,26 @@ model DevicePushToken {
   updatedAt DateTime    @updatedAt
 
   @@index([tenantId, userId])
+}
+
+model Notification {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branchId    String?
+  branch      Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    String
+  title       String
+  body        String
+  destination String?
+  entityId    String?
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([tenantId, userId, createdAt])
+  @@index([tenantId, userId, readAt])
 }
 
 model TwoFactor {

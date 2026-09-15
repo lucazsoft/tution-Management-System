@@ -1,19 +1,15 @@
 /// Student notifications inbox ViewModel (MVVM, MOB-104).
 ///
-/// Items are the derived notices from `GET /api/users/me/student-portal`
-/// (fee/homework/result/attendance/leave/certificate, newest first).
-///
-/// READ-STATE LIFECYCLE: no server-side mark-read endpoint exists — verified
-/// read-only in `services/api/src/routes/communication.ts` (message-thread
-/// read receipts only) and `routes/users.ts` (notifications are derived per
-/// request with a computed `unread` flag). Read state is therefore tracked
-/// locally in-memory per id, layered over the server `unread` flag.
-/// TODO: when a `PATCH /api/users/me/notifications/:id` (or equivalent)
-/// endpoint lands, persist [markRead]/[markAllRead] server-side there and
-/// keep this local set as the optimistic layer.
+/// Primary source is the server-persisted inbox `GET /api/notifications`
+/// (newest first, `readAt` read state) when the repository is wired with an
+/// HTTP client; the derived notices from `GET /api/users/me/student-portal`
+/// remain the offline fallback. Read state is persisted server-side via
+/// `POST /api/notifications/:id/read` and `/read-all`, with the local
+/// in-memory set kept as the optimistic layer when the network fails.
 library;
 
 import 'package:flutter/foundation.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/core/network/api_exception.dart';
 import 'package:tms_mobile/core/network/request_cancellation.dart';
@@ -107,7 +103,7 @@ class StudentNotificationsViewModel
       isOffline: false,
     );
     try {
-      final raw = await _repository.fetchNotifications(cancelToken: token);
+      final raw = await _loadInbox(cancelToken: token);
       state = state.copyWith(
         isLoading: false,
         notices: _applyReadState(raw),
@@ -135,8 +131,10 @@ class StudentNotificationsViewModel
     state = state.copyWith(unreadOnly: value);
   }
 
-  /// Marks one notice read (local; see file doc for the server TODO).
-  void markRead(String id) {
+  /// Marks one notice read: optimistic locally, then persisted server-side.
+  /// A network failure keeps the local state (offline cache fallback) and
+  /// never surfaces an error.
+  Future<void> markRead(String id) async {
     if (_localReadIds.add(id)) {
       state = state.copyWith(
         notices: [
@@ -148,10 +146,16 @@ class StudentNotificationsViewModel
         ],
       );
     }
+    try {
+      await _repository.markNotificationRead(id);
+    } on ApiException {
+      // Local optimistic state stands in for the server (offline fallback).
+    }
   }
 
-  /// Marks every loaded notice read (local; see file doc for the server TODO).
-  void markAllRead() {
+  /// Marks every loaded notice read: optimistic locally, then persisted
+  /// server-side with the same offline fallback as [markRead].
+  Future<void> markAllRead() async {
     _localReadIds.addAll(state.notices.map((notice) => notice.raw.id));
     state = state.copyWith(
       notices: [
@@ -159,6 +163,31 @@ class StudentNotificationsViewModel
           InboxNotice(raw: notice.raw, isRead: true),
       ],
     );
+    try {
+      await _repository.markAllNotificationsRead();
+    } on ApiException {
+      // Local optimistic state stands in for the server (offline fallback).
+    }
+  }
+
+  /// Server-persisted inbox first, portal-derived notices as the fallback
+  /// (offline cache path and repositories wired without an HTTP client).
+  Future<List<PortalNotification>> _loadInbox({
+    required CancelToken cancelToken,
+  }) async {
+    if (_repository.supportsPersistentInbox) {
+      try {
+        final page = await _repository.fetchPersistentNotifications(
+          cancelToken: cancelToken,
+        );
+        return [
+          for (final item in page.items) item.toPortalNotification(),
+        ];
+      } on ApiException {
+        // Fall through to the portal-derived inbox below.
+      }
+    }
+    return _repository.fetchNotifications(cancelToken: cancelToken);
   }
 
   @override

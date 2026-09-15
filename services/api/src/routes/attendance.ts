@@ -5,6 +5,7 @@ import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware, hasPermission } from '../middleware/auth';
 import { parseStrictKeys, readFiniteNumber, readTrimmedString } from '../utils/request-validation';
 import { nepalCalendarDate } from '../services/timetable-service';
+import { recordNotification } from '../services/notification-records';
 
 const router = Router();
 
@@ -157,6 +158,19 @@ router.post(
           },
         });
 
+      // Persistent inbox record for the teacher. Fail-open: a notification
+      // store failure must never roll back the saved IN stamp.
+      await recordNotification(prisma, {
+        tenantId: req.tenantId!,
+        userId: teacherId,
+        branchId,
+        category: 'ATTENDANCE',
+        title: 'Attendance marked IN',
+        body: `Marked IN at ${branch.name}.`,
+        destination: 'attendance',
+        entityId: stamp.id,
+      });
+
       return res.status(200).json({
         message: 'Successfully marked IN. Session attendance validated server-side.',
         stamp,
@@ -219,6 +233,19 @@ router.post(
             gpsAccuracy: Number(gpsAccuracy),
           },
         });
+
+      // Persistent inbox record for the teacher. Fail-open: a notification
+      // store failure must never roll back the saved OUT stamp.
+      await recordNotification(prisma, {
+        tenantId: req.tenantId!,
+        userId: teacherId,
+        branchId,
+        category: 'ATTENDANCE',
+        title: 'Attendance marked OUT',
+        body: `Marked OUT at ${branch.name}.`,
+        destination: 'attendance',
+        entityId: stamp.id,
+      });
 
       return res.status(200).json({
         message: 'Successfully marked OUT. Core checkout logged.',
