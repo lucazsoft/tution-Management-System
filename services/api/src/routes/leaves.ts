@@ -3,7 +3,8 @@ import prisma from '../utils/db';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware, hasPermission } from '../middleware/auth';
 import { LeaveType, LeaveStatus } from '@tms/types';
-import { MockPushNotificationService, MockSmsSender } from '../utils/notifications';
+import { getSmsSender } from '../utils/sms';
+import { getPushSender } from '../utils/push';
 import { canAccessBranch, hasBranchPermission, isTenantAdmin } from '../utils/access-control';
 
 const router = Router();
@@ -151,7 +152,7 @@ router.post(
       });
 
       // Mocks parent/admin notification on request submission
-      await MockPushNotificationService.sendPush(
+      await getPushSender().sendPush(
         requesterUserId,
         'Leave Request Submitted',
         `Your request for ${leaveType} leave starting ${startDate} is pending approval.`
@@ -168,7 +169,7 @@ router.post(
           .map((enrollment) => enrollment.class.teacherId)
           .filter((id): id is string => Boolean(id));
         const recipients = [...new Set([...branchAdmins.map((admin) => admin.id), ...teacherIds])];
-        await Promise.all(recipients.map((userId) => MockPushNotificationService.sendPush(
+        await Promise.all(recipients.map((userId) => getPushSender().sendPush(
           userId,
           'Student leave requested',
           `A linked parent requested ${leaveType} leave from ${startDate} to ${endDate}.`,
@@ -238,7 +239,7 @@ router.post(
         return res.status(409).json({ error: 'Leave request was already processed.' });
       }
 
-      await MockPushNotificationService.sendPush(
+      await getPushSender().sendPush(
         leave.userId,
         `Leave Request Update`,
         `Your request has been ${newStatus.toLowerCase()}.`
@@ -297,7 +298,7 @@ router.post(
         });
 
       // Dispatch urgent SMS notification to parents
-      const smsSender = new MockSmsSender();
+      const smsSender = getSmsSender();
       await smsSender.sendSms(
         '98510XXXXX',
         `ALERT: Emergency departure logged for your child. Reason: ${reason}. Please contact the center.`

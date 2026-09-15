@@ -471,6 +471,28 @@ model ParentMessage {
   @@index([tenantId, studentId, senderId, receiverId, createdAt])
 }
 
+model PortalNotification {
+  id          String   @id @default(uuid())
+  tenantId    String
+  userId      String
+  studentId   String?
+  sourceKey   String
+  title       String
+  message     String
+  icon        String
+  destination String
+  channels    Json?
+  urgent      Boolean  @default(false)
+  occurredAt  DateTime
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, userId, sourceKey])
+  @@index([tenantId, userId, studentId, occurredAt])
+  @@index([tenantId, userId, readAt])
+}
+
 model Broadcast {
   id            String   @id @default(uuid())
   tenantId      String

@@ -6,8 +6,10 @@ import { invoiceTotal } from '../features/parent/parentPortalData';
 import {
   loadParentNepalPayQr,
   loadParentPortal,
+  markParentNotificationsRead,
   parentFileUrl,
   requestAppointment,
+  respondToAppointment,
   requestStudentLeave,
   sendParentMessage,
 } from '../features/parent/parentPortalService';
@@ -124,26 +126,69 @@ function MessagesView({ child, refresh }: { child: ParentChild; refresh: () => v
     try { await sendParentMessage({ studentId: child.id, receiverId: teacherId, messageText: text }); setText(''); setStatus('Message sent.'); refresh(); }
     catch (error) { setStatus(errorMessage(error)); } finally { setSubmitting(false); }
   };
-  return <div className="parent-view"><div className="parent-privacy-note">{icon('shield')}<span><strong>Privacy scoped to {child.name}.</strong> Only assigned teachers are available; sibling threads stay separate.</span></div><div className="parent-message-layout"><aside className="parent-card parent-teacher-list"><SectionHeader title="Assigned teachers" description={`${teachers.length} eligible contact${teachers.length === 1 ? '' : 's'}`} />{teachers.length ? teachers.map((teacher) => <button key={teacher.id} type="button" className={teacher.id === teacherId ? 'is-active' : ''} aria-pressed={teacher.id === teacherId} onClick={() => setTeacherId(teacher.id)}><span>{teacher.initials}</span><span><strong>{teacher.name}</strong><small>{teacher.subject}</small></span>{icon('chevron_right')}</button>) : <EmptyState title="No assigned teachers" message="Teacher contacts appear after class assignment." iconName="person_off" />}</aside><section className="parent-card parent-thread"><SectionHeader title={selected?.name ?? 'Conversation'} description={selected ? `${selected.subject} · regarding ${child.name}` : undefined} />{thread.length ? <div className="parent-message-list">{thread.map((message) => <article key={message.id} className={message.sender === 'Parent' ? 'is-parent' : ''}><strong>{message.sender === 'Parent' ? 'You' : selected?.name}</strong><p>{message.text}</p><small>{message.time}</small></article>)}</div> : <EmptyState title="No messages yet" message="Messages remain in this child-and-teacher thread." iconName="forum" />}<form className="parent-composer" onSubmit={(event) => void submit(event)}><label htmlFor="parent-message">Message about {child.name}</label><textarea id="parent-message" value={text} maxLength={4000} disabled={!teacherId || submitting} onChange={(event) => setText(event.target.value)} placeholder={teacherId ? 'Write a private message…' : 'No eligible teacher selected'} />{status ? <p className={status === 'Message sent.' ? 'parent-form__notice' : 'parent-form__error'} role="status">{status}</p> : null}<button type="submit" disabled={!teacherId || !text.trim() || submitting} aria-busy={submitting}>{icon('send')}{submitting ? 'Sending…' : 'Send message'}</button></form></section></div></div>;
+  return <div className="parent-view"><div className="parent-privacy-note">{icon('shield')}<span><strong>Privacy scoped to {child.name}.</strong> Only assigned teachers and this child's Branch Admin are available; sibling threads stay separate.</span></div><div className="parent-message-layout"><aside className="parent-card parent-teacher-list"><SectionHeader title="Authorized contacts" description={`${teachers.filter((teacher) => teacher.role === 'TEACHER').length} assigned teacher${teachers.filter((teacher) => teacher.role === 'TEACHER').length === 1 ? '' : 's'} · ${teachers.filter((teacher) => teacher.role === 'BRANCH_ADMIN').length} branch support`} />{teachers.length ? teachers.sort((a, b) => a.role.localeCompare(b.role)).map((teacher) => <button key={teacher.id} type="button" className={teacher.id === teacherId ? 'is-active' : ''} aria-pressed={teacher.id === teacherId} onClick={() => setTeacherId(teacher.id)}><span>{teacher.initials}</span><span><strong>{teacher.name}</strong><small>{teacher.role === 'BRANCH_ADMIN' ? 'Branch support' : `Assigned teacher · ${teacher.subject}`}</small></span>{icon('chevron_right')}</button>) : <EmptyState title="No authorized contacts" message="Teacher and branch contacts appear after class assignment." iconName="person_off" />}</aside><section className="parent-card parent-thread"><SectionHeader title={selected?.name ?? 'Conversation'} description={selected ? `${selected.subject} · regarding ${child.name}` : undefined} />{thread.length ? <div className="parent-message-list">{thread.map((message) => <article key={message.id} className={message.sender === 'Parent' ? 'is-parent' : ''}><strong>{message.sender === 'Parent' ? 'You' : selected?.name}</strong><p>{message.text}</p><small>{message.time}</small></article>)}</div> : <EmptyState title="No messages yet" message="Messages remain in this child-and-contact thread." iconName="forum" />}<form className="parent-composer" onSubmit={(event) => void submit(event)}><label htmlFor="parent-message">Message about {child.name}</label><textarea id="parent-message" value={text} maxLength={4000} disabled={!teacherId || submitting} onChange={(event) => setText(event.target.value)} placeholder={teacherId ? 'Write a private message…' : 'No eligible contact selected'} />{status ? <p className={status === 'Message sent.' ? 'parent-form__notice' : 'parent-form__error'} role="status">{status}</p> : null}<button type="submit" disabled={!teacherId || !text.trim() || submitting} aria-busy={submitting}>{icon('send')}{submitting ? 'Sending…' : 'Send message'}</button></form></section></div></div>;
 }
 
 function AppointmentsView({ child, refresh }: { child: ParentChild; refresh: () => void }) {
-  const { appointments, bookingWindowHours } = useParentData();
+  const { appointments, bookingWindowHours, teachers } = useParentData();
+  const assignedTeachers = teachers.filter((teacher) => teacher.role === 'TEACHER');
+  const branchAdmins = teachers.filter((teacher) => teacher.role === 'BRANCH_ADMIN');
+  const [targetId, setTargetId] = useState(assignedTeachers[0]?.id ?? branchAdmins[0]?.id ?? '');
+  const [isGroup, setIsGroup] = useState(false);
+  const [participantIds, setParticipantIds] = useState<string[]>([]);
   const [scheduledAt, setScheduledAt] = useState('');
   const [remarks, setRemarks] = useState('');
   const [status, setStatus] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [negotiatingId, setNegotiatingId] = useState('');
+  const [counterTime, setCounterTime] = useState('');
+  const selectedTarget = teachers.find((teacher) => teacher.id === targetId);
+  useEffect(() => {
+    if (!teachers.some((teacher) => teacher.id === targetId)) setTargetId(teachers.find((teacher) => teacher.role === 'TEACHER')?.id ?? teachers.find((teacher) => teacher.role === 'BRANCH_ADMIN')?.id ?? '');
+  }, [child.id, teachers, targetId]);
   const submit = async (event: React.FormEvent) => {
     event.preventDefault(); setStatus('');
-    if (!child.branchId) return setStatus('A branch must be assigned before requesting an appointment.');
+    if (!selectedTarget) return setStatus('Choose an assigned teacher or Branch Admin.');
+    if (selectedTarget.role === 'BRANCH_ADMIN' && !child.branchId) return setStatus('A branch must be assigned before requesting an appointment.');
     if (!scheduledAt) return setStatus('Choose a date and time.');
     if (new Date(scheduledAt).getTime() < Date.now() + bookingWindowHours * 3600000) return setStatus(`Appointments must be requested at least ${bookingWindowHours} hours in advance.`);
     setSubmitting(true);
-    try { await requestAppointment({ studentId: child.id, branchId: child.branchId, target: 'BRANCH_ADMIN', scheduledTime: new Date(scheduledAt).toISOString(), remarks }); setStatus('Appointment requested.'); setScheduledAt(''); setRemarks(''); refresh(); }
+    try {
+      await requestAppointment({
+        studentId: child.id,
+        branchId: child.branchId,
+        teacherId: selectedTarget.role === 'TEACHER' ? selectedTarget.id : undefined,
+        target: selectedTarget.role,
+        scheduledTime: new Date(scheduledAt).toISOString(),
+        remarks,
+        isGroup: selectedTarget.role === 'TEACHER' && isGroup,
+        participantIds: selectedTarget.role === 'TEACHER' && isGroup ? participantIds : undefined,
+      });
+      setStatus('Appointment requested.'); setScheduledAt(''); setRemarks(''); setParticipantIds([]); setIsGroup(false); refresh();
+    }
     catch (error) { setStatus(errorMessage(error)); } finally { setSubmitting(false); }
   };
+  const negotiate = async (appointmentId: string, action: 'ACCEPT_ALTERNATIVE' | 'REJECT_ALTERNATIVE' | 'PROPOSE_ALTERNATIVE') => {
+    setSubmitting(true); setStatus('');
+    try {
+      await respondToAppointment({ appointmentId, action, alternativeSlot: action === 'PROPOSE_ALTERNATIVE' && counterTime ? new Date(counterTime).toISOString() : undefined });
+      setStatus(action === 'ACCEPT_ALTERNATIVE' ? 'Alternative time accepted.' : action === 'REJECT_ALTERNATIVE' ? 'Alternative time rejected.' : 'Another time proposed.');
+      setNegotiatingId(''); setCounterTime(''); refresh();
+    } catch (error) { setStatus(errorMessage(error)); } finally { setSubmitting(false); }
+  };
   const minimumDateTime = new Date(Date.now() + bookingWindowHours * 3600000).toISOString().slice(0, 16);
-  return <div className="parent-view"><section className="parent-card"><SectionHeader title="Appointment history" description={`Branch Admin meeting requests for ${child.name}.`} />{appointments.length ? <div className="parent-appointment-list">{appointments.map((appointment) => <article key={appointment.id}><div><ParentStatus label={appointment.state} tone={toneForAppointment(appointment.state)} iconName="event" /><h3>{appointment.teacher}</h3><p>{appointment.subject}</p>{appointment.responseMessage ? <small>{appointment.responseMessage}</small> : null}</div><dl><div><dt>{appointment.state === 'Confirmed' ? 'Confirmed for' : 'Preferred time'}</dt><dd>{appointment.requestedTime}</dd></div></dl></article>)}</div> : <EmptyState title="No appointment requests" message="Request a meeting with the Branch Admin when you need branch-level support." iconName="event" />}</section><section className="parent-card"><SectionHeader title="Request a Branch Admin appointment" description={`${child.branch} · requests must be at least ${bookingWindowHours} hours in advance.`} /><form className="parent-form" onSubmit={(event) => void submit(event)}><label htmlFor="parent-appointment-time">Preferred date and time</label><input id="parent-appointment-time" type="datetime-local" min={minimumDateTime} value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} aria-invalid={status && status !== 'Appointment requested.' ? 'true' : undefined} aria-describedby={status ? 'parent-appointment-status' : undefined} required /><label htmlFor="parent-appointment-reason">Reason for meeting</label><textarea id="parent-appointment-reason" value={remarks} maxLength={2000} onChange={(event) => setRemarks(event.target.value)} required placeholder={`For example: discuss ${child.name}’s enrollment or branch support`} /><small>The Branch Admin may confirm this time or send a different date and time.</small>{status ? <p id="parent-appointment-status" className={status === 'Appointment requested.' ? 'parent-form__notice' : 'parent-form__error'} role={status === 'Appointment requested.' ? 'status' : 'alert'}>{status}</p> : null}<button className="parent-primary-button" type="submit" disabled={!child.branchId || submitting} aria-busy={submitting}>{icon('event_upcoming')}{submitting ? 'Requesting…' : 'Send request to Branch Admin'}</button></form></section></div>;
+  return <div className="parent-view">
+    <section className="parent-card"><SectionHeader title="Appointment history" description={`Teacher and branch meetings for ${child.name}. Original requests and alternatives remain linked.`} />
+      {appointments.length ? <div className="parent-appointment-list">{appointments.map((appointment) => <article key={appointment.id}><div><ParentStatus label={appointment.state} tone={toneForAppointment(appointment.state)} iconName="event" /><h3>{appointment.teacher}</h3><p>{appointment.subject}</p>{appointment.responseMessage ? <small>{appointment.responseMessage}</small> : null}{appointment.originalAppointmentId ? <small>Linked alternative to request {appointment.originalAppointmentId.slice(0, 8)}</small> : null}{appointment.participants.length > 1 ? <ul className="parent-appointment-participants" aria-label="Participant approvals">{appointment.participants.map((participant) => <li key={participant.id}><span>{participant.name}</span><b>{participant.approval.toLowerCase()}</b></li>)}</ul> : null}</div><dl><div><dt>{appointment.state === 'Confirmed' ? 'Confirmed for' : 'Preferred time'}</dt><dd>{appointment.requestedTime}</dd></div>{appointment.alternativeTime ? <div><dt>Alternative proposed</dt><dd>{appointment.alternativeTime}</dd></div> : null}{appointment.state === 'Alternative proposed' ? <div className="parent-appointment-actions"><button type="button" disabled={submitting} onClick={() => void negotiate(appointment.id, 'ACCEPT_ALTERNATIVE')}>Accept</button><button type="button" disabled={submitting} onClick={() => void negotiate(appointment.id, 'REJECT_ALTERNATIVE')}>Reject</button><button type="button" disabled={submitting} onClick={() => setNegotiatingId(appointment.id)}>Propose another</button></div> : null}{negotiatingId === appointment.id ? <div className="parent-counter-time"><label htmlFor={`counter-${appointment.id}`}>Another date and time</label><input id={`counter-${appointment.id}`} type="datetime-local" min={minimumDateTime} value={counterTime} onChange={(event) => setCounterTime(event.target.value)} /><button type="button" disabled={!counterTime || submitting} onClick={() => void negotiate(appointment.id, 'PROPOSE_ALTERNATIVE')}>Send proposal</button></div> : null}</dl></article>)}</div> : <EmptyState title="No appointment requests" message="Request a meeting with an assigned teacher or Branch Admin." iconName="event" />}
+    </section>
+    <section className="parent-card"><SectionHeader title="Request an appointment" description={`${child.branch} · requests must be at least ${bookingWindowHours} hours in advance.`} /><form className="parent-form" onSubmit={(event) => void submit(event)}>
+      <label htmlFor="parent-appointment-target">Meet with</label><select id="parent-appointment-target" value={targetId} onChange={(event) => { setTargetId(event.target.value); setParticipantIds([]); setIsGroup(false); }} required><optgroup label="Assigned teachers">{assignedTeachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.name} - {teacher.subject}</option>)}</optgroup><optgroup label="Branch support">{branchAdmins.map((admin) => <option key={admin.id} value={admin.id}>{admin.name}</option>)}</optgroup></select>
+      {selectedTarget?.role === 'TEACHER' && assignedTeachers.length > 1 ? <fieldset className="parent-appointment-group"><legend>Meeting type</legend><label><input type="radio" name="meeting-type" checked={!isGroup} onChange={() => { setIsGroup(false); setParticipantIds([]); }} /> Individual</label><label><input type="radio" name="meeting-type" checked={isGroup} onChange={() => setIsGroup(true)} /> Group meeting</label>{isGroup ? <div><span>Additional assigned teachers</span>{assignedTeachers.filter((teacher) => teacher.id !== selectedTarget.id).map((teacher) => <label key={teacher.id}><input type="checkbox" checked={participantIds.includes(teacher.id)} onChange={(event) => setParticipantIds((current) => event.target.checked ? [...current, teacher.id] : current.filter((id) => id !== teacher.id))} /> {teacher.name} - {teacher.subject}</label>)}</div> : null}</fieldset> : null}
+      <label htmlFor="parent-appointment-time">Preferred date and time</label><input id="parent-appointment-time" type="datetime-local" min={minimumDateTime} value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} aria-invalid={status && !status.endsWith('requested.') ? 'true' : undefined} aria-describedby={status ? 'parent-appointment-status' : undefined} required />
+      <label htmlFor="parent-appointment-reason">Reason for meeting</label><textarea id="parent-appointment-reason" value={remarks} maxLength={2000} onChange={(event) => setRemarks(event.target.value)} required placeholder={`For example: discuss ${child.name}'s progress or branch support`} /><small>Staff may confirm this time or propose a different date and time.</small>
+      {status ? <p id="parent-appointment-status" className={status.includes('requested.') || status.includes('accepted.') || status.includes('proposed.') ? 'parent-form__notice' : 'parent-form__error'} role="status">{status}</p> : null}<button className="parent-primary-button" type="submit" disabled={!selectedTarget || submitting} aria-busy={submitting}>{icon('event_upcoming')}{submitting ? 'Requesting…' : `Send request to ${selectedTarget?.role === 'BRANCH_ADMIN' ? 'Branch Admin' : 'teacher'}`}</button>
+    </form></section>
+  </div>;
 }
 
 function LeaveView({ child, refresh }: { child: ParentChild; refresh: () => void }) {
@@ -248,10 +293,9 @@ export function ParentStudentPortal() {
   }, [location.pathname, requestedChildId, reloadKey]);
   const activeChildId = data?.selected?.id;
   useEffect(() => {
-    if (!activeChildId) return;
-    try { setReadIds(new Set(JSON.parse(localStorage.getItem(`tms_parent_read_notifications:${activeChildId}`) || '[]'))); }
-    catch { setReadIds(new Set()); }
-  }, [activeChildId]);
+    if (!data || !activeChildId) return;
+    setReadIds(new Set(data.notifications.filter((notice) => !notice.unread).map((notice) => notice.id)));
+  }, [activeChildId, data]);
   if (loadError) return <div className="parent-portal"><div className="parent-unavailable" role="alert">{icon('cloud_off')}<div><strong>Couldn’t load the parent portal</strong><p>{loadError}</p><button type="button" onClick={() => setReloadKey((value) => value + 1)}>Try again</button></div></div></div>;
   if (!data || (requestedChildId && data.selected?.id !== requestedChildId)) return <div className="parent-portal parent-loading" aria-busy="true" aria-label="Loading parent portal"><div /><div /><div /></div>;
   if (!data.selected) return <div className="parent-portal"><EmptyState title="No linked students" message="Ask the institution to link your child to this parent account." iconName="family_restroom" /></div>;
@@ -259,7 +303,7 @@ export function ParentStudentPortal() {
   const [title, subtitle] = VIEW_COPY[view];
   const go = (next: ParentView) => navigate(`/parent/${next}?child=${child.id}`);
   const refresh = () => setReloadKey((value) => value + 1);
-  const storeRead = (ids: Set<string>) => { setReadIds(ids); localStorage.setItem(`tms_parent_read_notifications:${child.id}`, JSON.stringify([...ids])); };
+  const storeRead = (ids: Set<string>) => { const previous = readIds; setReadIds(ids); void markParentNotificationsRead([...ids]).catch(() => setReadIds(previous)); };
   const unread = data.notifications.filter((notice) => notice.unread && !readIds.has(notice.id)).length;
   const content = view === 'home' ? <DashboardView child={child} go={go} />
     : view === 'timetable' ? <TimetableView child={child} />

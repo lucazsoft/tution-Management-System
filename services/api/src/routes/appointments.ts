@@ -3,7 +3,8 @@ import { Router, Response } from 'express';
 import prisma from '../utils/db';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware } from '../middleware/auth';
-import { MockPushNotificationService, MockSmsSender } from '../utils/notifications';
+import { getSmsSender } from '../utils/sms';
+import { getPushSender } from '../utils/push';
 import { canAccessBranch, isTenantAdmin, managedBranchIds } from '../utils/access-control';
 
 const router = Router();
@@ -25,11 +26,12 @@ async function notifyAppointmentUsers(userIds: string[], title: string, message:
     where: { id: { in: uniqueIds } },
     select: { id: true, phone: true },
   });
-  const smsSender = new MockSmsSender();
-  await Promise.all(users.flatMap((user) => [
-    MockPushNotificationService.sendPush(user.id, title, message),
+  const smsSender = getSmsSender();
+  const results = await Promise.all(users.flatMap((user) => [
+    getPushSender().sendPush(user.id, title, message),
     ...(user.phone ? [smsSender.sendSms(user.phone, `${title}: ${message}`)] : []),
   ]));
+  return results.every((result) => result.success);
 }
 
 router.post('/request', authMiddleware, async (req: TenantRequest, res: Response) => {
@@ -99,8 +101,8 @@ router.post('/request', authMiddleware, async (req: TenantRequest, res: Response
       where: { tenantId: req.tenantId!, status: 'ACTIVE', userRoles: { some: { branchId: { in: branchIds }, role: { name: 'Branch Admin' } } } },
       select: { id: true },
     });
-    await notifyAppointmentUsers([...uniqueParticipants, ...branchAdmins.map((admin) => admin.id)], 'Appointment requested', `A parent requested an appointment about ${student.user.firstName}.`);
-    return res.status(201).json({ message: 'Appointment requested.', appointment, bookingWindowHours: tenant.appointmentWindowHours });
+    const notificationDelivered = await notifyAppointmentUsers([...uniqueParticipants, ...branchAdmins.map((admin) => admin.id)], 'Appointment requested', `A parent requested an appointment about ${student.user.firstName}.`);
+    return res.status(201).json({ message: 'Appointment requested.', appointment, bookingWindowHours: tenant.appointmentWindowHours, notificationDelivered });
   } catch (error: any) {
     return res.status(500).json({ error: 'Failed to request appointment.', details: error.message });
   }
@@ -112,7 +114,7 @@ router.post('/respond/:appointmentId', authMiddleware, async (req: TenantRequest
     let notificationDelivered = true;
     if (result.notify) {
       try {
-        await notifyAppointmentUsers([result.requestedById], 'Appointment updated', `Appointment status: ${result.appointment.status}.`);
+        notificationDelivered = await notifyAppointmentUsers([result.requestedById], 'Appointment updated', `Appointment status: ${result.appointment.status}.`);
       } catch {
         notificationDelivered = false;
       }
@@ -121,6 +123,68 @@ router.post('/respond/:appointmentId', authMiddleware, async (req: TenantRequest
   } catch (error) {
     if (error instanceof AppointmentDecisionError) return res.status(error.status).json({ error: error.message });
     return res.status(500).json({ error: 'Failed to respond to appointment.' });
+  }
+});
+
+router.post('/parent-respond/:appointmentId', authMiddleware, async (req: TenantRequest, res: Response) => {
+  const action = typeof req.body?.action === 'string' ? req.body.action : '';
+  const remarks = typeof req.body?.remarks === 'string' ? req.body.remarks.trim() : '';
+  if (!['ACCEPT_ALTERNATIVE', 'REJECT_ALTERNATIVE', 'PROPOSE_ALTERNATIVE'].includes(action)) {
+    return res.status(400).json({ error: 'Action must accept, reject, or counter the proposed time.' });
+  }
+  if (remarks.length > 5000) return res.status(400).json({ error: 'Remarks must be 5000 characters or fewer.' });
+  try {
+    const appointment = await prisma.appointment.findFirst({
+      where: {
+        id: req.params.appointmentId,
+        tenantId: req.tenantId!,
+        requestedById: req.user!.id,
+        student: { studentParents: { some: { parent: { userId: req.user!.id } } } },
+      },
+    });
+    if (!appointment) return res.status(404).json({ error: 'Appointment negotiation was not found.' });
+    if (!['REQUESTED', 'APPROVED', 'ALTERNATIVE_PROPOSED'].includes(appointment.status)) {
+      return res.status(409).json({ error: 'This appointment is already closed.' });
+    }
+    const rootId = appointment.originalAppointmentId ?? appointment.id;
+    const linkedAlternative = appointment.status === 'ALTERNATIVE_PROPOSED'
+      ? await prisma.appointment.findFirst({ where: { tenantId: req.tenantId!, originalAppointmentId: appointment.id }, orderBy: { createdAt: 'desc' } })
+      : appointment;
+    if (action === 'ACCEPT_ALTERNATIVE') {
+      if (!linkedAlternative || appointment.status !== 'ALTERNATIVE_PROPOSED') return res.status(409).json({ error: 'There is no alternative time to accept.' });
+      const updated = await prisma.appointment.update({
+        where: { id: linkedAlternative.id },
+        data: { responseRemarks: remarks || 'Parent accepted the proposed time.' },
+      });
+      await notifyAppointmentUsers((Array.isArray(updated.participantIds) ? updated.participantIds : [updated.teacherId]).filter((id): id is string => typeof id === 'string'), 'Alternative time accepted', 'The parent accepted the proposed appointment time.');
+      return res.json({ message: 'Alternative time accepted. Waiting for final participant approval.', appointment: updated });
+    }
+    if (action === 'REJECT_ALTERNATIVE') {
+      if (!linkedAlternative || appointment.status !== 'ALTERNATIVE_PROPOSED') return res.status(409).json({ error: 'There is no alternative time to reject.' });
+      const updated = await prisma.appointment.update({ where: { id: linkedAlternative.id }, data: { status: 'REJECTED', responseRemarks: remarks || 'Parent rejected the proposed time.' } });
+      await notifyAppointmentUsers((Array.isArray(updated.participantIds) ? updated.participantIds : [updated.teacherId]).filter((id): id is string => typeof id === 'string'), 'Alternative time rejected', 'The parent rejected the proposed appointment time.');
+      return res.json({ message: 'Alternative time rejected.', appointment: updated });
+    }
+    const alternativeDate = new Date(req.body?.alternativeSlot);
+    const tenant = await prisma.tenant.findUnique({ where: { id: req.tenantId! }, select: { appointmentWindowHours: true } });
+    const minimum = Date.now() + (tenant?.appointmentWindowHours ?? 24) * 3600000;
+    if (!Number.isFinite(alternativeDate.getTime()) || alternativeDate.getTime() < minimum) {
+      return res.status(422).json({ error: `Choose a time at least ${tenant?.appointmentWindowHours ?? 24} hours in advance.` });
+    }
+    const participants = (Array.isArray(appointment.participantIds) ? appointment.participantIds : [appointment.teacherId]).filter((id): id is string => typeof id === 'string');
+    const created = await prisma.$transaction(async (tx) => {
+      await tx.appointment.update({ where: { id: appointment.id }, data: { status: 'ALTERNATIVE_PROPOSED', alternativeTime: alternativeDate, responseRemarks: remarks || 'Parent proposed another time.' } });
+      return tx.appointment.create({ data: {
+        tenantId: appointment.tenantId, studentId: appointment.studentId, requestedById: appointment.requestedById,
+        teacherId: appointment.teacherId, scheduledTime: alternativeDate, status: 'REQUESTED', isGroup: appointment.isGroup,
+        participantIds: participants, participantApprovals: Object.fromEntries(participants.map((id) => [id, 'PENDING'])),
+        remarks: appointment.remarks, responseRemarks: remarks || 'Parent proposed another time.', originalAppointmentId: rootId,
+      } });
+    });
+    await notifyAppointmentUsers(participants, 'New appointment time proposed', 'The parent proposed another appointment time.');
+    return res.status(201).json({ message: 'Another time proposed.', appointment: created });
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Failed to update appointment negotiation.', details: error.message });
   }
 });
 router.get('/branch', authMiddleware, async (req: TenantRequest, res: Response) => {

@@ -79,6 +79,7 @@ export interface ParentTeacher {
   name: string;
   subject: string;
   initials: string;
+  role: 'TEACHER' | 'BRANCH_ADMIN';
 }
 
 export interface ParentMessage {
@@ -101,6 +102,8 @@ export interface ParentAppointment {
   responseDescription?: string;
   state: AppointmentState;
   group: boolean;
+  originalAppointmentId?: string;
+  participants: Array<{ id: string; name: string; approval: 'PENDING' | 'APPROVED' | 'REJECTED' }>;
 }
 
 export interface ParentLeave {

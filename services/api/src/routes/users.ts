@@ -24,6 +24,8 @@ import { salaryStructureFor, type SupportedContractType } from '../services/payr
 import { getAdmissionTenure } from '../utils/nepali';
 import { privateImageUrl, storePrivateBytes } from '../services/object-storage';
 import { normalizeStudentPhoto } from '../services/student-photo';
+import { classAverageByAssessment, classAverageOnScale, type PublishedScoreLike } from '../utils/result-averages';
+import { persistPortalNotifications } from '../services/portal-notifications';
 
 const router = Router();
 
@@ -670,9 +672,8 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
         studentAttendance: {
           include: { class: { include: { course: true } } },
           orderBy: { date: 'desc' },
-          take: 60,
         },
-        invoices: { include: { branch: { select: { name: true } } }, orderBy: { dueDate: 'desc' }, take: 12 },
+        invoices: { include: { branch: { select: { name: true } } }, orderBy: { dueDate: 'desc' } },
         certificates: { include: { template: true }, orderBy: { issuedDate: 'desc' } },
       },
     });
@@ -697,19 +698,36 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
       prisma.academicEvent.findMany({
         where: await calendarAccessWhere(req.user!, req.tenantId!, { viewerRole: 'Student' }),
         orderBy: { startDate: 'asc' },
-        take: 100,
       }),
       prisma.leave.findMany({
         where: { tenantId: req.tenantId!, userId: student.userId },
         orderBy: { updatedAt: 'desc' },
-        take: 30,
       }),
       prisma.studentScore.findMany({
         where: { tenantId: req.tenantId!, studentId: student.id, publishedAt: { not: null } },
         orderBy: { testDate: 'desc' },
-        take: 100,
       }),
     ]);
+
+    const resultDefinitionIds = scoreRows.map((row) => row.resultDefinitionId).filter((id): id is string => Boolean(id));
+    const legacyScoreGroups = scoreRows.filter((row) => !row.resultDefinitionId);
+    const peerScoreRows = scoreRows.length ? await prisma.studentScore.findMany({
+      where: {
+        tenantId: req.tenantId!,
+        publishedAt: { not: null },
+        OR: [
+          ...(resultDefinitionIds.length ? [{ resultDefinitionId: { in: resultDefinitionIds } }] : []),
+          ...legacyScoreGroups.map((row) => ({ resultDefinitionId: null, subject: row.subject, assessment: row.assessment, testDate: row.testDate })),
+        ],
+      },
+      select: { id: true, resultDefinitionId: true, subject: true, assessment: true, testDate: true, score: true, maximum: true },
+    }) : [];
+    const peerScores: PublishedScoreLike[] = peerScoreRows.map((row) => ({
+      ...row,
+      score: Number(row.score),
+      maximum: Number(row.maximum),
+    }));
+    const classAverages = classAverageByAssessment(peerScores);
 
     const parseNumericGrade = (value: string | null | undefined) => {
       if (!value) return null;
@@ -810,11 +828,13 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
     });
 
     const results = [
-      ...scoreRows.map((row) => ({
-        id: row.id, subject: row.subject, assessment: row.assessment, score: Number(row.score), maximum: Number(row.maximum),
+      ...scoreRows.map((row) => {
+        const normalized: PublishedScoreLike = { ...row, score: Number(row.score), maximum: Number(row.maximum) };
+        return {
+        id: row.id, subject: row.subject, assessment: row.assessment, score: normalized.score, maximum: normalized.maximum,
         passMarks: row.passMarks == null ? undefined : Number(row.passMarks), percentile: row.percentile == null ? undefined : Number(row.percentile),
-        resultSheetUrl: row.resultSheetUrl ?? undefined, classAverage: Number(row.score), publishedLabel: `Shared ${formatDate(row.publishedAt!)}`,
-      })),
+        resultSheetUrl: row.resultSheetUrl ?? undefined, classAverage: classAverageOnScale(normalized, classAverages), publishedLabel: `Shared ${formatDate(row.publishedAt!)}`,
+      }}),
       ...homeworkResults,
     ];
     const syllabi = student.enrollments.flatMap((enrollment) => enrollment.class.syllabi.map((syllabus) => ({
@@ -917,7 +937,7 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
       };
     });
 
-    const notifications = [
+    const generatedNotifications = [
       ...student.invoices
         .filter((invoice) => invoice.status === 'OVERDUE' || (invoice.status === 'UNPAID' && invoice.dueDate.getTime() - Date.now() <= 3 * 86400000))
         .map((invoice) => ({
@@ -932,7 +952,6 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
         })),
       ...homeworkRows
         .filter((row) => !row.submissions.some((submission) => submission.studentId === student.id))
-        .slice(0, 5)
         .map((row) => ({
           id: `homework-${row.id}`,
           title: 'Homework assigned',
@@ -956,7 +975,7 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
           unread: submission.updatedAt.getTime() >= Date.now() - 7 * 86400000,
         }] : [];
       }),
-      ...student.studentAttendance.slice(0, 10).map((record) => ({
+      ...student.studentAttendance.map((record) => ({
         id: `attendance-${record.id}`,
         title: 'Attendance marked',
         message: `${record.class.course.name}: ${attendanceLabel(record.status)} on ${formatDate(record.date)}.`,
@@ -978,7 +997,7 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
           destination: '/student/attendance',
           unread: leave.updatedAt.getTime() >= Date.now() - 7 * 86400000,
         })),
-      ...student.certificates.slice(0, 5).map((certificate) => ({
+      ...student.certificates.map((certificate) => ({
         id: `certificate-${certificate.id}`,
         title: 'Certificate issued',
         message: `${certificate.template.name} is ready to download.`,
@@ -989,6 +1008,7 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
         unread: certificate.issuedDate.getTime() >= Date.now() - 7 * 86400000,
       })),
     ].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+    const notifications = await persistPortalNotifications(req.tenantId!, req.user!.id, generatedNotifications);
 
     const assignedBranch = student.user.userRoles.find((role) => role.branch)?.branch ?? student.enrollments[0]?.class.branch;
     return res.json({
@@ -1001,7 +1021,7 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
         grade: student.grade?.name ?? 'Grade not assigned',
         branch: assignedBranch?.name ?? 'Branch not assigned',
         branchAddress: assignedBranch?.address,
-        rollNumber: student.id.slice(0, 6).toUpperCase(),
+        rollNumber: student.admissionNumber ?? student.id.slice(0, 6).toUpperCase(),
         enrollmentId: student.id,
         academicYear: `${new Date().getFullYear()}/${String(new Date().getFullYear() + 1).slice(-2)}`,
         validUntil: 'While actively enrolled',

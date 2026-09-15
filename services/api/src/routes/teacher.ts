@@ -250,11 +250,14 @@ router.post('/syllabus/:syllabusId/log', authMiddleware, async (req: TenantReque
     if (!syllabus) return res.status(404).json({ error: 'Owned syllabus chapter not found.' });
     const date = logDate ? new Date(logDate) : new Date(); date.setHours(0, 0, 0, 0);
     const [log] = await prisma.$transaction([
-      prisma.dailyLessonLog.upsert({ where: { chapterId_logDate: { chapterId, logDate: date } }, create: { syllabusId: syllabus.id, chapterId, teacherId: req.user!.id, classId: syllabus.classId, logDate: date, status, notes: notes?.trim() || null }, update: { status, notes: notes?.trim() || null } }),
+      prisma.dailyLessonLog.create({ data: { syllabusId: syllabus.id, chapterId, teacherId: req.user!.id, classId: syllabus.classId, logDate: date, status, notes: notes?.trim() || null } }),
       prisma.syllabusChapter.update({ where: { id: chapterId }, data: { status } }),
     ]);
     return res.json({ message: 'Daily syllabus progress shared with students.', log });
-  } catch (error: any) { return res.status(500).json({ error: 'Failed to update syllabus progress.', details: error.message }); }
+  } catch (error: any) {
+    if (error.code === 'P2002') return res.status(409).json({ error: 'Today’s update is already published and cannot be changed. Create the next update on the next class day.' });
+    return res.status(500).json({ error: 'Failed to update syllabus progress.', details: error.message });
+  }
 });
 
 router.post('/syllabus/:syllabusId/topic-log', authMiddleware, async (req: TenantRequest, res: Response) => {
@@ -268,7 +271,7 @@ router.post('/syllabus/:syllabusId/topic-log', authMiddleware, async (req: Tenan
     if (Number.isNaN(date.getTime())) return res.status(400).json({ error: 'A valid progress date is required.' });
     date.setHours(0, 0, 0, 0);
     const saved = await prisma.$transaction(async (tx) => {
-      const saved = await tx.topicProgressLog.upsert({ where: { topicId_logDate: { topicId, logDate: date } }, create: { topicId, teacherId: req.user!.id, classId: syllabus.classId, logDate: date, status, notes: String(notes || '').trim() || null }, update: { status, notes: String(notes || '').trim() || null } });
+      const saved = await tx.topicProgressLog.create({ data: { topicId, teacherId: req.user!.id, classId: syllabus.classId, logDate: date, status, notes: String(notes || '').trim() || null } });
       const updatedTopic = await tx.syllabusTopic.update({ where: { id: topicId }, data: { status } });
       const topics = await tx.syllabusTopic.findMany({ where: { chapterId: topic.chapterId }, select: { status: true } });
       const chapterStatus = topics.every((item) => item.status === 'COMPLETED') ? 'COMPLETED' : topics.some((item) => item.status === 'IN_PROGRESS' || item.status === 'COMPLETED') ? 'IN_PROGRESS' : 'LEFT';
@@ -276,7 +279,10 @@ router.post('/syllabus/:syllabusId/topic-log', authMiddleware, async (req: Tenan
       return { log: saved, topic: updatedTopic, chapter: updatedChapter };
     });
     return res.json({ message: 'Topic progress saved and shared with students and Branch Admin.', ...saved });
-  } catch (error: any) { return res.status(500).json({ error: 'Failed to update topic progress.', details: error.message }); }
+  } catch (error: any) {
+    if (error.code === 'P2002') return res.status(409).json({ error: 'Today’s update is already published and cannot be changed. Create the next update on the next class day.' });
+    return res.status(500).json({ error: 'Failed to update topic progress.', details: error.message });
+  }
 });
 
 router.post('/syllabus/:syllabusId/topics', authMiddleware, async (req: TenantRequest, res: Response) => {

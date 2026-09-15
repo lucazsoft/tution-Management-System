@@ -383,6 +383,10 @@
 .student-assignment-list article:last-child, .student-certificate-list article:last-child { border-bottom: 0; }
 .student-assignment-list article > div { flex: 1; }
 .student-assignment-list h3, .student-certificate-list h3 { margin-top: 4px; font-size: 15px; }
+.student-assignment__description { max-width: 70ch; }
+.student-assignment__files { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.student-assignment__files a { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 7px 10px; border: 1px solid var(--student-border); border-radius: 7px; color: var(--student-primary); font-size: 12px; font-weight: 700; text-decoration: none; }
+.student-assignment__remarks { display: block; margin-top: 8px; color: var(--student-muted); }
 .student-assignment-list p, .student-certificate-list p { margin-top: 4px; color: var(--student-muted); font-size: 12px; }
 .student-assignment__due { flex: 0 0 180px !important; text-align: right; }
 .student-assignment__due small, .student-assignment__due strong { display: block; }
