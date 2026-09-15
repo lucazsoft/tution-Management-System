@@ -52,12 +52,12 @@ class TeacherClassDetailScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            _SectionHeader(
+            const _SectionHeader(
               title: 'Class tools',
               subtitle: 'Daily workflows for this class',
             ),
             const SizedBox(height: 8),
-            _ToolTile(
+            const _ToolTile(
               icon: Icons.fact_check_outlined,
               title: 'Class attendance',
               subtitle: 'Use the Attendance tab to mark today\'s roster',
