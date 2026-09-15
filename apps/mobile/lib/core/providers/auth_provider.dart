@@ -43,9 +43,9 @@ class AuthState {
     if (isTwoFactorPending) return '/2fa';
 
     return switch (user!.role) {
-      RoleCodes.tenantAdmin => '/tenant/home',
-      RoleCodes.branchAdmin => '/branch/home',
-      RoleCodes.janitor => '/janitor/home',
+      RoleCodes.tenantAdmin => '/unsupported-role',
+      RoleCodes.branchAdmin => '/unsupported-role',
+      RoleCodes.janitor => '/unsupported-role',
       RoleCodes.teacher => '/teacher/home',
       RoleCodes.student => '/student/home',
       RoleCodes.parent => '/parent/home',

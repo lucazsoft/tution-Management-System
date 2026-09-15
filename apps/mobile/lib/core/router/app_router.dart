@@ -28,11 +28,7 @@ import 'package:tms_mobile/features/student/screens/student_attendance_screen.da
 import 'package:tms_mobile/features/student/screens/student_calendar_screen.dart';
 import 'package:tms_mobile/features/student/screens/student_certificates_screen.dart';
 import 'package:tms_mobile/features/student/screens/student_notifications_screen.dart';
-import 'package:tms_mobile/features/branch_manager/screens/branch_home_screen.dart';
-import 'package:tms_mobile/features/janitor/screens/janitor_home_screen.dart';
-import 'package:tms_mobile/features/janitor/screens/janitor_task_detail_screen.dart';
-import 'package:tms_mobile/features/janitor/models/janitor_task.dart';
-import 'package:tms_mobile/features/tenant_admin/screens/tenant_admin_home_screen.dart';
+import 'package:tms_mobile/features/auth/screens/unsupported_role_screen.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authProvider);
@@ -134,52 +130,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         },
       ),
 
-      // ── Branch Manager routes (canonical role: BRANCH_ADMIN) ──
+      // ── Unsupported role handoff ──
       GoRoute(
-        path: '/branch/home',
+        path: '/unsupported-role',
         builder: (BuildContext context, GoRouterState state) =>
-            const BranchHomeScreen(),
-      ),
-      GoRoute(
-        path: '/branch/change-password',
-        builder: (BuildContext context, GoRouterState state) =>
-            const ChangePasswordScreen(),
-      ),
-
-      // ── Tenant Admin routes ──
-      GoRoute(
-        path: '/tenant/home',
-        builder: (BuildContext context, GoRouterState state) =>
-            const TenantAdminHomeScreen(),
-      ),
-      GoRoute(
-        path: '/tenant/change-password',
-        builder: (BuildContext context, GoRouterState state) =>
-            const ChangePasswordScreen(),
-      ),
-
-      // ── Janitor routes ──
-      GoRoute(
-        path: '/janitor/home',
-        builder: (BuildContext context, GoRouterState state) =>
-            const JanitorHomeScreen(),
-      ),
-      GoRoute(
-        path: '/janitor/change-password',
-        builder: (BuildContext context, GoRouterState state) =>
-            const ChangePasswordScreen(),
-      ),
-      GoRoute(
-        path: '/janitor/task',
-        builder: (BuildContext context, GoRouterState state) {
-          final task = state.extra as JanitorTask?;
-          if (task == null) {
-            return const Scaffold(
-              body: Center(child: Text('Task details are unavailable.')),
-            );
-          }
-          return JanitorTaskDetailScreen(task: task);
-        },
+            const UnsupportedRoleScreen(),
       ),
 
       // ── Teacher routes ──

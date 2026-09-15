@@ -18,16 +18,18 @@ AuthState authenticatedAs(String role) {
 
 void main() {
   group('AuthState.roleRedirectPath', () {
-    test('redirects tenant admins to the tenant admin home', () {
-      expect(authenticatedAs('TENANT_ADMIN').roleRedirectPath, '/tenant/home');
+    test('redirects tenant admins to the web-portal handoff', () {
+      expect(authenticatedAs('TENANT_ADMIN').roleRedirectPath,
+          '/unsupported-role');
     });
 
-    test('redirects branch admins to the branch admin home', () {
-      expect(authenticatedAs('BRANCH_ADMIN').roleRedirectPath, '/branch/home');
+    test('redirects branch admins to the web-portal handoff', () {
+      expect(authenticatedAs('BRANCH_ADMIN').roleRedirectPath,
+          '/unsupported-role');
     });
 
-    test('redirects janitors to the janitor home', () {
-      expect(authenticatedAs('JANITOR').roleRedirectPath, '/janitor/home');
+    test('redirects janitors to the web-portal handoff', () {
+      expect(authenticatedAs('JANITOR').roleRedirectPath, '/unsupported-role');
     });
 
     test('redirects unknown roles safely to login', () {
