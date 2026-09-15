@@ -1,5 +1,6 @@
 import prisma from '../utils/db';
 import { PushNotificationService } from './push-notification';
+import { recordNotification } from './notification-records';
 import { buildFinancialIntelligence } from '../utils/financial-intelligence';
 
 type BranchRow = { id: string; name: string };
@@ -84,14 +85,28 @@ export async function runBranchExpenseAnomalyAlerts(input: {
 
   let delivered = 0;
   let failed = 0;
+  const recordDb = (input.db ?? prisma) as any;
   for (const anomaly of anomalies) {
+    const title = `Branch expense anomaly: ${anomaly.branchName}`;
+    const body = `${anomaly.message} Current: NPR ${anomaly.currentAmountNpr}; baseline: NPR ${anomaly.baselineAmountNpr}.`;
     for (const recipient of recipients) {
       try {
         const result = await sendPush(
           recipient.id,
-          `Branch expense anomaly: ${anomaly.branchName}`,
-          `${anomaly.message} Current: NPR ${anomaly.currentAmountNpr}; baseline: NPR ${anomaly.baselineAmountNpr}.`,
+          title,
+          body,
         );
+        // Persistent inbox record. Fail-open: never changes delivery counting.
+        await recordNotification(recordDb, {
+          tenantId: input.tenantId,
+          userId: recipient.id,
+          branchId: anomaly.branchId,
+          category: 'ANOMALY',
+          title,
+          body,
+          destination: 'finances',
+          entityId: anomaly.branchId,
+        });
         if (typeof result === 'object' && result !== null && 'success' in result && result.success === false) {
           failed += 1;
         } else {
