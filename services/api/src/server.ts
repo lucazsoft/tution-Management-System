@@ -1,3 +1,5 @@
+import { authMiddleware } from './middleware/auth';
+import { requireVerifiedMobileForSetup } from './middleware/two-step-setup';
 import 'dotenv/config';
 import accountContactRouter from './routes/account-contact';
 import mobileRecoveryRouter from './routes/mobile-recovery';
@@ -28,6 +30,7 @@ import appointmentsRouter from './routes/appointments';
 import resourcesRouter from './routes/resources';
 import cronRouter from './routes/cron';
 import parentRouter from './routes/parent';
+import portalNotificationsRouter from './routes/portal-notifications';
 import receptionRouter from './routes/reception';
 import branchAdminRouter from './routes/branch-admin';
 import tenantAdminRouter from './routes/tenant-admin';
@@ -111,6 +114,7 @@ app.use('/api/auth', (req, res, next) => {
 app.use('/api/auth/two-factor/send-otp', (_req, res, next) => authenticationSmsConfigured()
   ? next()
   : res.status(503).json({ error: 'SMS authentication is temporarily unavailable.' }));
+app.use('/api/auth/two-factor/enable', authMiddleware, requireVerifiedMobileForSetup);
 app.all('/api/auth/*', monitorCredentialSignIn, toNodeHandler(auth));
 
 app.use('/api/finances/manual-payment', express.json({ limit: '2mb' }));
@@ -147,6 +151,7 @@ app.use('/api/appointments', appointmentsRouter);
 app.use('/api/resources', resourcesRouter);
 app.use('/api/cron', cronRouter);
 app.use('/api/parent', parentRouter);
+app.use('/api/portal-notifications', portalNotificationsRouter);
 app.use('/api/reception', receptionRouter);
 app.use('/api/branch-admin', branchAdminRouter);
 app.use('/api/tenant-admin', tenantAdminRouter);

@@ -13,6 +13,7 @@
     "prisma:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "test:petty-cash": "ts-node src/routes/petty-cash.test.ts",
+    "test:two-step-setup": "ts-node src/middleware/two-step-setup.test.ts",
     "test:account-contact": "ts-node src/routes/account-contact.test.ts",
     "test:account-profile": "ts-node src/routes/account-profile.test.ts",
     "test:user-management-access": "ts-node src/routes/user-management-access.test.ts",
@@ -41,6 +42,8 @@
     "test:phase-four-branch-payment": "ts-node src/services/branch-payment-settings.test.ts && ts-node src/routes/branch-payment-settings.test.ts && ts-node src/routes/payment-settings-access.test.ts && ts-node src/services/payment-settings-verification.test.ts && ts-node src/services/object-storage.test.ts",
     "test:private-media": "ts-node src/services/object-storage.test.ts && ts-node src/services/student-photo.test.ts",
     "test:certificates": "ts-node src/services/certificate-renderer.test.ts",
+    "test:result-averages": "ts-node src/utils/result-averages.test.ts",
+    "test:push": "ts-node src/utils/push.test.ts",
     "admissions:recover": "ts-node src/scripts/recover-admission-deliveries.ts",
     "test:tenant-admin:integration": "ts-node src/integration/tenant-admin.integration.test.ts"
   },

@@ -60,6 +60,14 @@ export function validateRuntimeConfig(env: Environment = process.env): RuntimeCo
     if (smsProvider === 'AAKASH' && !env.AAKASH_SMS_AUTH_TOKEN?.trim()) {
       throw new Error('AAKASH_SMS_AUTH_TOKEN is required when SMS_PROVIDER=AAKASH.');
     }
+    const pushProvider = (env.PUSH_PROVIDER || 'DISABLED').toUpperCase();
+    if (!['WEBHOOK', 'DISABLED'].includes(pushProvider)) {
+      throw new Error('PUSH_PROVIDER must be WEBHOOK or DISABLED in production.');
+    }
+    if (pushProvider === 'WEBHOOK') {
+      validateUrl(required(env, 'PUSH_WEBHOOK_URL'), 'PUSH_WEBHOOK_URL', true);
+      if (!env.PUSH_WEBHOOK_TOKEN?.trim()) throw new Error('PUSH_WEBHOOK_TOKEN is required when PUSH_PROVIDER=WEBHOOK.');
+    }
     const webhookSecret = required(env, 'NEPALPAY_WEBHOOK_SECRET');
     if (webhookSecret.length < 32) {
       throw new Error('NEPALPAY_WEBHOOK_SECRET must be at least 32 characters long.');

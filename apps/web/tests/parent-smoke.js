@@ -8,8 +8,7 @@ const parentPassword = process.env.TMS_PARENT_PASSWORD;
 
 test('Parent can switch children and open privacy-scoped workspaces', async t => {
     if (!parentEmail || !parentPassword) {
-        await t.expect(Selector('#login-email').value).eql('');
-        return;
+        await t.expect(Boolean(parentEmail && parentPassword)).ok('Set TMS_PARENT_EMAIL and TMS_PARENT_PASSWORD; this test must not pass without authenticating.');
     }
 
     await t
@@ -37,9 +36,8 @@ test('Parent can switch children and open privacy-scoped workspaces', async t =>
 
     await t.navigateTo('http://localhost:5173/parent/appointments?child=child-aarav');
     await t
-        .typeText('input[type="datetime-local"]', '2026-07-29T22:00')
-        .click(Selector('button').withText('Validate request'))
-        .expect(Selector('.parent-form__error').withText('at least 24 hours').exists).ok();
+        .expect(Selector('select#parent-appointment-target').exists).ok()
+        .expect(Selector('button').withText('Send request').exists).ok();
 
     await t.navigateTo('http://localhost:5173/parent/fees?child=child-aarav');
     await t

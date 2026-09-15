@@ -9,8 +9,7 @@ const hasHorizontalOverflow = ClientFunction(() => document.documentElement.scro
 
 test('Student portal is account-scoped, live, responsive, and theme-aware', async t => {
   if (!studentEmail || !studentPassword) {
-    await t.expect(Selector('#login-email').value).eql('');
-    return;
+    await t.expect(Boolean(studentEmail && studentPassword)).ok('Set TMS_STUDENT_EMAIL and TMS_STUDENT_PASSWORD; this test must not pass without authenticating.');
   }
 
   await t

@@ -9,7 +9,7 @@ import {
   type StudentPortalDataset,
   type SubjectInsight,
 } from '../features/student/studentPortalData';
-import { loadStudentPortal, studentFileUrl } from '../features/student/studentPortalService';
+import { loadStudentPortal, markStudentNotificationsRead, studentFileUrl } from '../features/student/studentPortalService';
 import { errorMessage } from '../services/api/client';
 import { ChangePasswordForm } from '../components/ChangePasswordForm';
 import { toDualDateLabel } from '../utils/nepaliDate';
@@ -194,7 +194,7 @@ function HomeworkView() {
           {filteredHomework.map((item) => (
             <article key={item.id}>
               <span className={`student-icon-box student-icon-box--${item.completed ? 'success' : item.urgency === 'overdue' ? 'error' : item.urgency === 'soon' ? 'warning' : 'info'}`}>{icon(item.completed ? 'task_alt' : item.urgency === 'overdue' ? 'priority_high' : 'assignment')}</span>
-              <div><span className="student-eyebrow">{item.subject}</span><h3>{item.title}</h3><p>Assigned by {item.teacher}</p></div>
+              <div><span className="student-eyebrow">{item.subject}</span><h3>{item.title}</h3><p>Assigned by {item.teacher}</p>{item.description ? <p className="student-assignment__description">{item.description}</p> : null}<div className="student-assignment__files">{item.contentUrl ? <a href={studentFileUrl(item.contentUrl)} target="_blank" rel="noreferrer">{icon('attachment')}Open assignment file</a> : null}{item.submissionUrl ? <a href={studentFileUrl(item.submissionUrl)} target="_blank" rel="noreferrer">{icon('upload_file')}View your submission</a> : null}</div>{item.teacherRemarks ? <small className="student-assignment__remarks"><strong>Teacher feedback:</strong> {item.teacherRemarks}</small> : null}</div>
               <div className="student-assignment__due"><small>{item.completed ? 'Status' : 'Due'}</small><strong>{item.dueLabel}</strong>{item.completed ? <StatusPill label="Completed" iconName="check_circle" tone="success" /> : item.urgency === 'overdue' ? <StatusPill label="Overdue" iconName="error" tone="error" /> : null}</div>
             </article>
           ))}
@@ -433,15 +433,9 @@ export function StudentPortal() {
   }, [view]);
 
   useEffect(() => {
-    if (!enrollmentId) return;
-    const key = `tms_student_read_notifications:${enrollmentId}`;
-    try {
-      const stored = JSON.parse(localStorage.getItem(key) || '[]');
-      setReadIds(new Set(Array.isArray(stored) ? stored.filter((item): item is string => typeof item === 'string') : []));
-    } catch {
-      setReadIds(new Set());
-    }
-  }, [enrollmentId]);
+    if (!data) return;
+    setReadIds(new Set(data.notifications.filter((notice) => !notice.unread).map((notice) => notice.id)));
+  }, [data, enrollmentId]);
 
   if (loadError) {
     return <div className="student-portal"><div className="student-load-error" role="alert">{icon('cloud_off')}<div><h2>Couldn’t load your student record</h2><p>{loadError}</p><button type="button" onClick={() => setReloadKey((value) => value + 1)}>Try again</button></div></div></div>;
@@ -457,8 +451,9 @@ export function StudentPortal() {
   const unread = data.notifications.filter((item) => item.unread && !readIds.has(item.id)).length;
   const go = (next: StudentView) => navigate(`/student/${next}`);
   const storeReadIds = (next: Set<string>) => {
+    const previous = readIds;
     setReadIds(next);
-    localStorage.setItem(`tms_student_read_notifications:${data.studentProfile.enrollmentId}`, JSON.stringify([...next]));
+    void markStudentNotificationsRead([...next]).catch(() => setReadIds(previous));
   };
   const markRead = (id: string) => storeReadIds(new Set(readIds).add(id));
   const markAllRead = () => storeReadIds(new Set(data.notifications.map((item) => item.id)));

@@ -12,3 +12,7 @@ export function loadNepalPayPayload(invoiceId: string): Promise<NepalPayPayload>
 export function studentFileUrl(path: string): string {
   return path.startsWith('/') ? `${API_BASE_URL}${path}` : path;
 }
+
+export function markStudentNotificationsRead(ids: string[]): Promise<{ message: string }> {
+  return request('/portal-notifications/read', { method: 'POST', body: JSON.stringify({ ids }) });
+}

@@ -38,7 +38,7 @@ Map<String, dynamic> workspaceJson({
         {
           'sessionId': 'session-1',
           'classId': 'class-1',
-          'className': 'Grade 8 · A',
+          'className': 'Grade 8 - A',
           'courseName': 'Mathematics',
           'branch': {'id': 'branch-1', 'name': 'Baneshwor'},
           'schedule': [
@@ -58,7 +58,7 @@ Map<String, dynamic> workspaceJson({
             {
               'sessionId': 'session-1',
               'classId': 'class-1',
-              'className': 'Grade 8 · A',
+              'className': 'Grade 8 - A',
               'courseName': 'Mathematics',
               'date': '2026-09-05T00:00:00.000Z',
             },
@@ -66,7 +66,7 @@ Map<String, dynamic> workspaceJson({
       'classes': [
         {
           'id': 'class-1',
-          'name': 'Grade 8 · A',
+          'name': 'Grade 8 - A',
           'subject': 'Mathematics',
           'schedule': [
             {'day': 'Sun', 'startTime': '09:00', 'endTime': '10:00'},
@@ -79,8 +79,18 @@ Map<String, dynamic> workspaceJson({
             'radiusMeters': 125,
           },
           'students': [
-            {'id': 'student-1'},
-            {'id': 'student-2'},
+            {'id': 'student-1', 'name': 'Aarya Rai', 'status': 'ACTIVE'},
+            {'id': 'student-2', 'name': 'Bikash Lama', 'status': 'BLOCKED'},
+          ],
+          'attendance': [
+            {
+              'studentId': 'student-1',
+              'status': 'PRESENT',
+            },
+            {
+              'studentId': 'student-2',
+              'status': 'EXCUSED',
+            },
           ],
         },
       ],
@@ -116,6 +126,7 @@ class _FakeRepository extends TeacherPortalRepository {
   int geoMarkCount = 0;
   Map<String, Object?>? leaveRequest;
   Map<String, String>? sessionUpdateRequest;
+  Map<String, Object?>? classAttendanceRequest;
 
   @override
   Future<TeacherWorkspace> fetchWorkspace({CancelToken? cancelToken}) async {
@@ -165,6 +176,20 @@ class _FakeRepository extends TeacherPortalRepository {
     sessionUpdateRequest = {
       'sessionId': sessionId,
       'updateContent': updateContent,
+    };
+  }
+
+  @override
+  Future<void> saveClassAttendance({
+    required String classId,
+    required DateTime date,
+    required Map<String, String> records,
+    CancelToken? cancelToken,
+  }) async {
+    classAttendanceRequest = {
+      'classId': classId,
+      'date': date,
+      'records': records,
     };
   }
 }
@@ -236,7 +261,7 @@ void main() {
 
       expect(workspace.teacherName, 'Aarati Shrestha');
       expect(workspace.todayClasses.single.branchName, 'Baneshwor');
-      expect(workspace.todayClasses.single.scheduleLabel, 'Sunday 09:00–10:00');
+      expect(workspace.todayClasses.single.scheduleLabel, 'Sunday 09:00-10:00');
       expect(workspace.classes.single.slots, hasLength(2));
       expect(workspace.classes.single.isScheduledOn('Sun'), isTrue);
       expect(workspace.classes.single.isScheduledOn('Mon'), isFalse);
@@ -335,6 +360,42 @@ void main() {
       expect((captured.data as Map).keys, isNot(contains('userId')));
       expect((captured.data as Map).keys, isNot(contains('tenantId')));
     });
+
+    test('posts class attendance with the assigned roster only', () async {
+      late RequestOptions captured;
+      final dio = ApiClient.buildDio(
+        baseUrl: 'https://test.invalid',
+        extraInterceptors: [
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              captured = options;
+              handler.resolve(Response<dynamic>(
+                requestOptions: options,
+                statusCode: 200,
+                data: {'message': 'Class attendance saved.'},
+              ));
+            },
+          ),
+        ],
+      );
+
+      await TeacherPortalRepository(dio: dio).saveClassAttendance(
+        classId: 'class-1',
+        date: DateTime(2026, 9, 14, 10),
+        records: const {'student-1': 'PRESENT', 'student-2': 'ABSENT'},
+      );
+
+      expect(captured.method, 'POST');
+      expect(captured.path,
+          TeacherPortalRepository.classAttendancePath('class-1'));
+      expect(captured.data, {
+        'date': '2026-09-14',
+        'records': [
+          {'studentId': 'student-1', 'status': 'PRESENT'},
+          {'studentId': 'student-2', 'status': 'ABSENT'},
+        ],
+      });
+    });
   });
 
   group('teacher viewmodels', () {
@@ -412,6 +473,69 @@ void main() {
   });
 
   group('teacher timetable and leave widgets', () {
+    testWidgets('saves class roster attendance from the Attendance tab',
+        (tester) async {
+      final before = TeacherWorkspace.fromJson(workspaceJson());
+      final after = TeacherWorkspace.fromJson(workspaceJson());
+      final repository = _FakeRepository(workspaces: [before, after]);
+      await tester.binding.setSurfaceSize(const Size(420, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await _pumpWithRepository(
+        tester,
+        const TeacherHomeScreen(),
+        repository,
+      );
+
+      await tester.tap(find.byType(NavigationDestination).at(1));
+      await tester.pumpAndSettle();
+      expect(find.text('Aarya Rai'), findsOneWidget);
+      expect(find.text('Bikash Lama'), findsOneWidget);
+      expect(find.text('Excused leave recorded'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Save attendance'), 300);
+      await tester.tap(find.text('Save attendance'));
+      await tester.pumpAndSettle();
+
+      expect(repository.classAttendanceRequest!['classId'], 'class-1');
+      expect(repository.classAttendanceRequest!['records'], {
+        'student-1': 'PRESENT',
+        'student-2': 'ABSENT',
+      });
+      expect(repository.fetchCount, 2);
+    });
+
+    testWidgets('opens a class detail hub from the Classes tab',
+        (tester) async {
+      final repository = _FakeRepository(
+        workspaces: [TeacherWorkspace.fromJson(workspaceJson())],
+      );
+      await tester.binding.setSurfaceSize(const Size(420, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await _pumpWithRepository(
+        tester,
+        const TeacherHomeScreen(),
+        repository,
+      );
+
+      await tester.tap(find.byType(NavigationDestination).at(2));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Grade 8 - A'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Class tools'), findsOneWidget);
+      expect(find.text('Syllabus progress'), findsOneWidget);
+      expect(find.text('Homework'), findsOneWidget);
+      expect(find.text('Results'), findsOneWidget);
+      expect(find.text('Roster'), findsOneWidget);
+      expect(find.text('Aarya Rai'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Schedule'), 300);
+      expect(find.text('Schedule'), findsOneWidget);
+      expect(find.text('Sun 09:00-10:00'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Attendance history'), 300);
+      expect(find.text('Attendance history'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('EXCUSED'), 300);
+      expect(find.text('EXCUSED'), findsOneWidget);
+    });
+
     testWidgets('submits a pending daily update and refreshes the workspace',
         (tester) async {
       final before = TeacherWorkspace.fromJson(workspaceJson());
@@ -427,7 +551,7 @@ void main() {
         repository,
       );
 
-      expect(find.text('Mathematics — Grade 8 · A'), findsOneWidget);
+      expect(find.text('Mathematics - Grade 8 - A'), findsOneWidget);
       await tester.tap(find.text('Submit daily update'));
       await tester.pumpAndSettle();
       await tester.enterText(
@@ -459,13 +583,13 @@ void main() {
       await tester.tap(find.text('Today'));
       await tester.pumpAndSettle();
       expect(find.text('Mathematics'), findsOneWidget);
-      expect(find.text('Sunday 09:00–10:00'), findsOneWidget);
+      expect(find.text('Sunday 09:00-10:00'), findsOneWidget);
 
       await tester.tap(find.text('Sun'));
       await tester.pumpAndSettle();
-      expect(find.text('Grade 8 · A • Baneshwor'), findsOneWidget);
+      expect(find.text('Grade 8 - A • Baneshwor'), findsOneWidget);
       expect(
-        find.text('Sun 09:00–10:00, Wednesday 11:00–12:00'),
+        find.text('Sun 09:00-10:00, Wednesday 11:00-12:00'),
         findsOneWidget,
       );
 

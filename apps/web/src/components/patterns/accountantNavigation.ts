@@ -6,6 +6,4 @@ export const accountantNavItems = [
   { section: 'FINANCE' as const, label: 'Payroll', icon: 'receipt_long', path: '/staff/finance#payroll' },
   { section: 'FINANCE' as const, label: 'Payment requests', icon: 'fact_check', path: '/staff/finance#payments' },
   { section: 'FINANCE' as const, label: 'Reports', icon: 'analytics', path: '/staff/finance#reports' },
-  { section: 'SETTINGS' as const, label: 'My account', icon: 'account_circle', path: '/staff/account' },
-  { section: 'SETTINGS' as const, label: 'Security', icon: 'security', path: '/staff/security' },
 ];
