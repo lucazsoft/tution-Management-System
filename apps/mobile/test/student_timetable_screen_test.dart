@@ -90,6 +90,26 @@ class _FakePortalRepository extends StudentPortalRepository {
       const [];
 }
 
+class _SequencedPortalRepository extends StudentPortalRepository {
+  _SequencedPortalRepository(this.portals) : super(dio: Dio());
+
+  final List<StudentPortal> portals;
+  var calls = 0;
+
+  @override
+  Future<StudentPortal> fetchPortal({CancelToken? cancelToken}) async {
+    final index = calls++;
+    return portals[index.clamp(0, portals.length - 1)];
+  }
+
+  @override
+  Future<List<StudentClassSchedule>> fetchStudentTimetable(
+    String studentId, {
+    CancelToken? cancelToken,
+  }) async =>
+      const [];
+}
+
 Future<void> _pumpTimetable(
   WidgetTester tester,
   _FakePortalRepository fake,
@@ -168,6 +188,180 @@ void main() {
       await _pumpTimetable(tester, fake);
 
       expect(find.text('You are offline'), findsOneWidget);
+    });
+
+    test('refresh adds newly enrolled class sessions from API snapshot',
+        () async {
+      final before = _portalJson()
+        ..['todaySessions'] = []
+        ..['weeklySessions'] = [];
+      final after = _portalJson()
+        ..['todaySessions'] = [
+          {
+            'id': 'enrollment-class-0',
+            'time': '16:30',
+            'endTime': '17:30',
+            'subject': 'Enrollment Sync Music',
+            'teacher': 'Teacher Integration',
+            'room': 'Enrollment Sync Music Class',
+            'type': 'Music',
+          },
+        ]
+        ..['weeklySessions'] = [
+          {
+            'id': 'enrollment-class-0',
+            'day': 'Tuesday',
+            'time': '16:30',
+            'endTime': '17:30',
+            'subject': 'Enrollment Sync Music',
+            'teacher': 'Teacher Integration',
+            'room': 'Enrollment Sync Music Class',
+            'className': 'Enrollment Sync Music Class',
+            'type': 'Music',
+          },
+        ];
+      final viewModel = StudentTimetableViewModel(
+        repository: _SequencedPortalRepository([
+          StudentPortal.fromJson(before),
+          StudentPortal.fromJson(after),
+        ]),
+      );
+      addTearDown(viewModel.dispose);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(viewModel.state.hasData, isFalse);
+
+      await viewModel.refresh();
+
+      expect(viewModel.state.todaySessions.single.subject,
+          'Enrollment Sync Music');
+      expect(
+          viewModel.state.todaySessions.single.teacher, 'Teacher Integration');
+      expect(viewModel.state.days.single.sessions.single.subject,
+          'Enrollment Sync Music');
+      expect(viewModel.state.days.single.sessions.single.typeLabel, 'Music');
+    });
+
+    test('refresh removes dropped class sessions from API snapshot', () async {
+      final before = _portalJson()
+        ..['todaySessions'] = [
+          {
+            'id': 'enrollment-class-0',
+            'time': '16:30',
+            'endTime': '17:30',
+            'subject': 'Enrollment Sync Music',
+            'teacher': 'Teacher Integration',
+            'room': 'Enrollment Sync Music Class',
+            'type': 'Music',
+          },
+        ]
+        ..['weeklySessions'] = [
+          {
+            'id': 'enrollment-class-0',
+            'day': 'Tuesday',
+            'time': '16:30',
+            'endTime': '17:30',
+            'subject': 'Enrollment Sync Music',
+            'teacher': 'Teacher Integration',
+            'room': 'Enrollment Sync Music Class',
+            'className': 'Enrollment Sync Music Class',
+            'type': 'Music',
+          },
+        ];
+      final after = _portalJson()
+        ..['todaySessions'] = []
+        ..['weeklySessions'] = [];
+      final viewModel = StudentTimetableViewModel(
+        repository: _SequencedPortalRepository([
+          StudentPortal.fromJson(before),
+          StudentPortal.fromJson(after),
+        ]),
+      );
+      addTearDown(viewModel.dispose);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(viewModel.state.todaySessions.single.subject,
+          'Enrollment Sync Music');
+      expect(viewModel.state.days.single.sessions.single.subject,
+          'Enrollment Sync Music');
+
+      await viewModel.refresh();
+
+      expect(viewModel.state.todaySessions, isEmpty);
+      expect(viewModel.state.days, isEmpty);
+    });
+
+    test('refresh replaces a moved class with its destination session',
+        () async {
+      final before = _portalJson()
+        ..['todaySessions'] = [
+          {
+            'id': 'source-class-0',
+            'time': '16:30',
+            'endTime': '17:30',
+            'subject': 'Enrollment Sync Music',
+            'teacher': 'Teacher Integration',
+            'room': 'Enrollment Sync Music Class',
+            'type': 'Music',
+          },
+        ]
+        ..['weeklySessions'] = [
+          {
+            'id': 'source-class-0',
+            'day': 'Tuesday',
+            'time': '16:30',
+            'endTime': '17:30',
+            'subject': 'Enrollment Sync Music',
+            'teacher': 'Teacher Integration',
+            'room': 'Enrollment Sync Music Class',
+            'className': 'Enrollment Sync Music Class',
+            'type': 'Music',
+          },
+        ];
+      final after = _portalJson()
+        ..['todaySessions'] = [
+          {
+            'id': 'destination-class-0',
+            'time': '18:00',
+            'endTime': '19:00',
+            'subject': 'Enrollment Sync Music',
+            'teacher': 'Teacher Integration',
+            'room': 'Enrollment Sync Music Destination Class',
+            'type': 'Music',
+          },
+        ]
+        ..['weeklySessions'] = [
+          {
+            'id': 'destination-class-0',
+            'day': 'Tuesday',
+            'time': '18:00',
+            'endTime': '19:00',
+            'subject': 'Enrollment Sync Music',
+            'teacher': 'Teacher Integration',
+            'room': 'Enrollment Sync Music Destination Class',
+            'className': 'Enrollment Sync Music Destination Class',
+            'type': 'Music',
+          },
+        ];
+      final viewModel = StudentTimetableViewModel(
+        repository: _SequencedPortalRepository([
+          StudentPortal.fromJson(before),
+          StudentPortal.fromJson(after),
+        ]),
+      );
+      addTearDown(viewModel.dispose);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(viewModel.state.todaySessions.single.id, 'source-class-0');
+
+      await viewModel.refresh();
+
+      expect(viewModel.state.todaySessions.single.id, 'destination-class-0');
+      expect(viewModel.state.todaySessions.single.time, '18:00');
+      expect(viewModel.state.days.single.sessions.single.id,
+          'destination-class-0');
+      expect(viewModel.state.days.single.sessions.single.room,
+          'Enrollment Sync Music Destination Class');
     });
   });
 }

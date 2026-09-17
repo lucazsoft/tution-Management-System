@@ -1,7 +1,15 @@
 # TMS Mobile (Flutter)
 
-Role portals for Teacher, Student, Parent, Branch Admin, Tenant Admin, Janitor.
+Role portals for Teacher, Student, and Parent. Admin/operations roles use the
+web portal/PWA.
 Auth is Better Auth session cookies — no tokens or tenant/branch IDs from the client.
+
+## Laptop setup
+
+For a fresh laptop setup, emulator/device run commands, backend setup, and
+common fixes, see:
+
+`../../documents/frontend-handoffs/MOBILE_APP_LOCAL_SETUP_GUIDE.md`
 
 ## Environment builds
 

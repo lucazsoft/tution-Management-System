@@ -162,15 +162,18 @@ class _ControlledParentPortalRepository extends ParentPortalRepository {
   }
 
   void complete(int index, String selectedId) {
-    requests[index].completer.complete(
-          ParentPortal.fromJson(
-            _portalJson(
-              selectedId: selectedId,
-              selectedName:
-                  selectedId == 'student-2' ? 'API Child Two' : 'API Child One',
-            ),
-          ),
-        );
+    completeWithBody(
+      index,
+      _portalJson(
+        selectedId: selectedId,
+        selectedName:
+            selectedId == 'student-2' ? 'API Child Two' : 'API Child One',
+      ),
+    );
+  }
+
+  void completeWithBody(int index, Map<String, dynamic> body) {
+    requests[index].completer.complete(ParentPortal.fromJson(body));
   }
 }
 
@@ -439,6 +442,259 @@ void main() {
     expect(viewModel.state.isRefreshing, isFalse);
     expect(viewModel.state.selectedChildId, 'student-2');
     expect(viewModel.state.portal?.selected?.id, 'student-2');
+  });
+
+  test('refresh replaces stale linked-child attendance with API data',
+      () async {
+    final repository = _ControlledParentPortalRepository();
+    final viewModel = ParentPortalViewModel(repository: repository);
+    addTearDown(viewModel.dispose);
+
+    final stale = _portalJson()
+      ..['attendance'] = [
+        {
+          'id': 'old-attendance',
+          'childId': 'student-1',
+          'date': '14 Sep 2026',
+          'subject': 'Tenant A Mathematics',
+          'session': 'Class 10 Mathematics Updated',
+          'state': 'Absent',
+        },
+      ];
+    repository.completeWithBody(0, stale);
+    await Future<void>.delayed(Duration.zero);
+    expect(viewModel.state.portal?.attendance.single.id, 'old-attendance');
+    expect(viewModel.state.portal?.absentCount, 1);
+
+    final refreshFuture = viewModel.refresh();
+    final fresh = _portalJson()
+      ..['attendance'] = [
+        {
+          'id': 'live-attendance',
+          'childId': 'student-1',
+          'date': '15 Sep 2026',
+          'subject': 'Tenant A Mathematics',
+          'session': 'Class 10 Mathematics Updated',
+          'state': 'Present',
+        },
+      ];
+    repository.completeWithBody(1, fresh);
+    await refreshFuture;
+
+    expect(viewModel.state.portal?.attendance.single.id, 'live-attendance');
+    expect(viewModel.state.portal?.attendance.single.isPresent, isTrue);
+    expect(viewModel.state.portal?.presentCount, 1);
+    expect(viewModel.state.portal?.absentCount, 0);
+  });
+
+  test('refresh adds newly enrolled linked-child session from API data',
+      () async {
+    final repository = _ControlledParentPortalRepository();
+    final viewModel = ParentPortalViewModel(repository: repository);
+    addTearDown(viewModel.dispose);
+
+    final before = _portalJson()..['sessions'] = [];
+    repository.completeWithBody(0, before);
+    await Future<void>.delayed(Duration.zero);
+    expect(viewModel.state.portal?.sessions, isEmpty);
+
+    final refreshFuture = viewModel.refresh();
+    final after = _portalJson()
+      ..['sessions'] = [
+        {
+          'id': 'enrollment-class-0',
+          'childId': 'student-1',
+          'time': '16:30',
+          'endTime': '17:30',
+          'subject': 'Enrollment Sync Music',
+          'teacher': 'Teacher Integration',
+          'room': 'Enrollment Sync Music Class',
+          'type': 'Music',
+        },
+      ];
+    repository.completeWithBody(1, after);
+    await refreshFuture;
+
+    final session = viewModel.state.portal?.sessions.single;
+    expect(session?.id, 'enrollment-class-0');
+    expect(session?.subject, 'Enrollment Sync Music');
+    expect(session?.teacher, 'Teacher Integration');
+    expect(session?.time, '16:30');
+    expect(session?.endTime, '17:30');
+  });
+
+  test('refresh removes dropped linked-child session from API data', () async {
+    final repository = _ControlledParentPortalRepository();
+    final viewModel = ParentPortalViewModel(repository: repository);
+    addTearDown(viewModel.dispose);
+
+    final before = _portalJson()
+      ..['sessions'] = [
+        {
+          'id': 'enrollment-class-0',
+          'childId': 'student-1',
+          'time': '16:30',
+          'endTime': '17:30',
+          'subject': 'Enrollment Sync Music',
+          'teacher': 'Teacher Integration',
+          'room': 'Enrollment Sync Music Class',
+          'type': 'Music',
+        },
+      ];
+    repository.completeWithBody(0, before);
+    await Future<void>.delayed(Duration.zero);
+    expect(viewModel.state.portal?.sessions.single.subject,
+        'Enrollment Sync Music');
+
+    final refreshFuture = viewModel.refresh();
+    final after = _portalJson()..['sessions'] = [];
+    repository.completeWithBody(1, after);
+    await refreshFuture;
+
+    expect(viewModel.state.portal?.sessions, isEmpty);
+  });
+
+  test('refresh replaces a moved linked-child session with its destination',
+      () async {
+    final repository = _ControlledParentPortalRepository();
+    final viewModel = ParentPortalViewModel(repository: repository);
+    addTearDown(viewModel.dispose);
+
+    final before = _portalJson()
+      ..['sessions'] = [
+        {
+          'id': 'source-class-0',
+          'childId': 'student-1',
+          'time': '16:30',
+          'endTime': '17:30',
+          'subject': 'Enrollment Sync Music',
+          'teacher': 'Teacher Integration',
+          'room': 'Enrollment Sync Music Class',
+          'type': 'Music',
+        },
+      ];
+    repository.completeWithBody(0, before);
+    await Future<void>.delayed(Duration.zero);
+    expect(viewModel.state.portal?.sessions.single.id, 'source-class-0');
+
+    final refreshFuture = viewModel.refresh();
+    final after = _portalJson()
+      ..['sessions'] = [
+        {
+          'id': 'destination-class-0',
+          'childId': 'student-1',
+          'time': '18:00',
+          'endTime': '19:00',
+          'subject': 'Enrollment Sync Music',
+          'teacher': 'Teacher Integration',
+          'room': 'Enrollment Sync Music Destination Class',
+          'type': 'Music',
+        },
+      ];
+    repository.completeWithBody(1, after);
+    await refreshFuture;
+
+    final session = viewModel.state.portal?.sessions.single;
+    expect(session?.id, 'destination-class-0');
+    expect(session?.room, 'Enrollment Sync Music Destination Class');
+    expect(session?.time, '18:00');
+    expect(session?.endTime, '19:00');
+  });
+
+  test('refresh reflects linked-child block, override, and paid invoice',
+      () async {
+    final repository = _ControlledParentPortalRepository();
+    final viewModel = ParentPortalViewModel(repository: repository);
+    addTearDown(viewModel.dispose);
+
+    final blocked = _portalJson()
+      ..['selected'] = {
+        ..._portalJson()['selected'] as Map<String, dynamic>,
+        'blocked': true,
+        'outstanding': 2400,
+      }
+      ..['invoices'] = [
+        {
+          'id': 'fee-sync-invoice',
+          'cycle': 'September 2026',
+          'dueDate': '24 Sep 2026',
+          'state': 'Upcoming',
+          'reference': 'fee-sync-invoice',
+          'netPayable': 2400,
+          'qrAvailable': true,
+        },
+      ];
+    repository.completeWithBody(0, blocked);
+    await Future<void>.delayed(Duration.zero);
+    expect(viewModel.state.portal?.selected?.blocked, isTrue);
+    expect(viewModel.state.portal?.outstandingTotal, 2400);
+
+    final overrideRefresh = viewModel.refresh();
+    final overridden = _portalJson()
+      ..['selected'] = {
+        ..._portalJson()['selected'] as Map<String, dynamic>,
+        'blocked': false,
+        'outstanding': 2400,
+      }
+      ..['invoices'] = blocked['invoices'];
+    repository.completeWithBody(1, overridden);
+    await overrideRefresh;
+    expect(viewModel.state.portal?.selected?.blocked, isFalse);
+    expect(viewModel.state.portal?.outstandingTotal, 2400);
+
+    final paymentRefresh = viewModel.refresh();
+    final paid = _portalJson()
+      ..['selected'] = {
+        ..._portalJson()['selected'] as Map<String, dynamic>,
+        'blocked': false,
+        'outstanding': 0,
+      }
+      ..['invoices'] = [
+        {
+          'id': 'fee-sync-invoice',
+          'cycle': 'September 2026',
+          'dueDate': '24 Sep 2026',
+          'state': 'Paid',
+          'reference': 'FEE-SYNC-PAID-001',
+          'netPayable': 2400,
+          'qrAvailable': false,
+        },
+      ];
+    repository.completeWithBody(2, paid);
+    await paymentRefresh;
+    expect(viewModel.state.portal?.outstandingTotal, 0);
+    expect(viewModel.state.portal?.invoices.single.isPaid, isTrue);
+  });
+
+  test('refresh adds the linked-child published-performance signal', () async {
+    final repository = _ControlledParentPortalRepository();
+    final viewModel = ParentPortalViewModel(repository: repository);
+    addTearDown(viewModel.dispose);
+
+    final before = _portalJson()..['remarks'] = [];
+    repository.completeWithBody(0, before);
+    await Future<void>.delayed(Duration.zero);
+    expect(viewModel.state.portal?.remarks, isEmpty);
+
+    final refreshFuture = viewModel.refresh();
+    final after = _portalJson()
+      ..['remarks'] = [
+        {
+          'id': 'signal-Tenant A Mathematics',
+          'subject': 'Tenant A Mathematics',
+          'author': 'Performance system',
+          'message': 'Current average 88% across 1 assessment.',
+          'date': 'Calculated from published scores',
+          'signal': 'Improving',
+        },
+      ];
+    repository.completeWithBody(1, after);
+    await refreshFuture;
+
+    final remark = viewModel.state.portal?.remarks.single;
+    expect(remark?.author, 'Performance system');
+    expect(remark?.message, contains('88% across 1 assessment'));
+    expect(remark?.signal, 'Improving');
   });
 
   test('logout and next login create an empty user-scoped portal repository',

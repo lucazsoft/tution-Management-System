@@ -168,6 +168,45 @@ Future<void> waitFor(
   }
 }
 
+class _SequencedFeesRepository extends StudentFeesRepository {
+  _SequencedFeesRepository(this.snapshots) : super(dio: Dio());
+
+  final List<({List<ApiStudentInvoice> invoices, FeeBlockedStatus blocked})>
+      snapshots;
+  var calls = 0;
+
+  @override
+  Future<({List<ApiStudentInvoice> invoices, FeeBlockedStatus blocked})>
+      fetchPortal({CancelToken? cancelToken}) async {
+    final index = calls < snapshots.length ? calls : snapshots.length - 1;
+    calls++;
+    return snapshots[index];
+  }
+}
+
+({List<ApiStudentInvoice> invoices, FeeBlockedStatus blocked}) feeSnapshot({
+  required bool blocked,
+  required double outstanding,
+  required ApiFeeState state,
+}) =>
+    (
+      invoices: [
+        ApiStudentInvoice(
+          id: 'fee-sync-invoice',
+          cycle: 'September 2026',
+          dueDate: DateTime(2026, 9, 24),
+          dueDateLabel: '24 Sep 2026',
+          state: state,
+          netPayable: 2400,
+          paymentReference: state == ApiFeeState.paid
+              ? 'FEE-SYNC-PAID-001'
+              : 'fee-sync-invoice',
+          lines: const [ApiInvoiceLine(label: 'Tuition', amount: 2400)],
+        ),
+      ],
+      blocked: FeeBlockedStatus(blocked: blocked, outstanding: outstanding),
+    );
+
 void main() {
   group('Student fees repository', () {
     test('fetchPortal parses invoices + blocked status', () async {
@@ -260,8 +299,7 @@ void main() {
       );
     });
 
-    test('non-SUCCESS verification keeps outcome failed, never paid',
-        () async {
+    test('non-SUCCESS verification keeps outcome failed, never paid', () async {
       final vm = StudentFeesViewModel(
         repository: StudentFeesRepository(
           dio: stubFeesDio(status: {
@@ -310,6 +348,45 @@ void main() {
 
       expect(vm.state.isDenied, isTrue);
       expect(vm.state.hasError, isTrue);
+    });
+
+    test('refresh reflects block, override, and paid invoice snapshots',
+        () async {
+      final vm = StudentFeesViewModel(
+        repository: _SequencedFeesRepository([
+          feeSnapshot(
+            blocked: true,
+            outstanding: 2400,
+            state: ApiFeeState.upcoming,
+          ),
+          feeSnapshot(
+            blocked: false,
+            outstanding: 2400,
+            state: ApiFeeState.upcoming,
+          ),
+          feeSnapshot(
+            blocked: false,
+            outstanding: 0,
+            state: ApiFeeState.paid,
+          ),
+        ]),
+      );
+      addTearDown(vm.dispose);
+      await waitFor(() => !vm.state.isLoading);
+
+      expect(vm.state.blocked, isTrue);
+      expect(vm.state.outstanding, 2400);
+      expect(vm.state.invoices.single.state, ApiFeeState.upcoming);
+
+      await vm.refresh();
+      expect(vm.state.blocked, isFalse);
+      expect(vm.state.outstanding, 2400);
+      expect(vm.state.invoices.single.state, ApiFeeState.upcoming);
+
+      await vm.refresh();
+      expect(vm.state.blocked, isFalse);
+      expect(vm.state.outstanding, 0);
+      expect(vm.state.invoices.single.state, ApiFeeState.paid);
     });
   });
 }

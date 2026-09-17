@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tms_mobile/features/student/data/student_academics_repository.dart';
+import 'package:tms_mobile/features/student/models/student_academics_api.dart';
 import 'package:tms_mobile/features/student/viewmodels/student_attendance_viewmodel.dart';
 
 import 'student_academics_test.dart' show portalJson, stubPortal, stubFailure;
@@ -11,6 +12,19 @@ import 'student_academics_test.dart' show portalJson, stubPortal, stubFailure;
 Dio stubAttendancePortal() => stubPortal(
       body: portalJson(homeworkCount: 2),
     );
+
+class _SequencedAttendanceRepository extends StudentAcademicsRepository {
+  _SequencedAttendanceRepository(this.snapshots) : super(dio: Dio());
+
+  final List<StudentPortalSnapshot> snapshots;
+  var calls = 0;
+
+  @override
+  Future<StudentPortalSnapshot> fetchPortal({CancelToken? cancelToken}) async {
+    final index = calls++;
+    return snapshots[index.clamp(0, snapshots.length - 1)];
+  }
+}
 
 void main() {
   group('StudentAttendanceViewModel', () {
@@ -27,9 +41,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      await container
-          .read(studentAttendanceViewModelProvider.notifier)
-          .load();
+      await container.read(studentAttendanceViewModelProvider.notifier).load();
       final state = container.read(studentAttendanceViewModelProvider);
 
       expect(state.hasData, isTrue);
@@ -96,20 +108,67 @@ void main() {
         overrides: [
           studentAttendanceViewModelProvider.overrideWith(
             (ref) => StudentAttendanceViewModel(
-              repository:
-                  StudentAcademicsRepository(dio: stubFailure(401)),
+              repository: StudentAcademicsRepository(dio: stubFailure(401)),
             ),
           ),
         ],
       );
       addTearDown(container.dispose);
 
-      await container
-          .read(studentAttendanceViewModelProvider.notifier)
-          .load();
+      await container.read(studentAttendanceViewModelProvider.notifier).load();
       final state = container.read(studentAttendanceViewModelProvider);
       expect(state.sessionExpired, isTrue);
       expect(state.hasData, isFalse);
+    });
+
+    test('refresh replaces stale attendance with the latest API snapshot',
+        () async {
+      final first = portalJson(homeworkCount: 0)
+        ..['studentProfile'] = {
+          'enrollmentId': 'stu-1',
+          'attendanceCounts': {'present': 0, 'absent': 1, 'excused': 0},
+        }
+        ..['attendance'] = [
+          {
+            'id': 'old-attendance',
+            'date': '14 Sep 2026',
+            'subject': 'Tenant A Mathematics',
+            'session': 'Class 10 Mathematics Updated',
+            'state': 'Absent',
+          },
+        ];
+      final second = portalJson(homeworkCount: 0)
+        ..['studentProfile'] = {
+          'enrollmentId': 'stu-1',
+          'attendanceCounts': {'present': 1, 'absent': 0, 'excused': 0},
+        }
+        ..['attendance'] = [
+          {
+            'id': 'live-attendance',
+            'date': '15 Sep 2026',
+            'subject': 'Tenant A Mathematics',
+            'session': 'Class 10 Mathematics Updated',
+            'state': 'Present',
+          },
+        ];
+      final repository = _SequencedAttendanceRepository([
+        StudentPortalSnapshot.fromJson(first),
+        StudentPortalSnapshot.fromJson(second),
+      ]);
+      final viewModel = StudentAttendanceViewModel(repository: repository);
+      addTearDown(viewModel.dispose);
+
+      await viewModel.load();
+      expect(viewModel.state.records.single.id, 'old-attendance');
+      expect(viewModel.state.absentCount, 1);
+
+      await viewModel.refresh();
+
+      expect(viewModel.state.records.single.id, 'live-attendance');
+      expect(viewModel.state.records.single.isPresent, isTrue);
+      expect(viewModel.state.presentCount, 1);
+      expect(viewModel.state.absentCount, 0);
+      expect(viewModel.state.attendanceRate, 1.0);
     });
   });
 }
