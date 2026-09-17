@@ -10,14 +10,16 @@ class AuthState {
   final bool isAuthenticated;
   final bool isLoading;
   final bool isTwoFactorPending;
-  final int attemptCount;
+  final String? pendingEmail;
+  final String? errorMessage;
 
   const AuthState({
     this.user,
     this.isAuthenticated = false,
     this.isLoading = true,
     this.isTwoFactorPending = false,
-    this.attemptCount = 0,
+    this.pendingEmail,
+    this.errorMessage,
   });
 
   AuthState copyWith({
@@ -25,14 +27,19 @@ class AuthState {
     bool? isAuthenticated,
     bool? isLoading,
     bool? isTwoFactorPending,
-    int? attemptCount,
+    String? pendingEmail,
+    String? errorMessage,
+    bool clearPendingEmail = false,
+    bool clearError = false,
   }) {
     return AuthState(
       user: user ?? this.user,
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
       isLoading: isLoading ?? this.isLoading,
       isTwoFactorPending: isTwoFactorPending ?? this.isTwoFactorPending,
-      attemptCount: attemptCount ?? this.attemptCount,
+      pendingEmail:
+          clearPendingEmail ? null : (pendingEmail ?? this.pendingEmail),
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
   }
 
@@ -42,13 +49,15 @@ class AuthState {
     if (isTwoFactorPending) return '/2fa';
 
     return switch (user!.role) {
-      RoleCodes.tenantAdmin => '/tenant/home',
-      RoleCodes.branchAdmin => '/branch/home',
-      RoleCodes.janitor => '/janitor/home',
+      RoleCodes.tenantAdmin => '/unsupported-role',
+      RoleCodes.branchAdmin => '/unsupported-role',
+      RoleCodes.accountant => '/unsupported-role',
+      RoleCodes.janitor => '/unsupported-role',
+      RoleCodes.webPortalOnly => '/unsupported-role',
       RoleCodes.teacher => '/teacher/home',
       RoleCodes.student => '/student/home',
       RoleCodes.parent => '/parent/home',
-      _ => '/login',
+      _ => '/unsupported-role',
     };
   }
 }
@@ -58,10 +67,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _restoreSession();
   }
 
-  /// Try to restore session from stored token + user.
+  int _operationVersion = 0;
+
+  /// Restore only a session the server verifies from its cookie.
   Future<void> _restoreSession() async {
+    final version = _operationVersion;
     try {
       final user = await AuthService.restoreSession();
+      if (version != _operationVersion) return;
       if (user != null) {
         state = AuthState(
           user: user,
@@ -72,74 +85,91 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = const AuthState(isLoading: false);
       }
     } catch (_) {
+      if (version != _operationVersion) return;
       state = const AuthState(isLoading: false);
     }
   }
 
   /// Login with email and password.
   Future<void> login(String email, String password) async {
-    if (state.attemptCount >= 5) {
-      throw const AuthFailure(
-        'Your account has been locked after 5 failed attempts.',
-      );
-    }
-
-    state = state.copyWith(isLoading: true);
+    _operationVersion++;
+    state = const AuthState(isLoading: true);
 
     try {
-      final user = await AuthService.signIn(email: email, password: password);
+      final result = await AuthService.signIn(email: email, password: password);
 
-      if (user.requiresTwoFactor) {
-        // Send 2FA code immediately.
-        try {
-          await AuthService.sendTwoFactorCode(email);
-        } catch (_) {
-          // The 2FA screen offers a resend option.
-        }
-
+      if (result.requiresTwoFactor) {
         state = AuthState(
-          user: user,
           isAuthenticated: false,
           isLoading: false,
           isTwoFactorPending: true,
-          attemptCount: 0,
+          pendingEmail: result.pendingEmail,
         );
       } else {
+        final user = result.user;
+        if (user == null) {
+          throw const AuthFailure(
+              'The server did not return an account session.');
+        }
         state = AuthState(
           user: user,
           isAuthenticated: true,
           isLoading: false,
         );
       }
-    } on AuthFailure {
-      state = state.copyWith(
+    } on AuthFailure catch (error) {
+      state = AuthState(
         isLoading: false,
-        attemptCount: state.attemptCount + 1,
+        errorMessage: error.message,
       );
       rethrow;
     } catch (e) {
-      state = state.copyWith(
+      final error = AuthFailure('Login failed: $e');
+      state = AuthState(
         isLoading: false,
-        attemptCount: state.attemptCount + 1,
+        errorMessage: error.message,
       );
-      throw AuthFailure('Login failed: $e');
+      throw error;
     }
   }
 
+  void clearError() {
+    if (state.errorMessage == null) return;
+    state = state.copyWith(clearError: true);
+  }
+
+  Future<void> send2FACode() async {
+    if (!state.isTwoFactorPending || state.pendingEmail == null) {
+      throw const AuthFailure('Start sign-in again before requesting a code.');
+    }
+    await AuthService.sendTwoFactorCode();
+  }
+
+  void cancel2FA() {
+    state = const AuthState(isLoading: false);
+  }
+
   /// Complete 2FA verification.
-  Future<void> verify2FA(String code) async {
-    if (state.user == null) return;
+  Future<void> verify2FA(String code, {required bool trustDevice}) async {
+    if (!state.isTwoFactorPending || state.pendingEmail == null) {
+      throw const AuthFailure(
+          'Your verification challenge has expired. Sign in again.');
+    }
 
     state = state.copyWith(isLoading: true);
 
     try {
       await AuthService.verifyTwoFactorCode(
-        email: state.user!.email,
         code: code,
+        trustDevice: trustDevice,
       );
-
+      final user = await AuthService.getAuthenticatedSession();
+      if (user == null) {
+        throw const AuthFailure(
+            'Verification completed without an authenticated session.');
+      }
       state = AuthState(
-        user: state.user,
+        user: user,
         isAuthenticated: true,
         isLoading: false,
       );
@@ -186,11 +216,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
       isAuthenticated: true,
       isLoading: false,
     );
-  }
-
-  /// Reset the failed-attempt counter (e.g. after a successful reset-password).
-  void resetAttemptCount() {
-    state = state.copyWith(attemptCount: 0);
   }
 }
 

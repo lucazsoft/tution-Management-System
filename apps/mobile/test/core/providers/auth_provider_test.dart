@@ -18,20 +18,52 @@ AuthState authenticatedAs(String role) {
 
 void main() {
   group('AuthState.roleRedirectPath', () {
-    test('redirects tenant admins to the tenant admin home', () {
-      expect(authenticatedAs('TENANT_ADMIN').roleRedirectPath, '/tenant/home');
+    test('redirects tenant admins to the web/PWA handoff screen', () {
+      expect(
+        authenticatedAs('TENANT_ADMIN').roleRedirectPath,
+        '/unsupported-role',
+      );
     });
 
-    test('redirects branch admins to the branch admin home', () {
-      expect(authenticatedAs('BRANCH_ADMIN').roleRedirectPath, '/branch/home');
+    test('redirects branch admins to the web/PWA handoff screen', () {
+      expect(
+        authenticatedAs('BRANCH_ADMIN').roleRedirectPath,
+        '/unsupported-role',
+      );
     });
 
-    test('redirects janitors to the janitor home', () {
-      expect(authenticatedAs('JANITOR').roleRedirectPath, '/janitor/home');
+    test('redirects janitors to the web/PWA handoff screen', () {
+      expect(
+        authenticatedAs('JANITOR').roleRedirectPath,
+        '/unsupported-role',
+      );
     });
 
-    test('redirects unknown roles safely to login', () {
-      expect(authenticatedAs('UNKNOWN').roleRedirectPath, '/login');
+    test('redirects accountants to the web/PWA handoff screen', () {
+      expect(
+        authenticatedAs('ACCOUNTANT').roleRedirectPath,
+        '/unsupported-role',
+      );
+    });
+
+    test('redirects unknown roles safely to the web/PWA handoff screen', () {
+      expect(authenticatedAs('UNKNOWN').roleRedirectPath, '/unsupported-role');
+    });
+  });
+
+  group('AuthState login feedback', () {
+    test('can carry and clear a production login error message', () {
+      const failed = AuthState(
+        isLoading: false,
+        errorMessage: 'Cannot reach the TMS server.',
+      );
+
+      expect(failed.errorMessage, 'Cannot reach the TMS server.');
+
+      final cleared = failed.copyWith(clearError: true);
+
+      expect(cleared.errorMessage, isNull);
+      expect(cleared.isLoading, isFalse);
     });
   });
 }

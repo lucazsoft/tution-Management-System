@@ -413,12 +413,6 @@ async function seedDemoPortalData(tenantId: string, branchId: string): Promise<v
     await prisma.staffDocument.upsert({ where: { id: 'demo-staff-document' }, update: {}, create: { id: 'demo-staff-document', staffRecordId: teacherStaff.id, documentType: 'CONTRACT', fileUrl: '/demo/staff/teacher-contract.pdf', expiryDate: daysFromNow(240) } });
   }
 
-  const wallet = await prisma.canteenWallet.upsert({ where: { studentId: student.id }, update: { balance: 850 }, create: { studentId: student.id, balance: 850, status: 'ACTIVE' } });
-  await prisma.canteenTransaction.upsert({ where: { id: 'demo-canteen-credit' }, update: {}, create: { id: 'demo-canteen-credit', walletId: wallet.id, amount: 1000, type: 'CREDIT', description: 'Parent wallet reload', referenceId: 'DEMO-WALLET-1001' } });
-  await prisma.canteenTransaction.upsert({ where: { id: 'demo-canteen-debit' }, update: {}, create: { id: 'demo-canteen-debit', walletId: wallet.id, amount: 150, type: 'DEBIT', description: 'Lunch set and juice' } });
-  const route = await prisma.vehicleRoute.upsert({ where: { id: 'demo-vehicle-route' }, update: {}, create: { id: 'demo-vehicle-route', tenantId, routeName: 'Koteshwor–Baneshwor Morning Route', driverName: 'Ramesh Thapa', driverPhone: '9841002200', vehicleNumber: 'Ba 2 Kha 4581', currentLatitude: 27.685, currentLongitude: 85.345, lastUpdated: now } });
-  await prisma.studentVehicle.upsert({ where: { studentId: student.id }, update: { routeId: route.id, pickupPoint: 'Koteshwor Chowk' }, create: { studentId: student.id, routeId: route.id, pickupPoint: 'Koteshwor Chowk' } });
-
   console.log('[seed]   Portal fixtures: academics, operations, finance, communication, and resource logs.');
 }
 

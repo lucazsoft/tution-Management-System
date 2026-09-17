@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:tms_mobile/core/auth/role_codes.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
-import 'package:tms_mobile/features/auth/data/mock_auth_service.dart';
 
 /// Represents a failure in the auth flow with a human-readable message.
 class AuthFailure implements Exception {
@@ -86,61 +85,52 @@ class AuthUser {
       };
 }
 
-/// Auth service with seamless offline mock demo fallback.
+/// Result of password verification. A two-factor challenge is deliberately
+/// not an authenticated user or a session.
+class PasswordSignInResult {
+  const PasswordSignInResult.authenticated(this.user) : pendingEmail = null;
+  const PasswordSignInResult.twoFactorRequired(this.pendingEmail) : user = null;
+
+  final AuthUser? user;
+  final String? pendingEmail;
+
+  bool get requiresTwoFactor => pendingEmail != null;
+}
+
+/// Server-backed authentication service.
 class AuthService {
   AuthService._();
 
   static Dio get _dio => ApiClient.instance.dio;
 
   /// Authenticate with email + password.
-  static Future<AuthUser> signIn({
+  static Future<PasswordSignInResult> signIn({
     required String email,
     required String password,
   }) async {
     final normalized = email.trim().toLowerCase();
 
-    // Check demo accounts directly for instant response
-    if (MockAuthService.demoUsers.containsKey(normalized)) {
-      final mock = await MockAuthService.signIn(
-        email: normalized,
-        password: password,
-        rememberMe: true,
-      );
-      final parts = normalized.split('@').first.split('.');
-      final first = parts.first;
-      final last = parts.length > 1 ? parts[1] : '';
-      final user = AuthUser(
-        id: 'mock-${mock.role.toLowerCase()}-1',
-        email: mock.email,
-        firstName: first.isNotEmpty
-            ? first[0].toUpperCase() + first.substring(1)
-            : mock.role,
-        lastName: last.isNotEmpty
-            ? last[0].toUpperCase() + last.substring(1)
-            : 'User',
-        role: mock.role,
-        requiresTwoFactor: mock.requiresTwoFactor,
-      );
-      await ApiClient.saveUser(jsonEncode(user.toJson()));
-      return user;
-    }
-
-    // Otherwise try API backend
     try {
-      await _dio.post(
+      final response = await _dio.post<dynamic>(
         '/api/auth/sign-in/email',
         data: {
           'email': normalized,
           'password': password,
         },
       );
-      final session = await _dio.get('/api/auth/get-session');
-      final user = AuthUser.fromJson(session.data as Map<String, dynamic>);
-      await ApiClient.saveUser(jsonEncode(user.toJson()));
-
-      return user;
+      final body = response.data;
+      if (body is Map && body['twoFactorRedirect'] == true) {
+        return PasswordSignInResult.twoFactorRequired(normalized);
+      }
+      final user = await _getAuthenticatedSession();
+      if (user == null) {
+        throw const AuthFailure(
+          'The server did not create an authenticated session. Please try again.',
+        );
+      }
+      return PasswordSignInResult.authenticated(user);
     } on DioException catch (e) {
-      throw AuthFailure(_extractMessage(e, 'Invalid email or password.'));
+      throw AuthFailure(_extractAuthMessage(e));
     } catch (e) {
       if (e is AuthFailure) rethrow;
       throw AuthFailure('An unexpected error occurred: $e');
@@ -150,11 +140,6 @@ class AuthService {
   /// Use [email] to locate the account; delivery goes to its verified mobile.
   static Future<void> sendPasswordOtp(String email) async {
     final normalized = email.trim().toLowerCase();
-    if (MockAuthService.demoUsers.containsKey(normalized)) {
-      await MockAuthService.sendPasswordOtp(normalized);
-      return;
-    }
-
     try {
       await _dio.post(
         '/api/auth/forgot-password',
@@ -172,11 +157,6 @@ class AuthService {
     required String otp,
   }) async {
     final normalized = email.trim().toLowerCase();
-    if (MockAuthService.demoUsers.containsKey(normalized)) {
-      await MockAuthService.verifyPasswordOtp(otp);
-      return 'mock-reset-token-${DateTime.now().millisecondsSinceEpoch}';
-    }
-
     try {
       final response = await _dio.post(
         '/api/auth/verify-reset-otp',
@@ -205,11 +185,6 @@ class AuthService {
     required String resetToken,
     required String newPassword,
   }) async {
-    if (resetToken.startsWith('mock-')) {
-      await MockAuthService.resetPassword(newPassword);
-      return;
-    }
-
     try {
       await _dio.post(
         '/api/auth/reset-password',
@@ -242,13 +217,7 @@ class AuthService {
   }
 
   /// Request a 2FA code sent to the account's verified security mobile.
-  static Future<void> sendTwoFactorCode(String email) async {
-    final normalized = email.trim().toLowerCase();
-    if (MockAuthService.demoUsers.containsKey(normalized)) {
-      await MockAuthService.sendTwoFactorCode();
-      return;
-    }
-
+  static Future<void> sendTwoFactorCode() async {
     try {
       await _dio.post(
         '/api/auth/two-factor/send-otp',
@@ -262,20 +231,15 @@ class AuthService {
 
   /// Verify the 2FA code.
   static Future<void> verifyTwoFactorCode({
-    required String email,
     required String code,
+    required bool trustDevice,
   }) async {
-    final normalized = email.trim().toLowerCase();
-    if (MockAuthService.demoUsers.containsKey(normalized)) {
-      await MockAuthService.verifyTwoFactorCode(code);
-      return;
-    }
-
     try {
       await _dio.post(
-          '/api/auth/two-factor/verify-otp',
+        '/api/auth/two-factor/verify-otp',
         data: {
           'code': code.trim(),
+          'trustDevice': trustDevice,
         },
       );
     } on DioException catch (e) {
@@ -294,50 +258,86 @@ class AuthService {
     }
   }
 
-  /// Try to restore the server-backed session.
+  /// Retrieves the authenticated profile only from the server session cookie.
   static Future<AuthUser?> restoreSession() async {
     try {
-      final storedUser = await ApiClient.getUser();
-      if (storedUser != null && storedUser.isNotEmpty) {
-        final parsed = jsonDecode(storedUser) as Map<String, dynamic>;
-        return AuthUser.fromJson(parsed);
-      }
-
-      final session = await _dio.get(
-        '/api/auth/get-session',
-        options: Options(receiveTimeout: const Duration(seconds: 3)),
-      ).timeout(const Duration(seconds: 3));
-      if (session.data is! Map<String, dynamic> ||
-          (session.data as Map)['user'] == null) {
-        return null;
-      }
-      final user = AuthUser.fromJson(session.data as Map<String, dynamic>);
-      await ApiClient.saveUser(jsonEncode(user.toJson()));
-      return user;
+      return await _getAuthenticatedSession();
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 401) await ApiClient.clearAuth();
+      return null;
     } catch (_) {
       return null;
     }
   }
 
+  static Future<AuthUser?> getAuthenticatedSession() =>
+      _getAuthenticatedSession();
+
+  static Future<AuthUser?> _getAuthenticatedSession() async {
+    final session = await _dio
+        .get<dynamic>(
+          '/api/auth/get-session',
+          options: Options(receiveTimeout: const Duration(seconds: 3)),
+        )
+        .timeout(const Duration(seconds: 3));
+    if (session.data is! Map<String, dynamic> ||
+        (session.data as Map)['user'] == null) {
+      return null;
+    }
+    final user = AuthUser.fromJson(session.data as Map<String, dynamic>);
+    await ApiClient.saveUser(jsonEncode(user.toJson()));
+    return user;
+  }
+
   /// Extract a user-friendly error message from a Dio exception.
   static String _extractMessage(DioException e, String fallback) {
-    final message = e.message;
-    if (message != null && message.isNotEmpty) return message;
-
-    if (e.response?.data is Map) {
-      final body = e.response!.data as Map<String, dynamic>;
-      return body['error'] as String? ?? body['message'] as String? ?? fallback;
-    }
-
     if (e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.sendTimeout ||
         e.type == DioExceptionType.receiveTimeout) {
-      return 'Connection timed out. Please check your internet connection.';
+      return 'Connection timed out. Check your internet connection and try again.';
     }
 
     if (e.type == DioExceptionType.connectionError) {
-      return 'Cannot reach the server. Please check your connection.';
+      return 'Cannot reach the TMS server. Check your connection or ask admin to confirm the mobile API URL.';
     }
 
+    if (e.type == DioExceptionType.cancel) {
+      return 'The request was cancelled. Please try again.';
+    }
+
+    if (e.response?.data is Map) {
+      final body = e.response!.data as Map<String, dynamic>;
+      final serverMessage =
+          body['error'] as String? ?? body['message'] as String?;
+      if (serverMessage != null && serverMessage.isNotEmpty) {
+        return _friendlyServerMessage(serverMessage, fallback);
+      }
+    }
+
+    final message = e.message;
+    if (message != null && message.isNotEmpty) return message;
+
     return fallback;
+  }
+
+  static String _extractAuthMessage(DioException e) {
+    final status = e.response?.statusCode;
+    if (status == 400 || status == 401 || status == 403) {
+      return _extractMessage(e, 'Invalid email or password.');
+    }
+    if (status != null && status >= 500) {
+      return 'The TMS server could not complete sign in right now. Please try again shortly.';
+    }
+    return _extractMessage(e, 'Invalid email or password.');
+  }
+
+  static String _friendlyServerMessage(String message, String fallback) {
+    final normalized = message.trim().toLowerCase();
+    if (normalized == 'unauthorized' ||
+        normalized == 'forbidden' ||
+        normalized == 'bad request') {
+      return fallback;
+    }
+    return message;
   }
 }

@@ -9,6 +9,7 @@ import 'package:tms_mobile/features/auth/screens/forgot_password_screen.dart';
 import 'package:tms_mobile/features/auth/screens/reset_password_screen.dart';
 import 'package:tms_mobile/features/auth/screens/two_factor_screen.dart';
 import 'package:tms_mobile/features/auth/screens/change_password_screen.dart';
+import 'package:tms_mobile/features/auth/screens/unsupported_mobile_role_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_home_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_timetable_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_leave_screen.dart';
@@ -27,14 +28,70 @@ import 'package:tms_mobile/features/student/screens/student_attendance_screen.da
 import 'package:tms_mobile/features/student/screens/student_calendar_screen.dart';
 import 'package:tms_mobile/features/student/screens/student_certificates_screen.dart';
 import 'package:tms_mobile/features/student/screens/student_notifications_screen.dart';
-import 'package:tms_mobile/features/branch_manager/screens/branch_home_screen.dart';
-import 'package:tms_mobile/features/janitor/screens/janitor_home_screen.dart';
-import 'package:tms_mobile/features/janitor/screens/janitor_task_detail_screen.dart';
-import 'package:tms_mobile/features/janitor/models/janitor_task.dart';
-import 'package:tms_mobile/features/tenant_admin/screens/tenant_admin_home_screen.dart';
+
+@visibleForTesting
+String? mobileRoleBoundaryRedirect({
+  required AuthState authState,
+  required String location,
+}) {
+  final isLoggedIn = authState.isAuthenticated;
+  final is2FAPending = authState.isTwoFactorPending;
+  final isLoading = authState.isLoading;
+
+  if (isLoading) return null;
+
+  const publicRoutes = [
+    '/login',
+    '/forgot-password',
+    '/reset-password',
+    '/2fa'
+  ];
+  final isPublicRoute = publicRoutes.contains(location);
+
+  if (is2FAPending && location != '/2fa') {
+    return '/2fa';
+  }
+
+  if (!isLoggedIn && !isPublicRoute && !is2FAPending) {
+    return '/login';
+  }
+
+  if (isLoggedIn && isPublicRoute) {
+    return authState.roleRedirectPath;
+  }
+
+  if (isLoggedIn) {
+    final allowedPrefix = switch (authState.user?.role) {
+      RoleCodes.tenantAdmin => '/unsupported-role',
+      RoleCodes.branchAdmin => '/unsupported-role',
+      RoleCodes.accountant => '/unsupported-role',
+      RoleCodes.janitor => '/unsupported-role',
+      RoleCodes.webPortalOnly => '/unsupported-role',
+      RoleCodes.teacher => '/teacher/',
+      RoleCodes.student => '/student/',
+      RoleCodes.parent => '/parent/',
+      _ => null,
+    };
+    if (allowedPrefix == null) {
+      return authState.roleRedirectPath;
+    }
+    if (allowedPrefix == '/unsupported-role' &&
+        location != '/unsupported-role') {
+      return authState.roleRedirectPath;
+    }
+    if (allowedPrefix != '/unsupported-role' &&
+        !location.startsWith(allowedPrefix)) {
+      return authState.roleRedirectPath;
+    }
+  }
+
+  return null;
+}
 
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authProvider);
+  final authRefresh = ValueNotifier<AuthState>(ref.read(authProvider));
+  ref.listen<AuthState>(authProvider, (_, next) => authRefresh.value = next);
+  ref.onDispose(authRefresh.dispose);
 
   // MOB-005: a 401 anywhere in the app drops provider state so the
   // redirect guard below sends the user to /login (session-expired path).
@@ -44,61 +101,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/login',
     debugLogDiagnostics: true,
+    refreshListenable: authRefresh,
 
     // ── Auth redirect guard ──
     // Mirrors the web RequireAuth / RedirectIfAuth / RequireTwoFactor logic.
     redirect: (BuildContext context, GoRouterState state) {
-      final isLoggedIn = authState.isAuthenticated;
-      final is2FAPending = authState.isTwoFactorPending;
-      final isLoading = authState.isLoading;
-      final location = state.matchedLocation;
-
-      // While restoring session, don't redirect.
-      if (isLoading) return null;
-
-      // Public routes that don't require auth.
-      const publicRoutes = [
-        '/login',
-        '/forgot-password',
-        '/reset-password',
-        '/2fa'
-      ];
-      final isPublicRoute = publicRoutes.contains(location);
-
-      // If 2FA is pending, force the user to /2fa.
-      if (is2FAPending && location != '/2fa') {
-        return '/2fa';
-      }
-
-      // If not logged in and trying to access a protected route → login.
-      if (!isLoggedIn && !isPublicRoute && !is2FAPending) {
-        return '/login';
-      }
-
-      // If logged in and on a public route → redirect to role home.
-      if (isLoggedIn && isPublicRoute) {
-        return authState.roleRedirectPath;
-      }
-
-      // A valid session is not permission to browse another role's portal.
-      // Server authorization remains authoritative for data, while this guard
-      // prevents an invalid deep link from rendering an unrelated UI first.
-      if (isLoggedIn) {
-        final allowedPrefix = switch (authState.user?.role) {
-          RoleCodes.tenantAdmin => '/tenant/',
-          RoleCodes.branchAdmin => '/branch/',
-          RoleCodes.janitor => '/janitor/',
-          RoleCodes.teacher => '/teacher/',
-          RoleCodes.student => '/student/',
-          RoleCodes.parent => '/parent/',
-          _ => null,
-        };
-        if (allowedPrefix == null || !location.startsWith(allowedPrefix)) {
-          return authState.roleRedirectPath;
-        }
-      }
-
-      return null;
+      return mobileRoleBoundaryRedirect(
+        authState: authRefresh.value,
+        location: state.matchedLocation,
+      );
     },
 
     routes: <RouteBase>[
@@ -125,62 +136,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/2fa',
-        builder: (BuildContext context, GoRouterState state) {
-          final email = state.extra as String? ??
-              ref.read(authProvider).user?.email ??
-              '';
-          return TwoFactorScreen(email: email);
-        },
+        builder: (BuildContext context, GoRouterState _) =>
+            const TwoFactorScreen(),
       ),
 
-      // ── Branch Manager routes (canonical role: BRANCH_ADMIN) ──
       GoRoute(
-        path: '/branch/home',
+        path: '/unsupported-role',
         builder: (BuildContext context, GoRouterState state) =>
-            const BranchHomeScreen(),
+            const UnsupportedMobileRoleScreen(),
       ),
-      GoRoute(
-        path: '/branch/change-password',
-        builder: (BuildContext context, GoRouterState state) =>
-            const ChangePasswordScreen(),
-      ),
-
-      // ── Tenant Admin routes ──
-      GoRoute(
-        path: '/tenant/home',
-        builder: (BuildContext context, GoRouterState state) =>
-            const TenantAdminHomeScreen(),
-      ),
-      GoRoute(
-        path: '/tenant/change-password',
-        builder: (BuildContext context, GoRouterState state) =>
-            const ChangePasswordScreen(),
-      ),
-
-      // ── Janitor routes ──
-      GoRoute(
-        path: '/janitor/home',
-        builder: (BuildContext context, GoRouterState state) =>
-            const JanitorHomeScreen(),
-      ),
-      GoRoute(
-        path: '/janitor/change-password',
-        builder: (BuildContext context, GoRouterState state) =>
-            const ChangePasswordScreen(),
-      ),
-      GoRoute(
-        path: '/janitor/task',
-        builder: (BuildContext context, GoRouterState state) {
-          final task = state.extra as JanitorTask?;
-          if (task == null) {
-            return const Scaffold(
-              body: Center(child: Text('Task details are unavailable.')),
-            );
-          }
-          return JanitorTaskDetailScreen(task: task);
-        },
-      ),
-
       // ── Teacher routes ──
       GoRoute(
         path: '/teacher/home',
