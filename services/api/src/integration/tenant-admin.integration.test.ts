@@ -192,7 +192,7 @@ async function main(): Promise<void> {
       prisma.branch.create({
         data: {
           tenantId: tenantA.id, name: 'Tenant A Branch', address: 'Kathmandu',
-          latitude: 27.7172, longitude: 85.324,
+          latitude: 27.7172, longitude: 85.324, admissionFee: 2500,
         },
       }),
       prisma.branch.create({
@@ -456,6 +456,22 @@ async function main(): Promise<void> {
     assert.equal(await prisma.tenantPolicyVersion.count({ where: { tenantId: tenantA.id } }), 1);
     assert.equal(await prisma.tenantPolicyVersion.count({ where: { tenantId: tenantB.id } }), 0);
 
+    const admissionDetails = {
+      admittedAt: '2026-08-01T10:00:00.000Z',
+      dateOfBirth: '2012-04-12',
+      gender: 'Male',
+      nationality: 'Nepali',
+      permanentAddress: 'Kathmandu',
+      fatherName: 'Father Integration',
+      fatherPhone: '9800000101',
+      motherName: 'Mother Integration',
+      motherPhone: '9800000102',
+      primaryParent: 'Father',
+      emergencyContactName: 'Emergency Contact',
+      emergencyContactPhone: '9800000103',
+      emergencyContactRelationship: 'Uncle',
+    };
+
     response = await request('POST', '/api/users/admissions', adminACookie, {
       branchId: branchA.id,
       gradeId: gradeAId,
@@ -467,6 +483,7 @@ async function main(): Promise<void> {
         firstName: 'Parent', lastName: 'Integration',
         email: 'parent@integration.tms.local', phone: '9800000002',
       },
+      admissionDetails,
     });
     assert.equal(response.status, 201);
     assert.equal(response.body.admission.status, 'PENDING_PAYMENT');
@@ -491,6 +508,7 @@ async function main(): Promise<void> {
         firstName: 'Foreign', lastName: 'Parent',
         email: 'foreign-parent@integration.tms.local', phone: '9800000004',
       },
+      admissionDetails: { ...admissionDetails, gender: 'Female' },
     });
     assert.equal(foreignAdmission.status, 404, 'foreign tenant admission resources must be hidden');
 
@@ -506,7 +524,7 @@ async function main(): Promise<void> {
     assert.equal(response.status, 200, 'assigned Accountant may record the admission payment');
     assert.equal(
       (await prisma.student.findUniqueOrThrow({ where: { id: admissionStudentId } })).admissionStatus,
-      'READY_FOR_LOGIN',
+      'ACTIVE',
     );
     response = await request(
       'POST',
@@ -521,16 +539,30 @@ async function main(): Promise<void> {
     ]);
     assert.deepEqual(
       concurrentCredentialIssues.map((result) => result.status).sort(),
-      [200, 409],
-      'admission credentials must be issued exactly once',
+      [409, 409],
+      'admission credentials must not be issued again after payment activation',
     );
-    const credentialIssue = concurrentCredentialIssues.find((result) => result.status === 200)!;
-    const studentCredentials = credentialIssue.body.student;
-    const parentCredentials = credentialIssue.body.parent;
+    const activatedStudent = await prisma.student.findUniqueOrThrow({
+      where: { id: admissionStudentId },
+      include: { user: true, studentParents: { include: { parent: { include: { user: true } } } } },
+    });
+    assert.equal(activatedStudent.admissionStatus, 'ACTIVE');
+    assert.equal(activatedStudent.user.status, 'ACTIVE');
+    assert.equal(activatedStudent.studentParents[0].parent.user.status, 'ACTIVE');
+
+    const knownPasswordHash = await bcrypt.hash(TEST_PASSWORD, 4);
+    const activatedParentUser = activatedStudent.studentParents[0].parent.user;
+    await Promise.all([
+      prisma.user.update({ where: { id: activatedStudent.user.id }, data: { passwordHash: knownPasswordHash } }),
+      prisma.user.update({ where: { id: activatedParentUser.id }, data: { passwordHash: knownPasswordHash } }),
+      prisma.account.updateMany({ where: { userId: activatedStudent.user.id }, data: { password: knownPasswordHash } }),
+      prisma.account.updateMany({ where: { userId: activatedParentUser.id }, data: { password: knownPasswordHash } }),
+    ]);
+
     await (prisma as any).rateLimit.deleteMany();
     const [studentCookie, parentCookie] = await Promise.all([
-      signIn(studentCredentials.email, studentCredentials.temporaryPassword),
-      signIn(parentCredentials.email, parentCredentials.temporaryPassword),
+      signIn(activatedStudent.user.email),
+      signIn(activatedParentUser.email),
     ]);
 
     response = await request('GET', '/api/branches', studentCookie);
@@ -541,14 +573,6 @@ async function main(): Promise<void> {
     assert.equal(response.status, 403, 'Students must not receive institution-wide finance totals');
     response = await request('GET', '/api/finances/overview', parentCookie);
     assert.equal(response.status, 403, 'Parents must not receive institution-wide finance totals');
-
-    const activatedStudent = await prisma.student.findUniqueOrThrow({
-      where: { id: admissionStudentId },
-      include: { user: true, studentParents: { include: { parent: { include: { user: true } } } } },
-    });
-    assert.equal(activatedStudent.admissionStatus, 'ACTIVE');
-    assert.equal(activatedStudent.user.status, 'ACTIVE');
-    assert.equal(activatedStudent.studentParents[0].parent.user.status, 'ACTIVE');
 
     response = await request('POST', '/api/cron/trigger', branchAdminCookie, {
       taskName: 'monthly-due-verification',
@@ -886,6 +910,63 @@ async function main(): Promise<void> {
     });
     assert.equal(response.status, 201);
     const enrollmentAId = response.body.enrollment.id;
+    response = await request('POST', '/api/branch-admin/result-definitions', adminACookie, {
+      branchId: branchA.id,
+      classId: classAId,
+      title: 'Portal Integration Assessment',
+      testDate: '2026-09-17T00:00:00.000Z',
+    });
+    assert.equal(response.status, 201, 'Tenant Admin may create a result definition for the enrolled class');
+    const portalResultDefinitionId = response.body.definition.id;
+    response = await request('POST', `/api/branch-admin/result-definitions/${portalResultDefinitionId}/import`, adminACookie, {
+      maximum: 50,
+      passMarks: 25,
+      rows: [{ studentId: admissionStudentId, score: 44 }],
+    });
+    assert.equal(response.status, 200, 'Tenant Admin may save result rows as drafts');
+    response = await request('GET', '/api/users/me/student-portal', studentCookie);
+    assert.equal(response.status, 200);
+    assert(
+      !response.body.results.some((result: any) => result.assessment === 'Portal Integration Assessment'),
+      'student portal must hide unpublished result drafts',
+    );
+    response = await request('POST', `/api/branch-admin/result-definitions/${portalResultDefinitionId}/publish`, adminACookie);
+    assert.equal(response.status, 200, 'Tenant Admin may publish saved result rows');
+    response = await request('GET', '/api/users/me/student-portal', studentCookie);
+    assert.equal(response.status, 200, 'student portal must refresh after result publication');
+    assert(
+      response.body.results.some((result: any) =>
+        result.assessment === 'Portal Integration Assessment' &&
+        result.subject === courseA.name &&
+        result.score === 44 &&
+        result.maximum === 50,
+      ),
+      'student portal must expose the newly published result after refresh',
+    );
+    response = await request('GET', '/api/parent/portal', parentCookie);
+    assert.equal(response.status, 200, 'parent portal must refresh after result publication');
+    assert(
+      response.body.remarks.some((remark: any) =>
+        remark.subject === courseA.name &&
+        remark.author === 'Performance system' &&
+        remark.message.includes('88% across 1 assessment'),
+      ),
+      'parent portal must expose the linked child published-performance signal after refresh',
+    );
+    const feeSyncInvoice = await prisma.invoice.create({
+      data: {
+        tenantId: tenantA.id,
+        branchId: branchA.id,
+        studentId: admissionStudentId,
+        amount: 2400,
+        netPayable: 2400,
+        billingCycleStart: new Date(),
+        billingCycleEnd: new Date(Date.now() + 30 * 86_400_000),
+        dueDate: new Date(Date.now() + 7 * 86_400_000),
+        invoiceType: 'TUITION',
+        panNumberSnapshot: tenantA.panNumber,
+      },
+    });
     response = await request('POST', '/api/courses/enroll', adminACookie, {
       studentId: admissionStudentId,
       courseId: courseA.id,
@@ -897,17 +978,9 @@ async function main(): Promise<void> {
       name: 'Class 10 Mathematics Conflict',
       schedule: [{ day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date().getDay()], start: '09:30', end: '10:30' }],
     });
-    assert.equal(response.status, 201);
-    const conflictingClassId = response.body.class.id;
-    response = await request('POST', '/api/courses/enroll', adminACookie, {
-      studentId: admissionStudentId,
-      courseId: courseA.id,
-      classId: conflictingClassId,
-    });
-    assert.equal(response.status, 409, 'students cannot be enrolled into overlapping active classes');
+    assert.equal(response.status, 409, 'overlapping active classes are rejected before enrollment');
     assert.match(response.body.error, /Student conflict:/);
     assert(Array.isArray(response.body.conflicts));
-    assert.equal(await prisma.enrollment.count({ where: { studentId: admissionStudentId, classId: conflictingClassId } }), 0);
     response = await request('POST', '/api/courses/billing/block', adminACookie, {
       studentId: foreignStudent.id,
       courseId: courseB.id,
@@ -918,15 +991,243 @@ async function main(): Promise<void> {
       courseId: courseA.id,
     });
     assert.equal(response.status, 200);
+    response = await request('GET', '/api/users/me/student-portal', studentCookie);
+    assert.equal(response.status, 200, 'student portal must refresh after a billing block');
+    assert.equal(response.body.studentProfile.blocked, true);
+    assert.equal(response.body.studentProfile.outstanding, 2400);
+    assert(response.body.invoices.some((invoice: any) => invoice.id === feeSyncInvoice.id && invoice.state === 'Upcoming'));
+    response = await request('GET', '/api/parent/portal', parentCookie);
+    assert.equal(response.status, 200, 'parent portal must refresh after a billing block');
+    assert.equal(response.body.selected.blocked, true);
+    assert.equal(response.body.selected.outstanding, 2400);
+    assert(response.body.invoices.some((invoice: any) => invoice.id === feeSyncInvoice.id && invoice.state === 'Upcoming'));
     response = await request('POST', '/api/courses/billing/override', adminACookie, {
       studentId: admissionStudentId,
       courseId: courseA.id,
       reason: 'Verified manual override',
     });
     assert.equal(response.status, 200);
+    response = await request('GET', '/api/users/me/student-portal', studentCookie);
+    assert.equal(response.status, 200, 'student portal must refresh after a billing override');
+    assert.equal(response.body.studentProfile.blocked, false, 'override must restore student access while the invoice remains unpaid');
+    assert.equal(response.body.studentProfile.outstanding, 2400);
+    response = await request('GET', '/api/parent/portal', parentCookie);
+    assert.equal(response.status, 200, 'parent portal must refresh after a billing override');
+    assert.equal(response.body.selected.blocked, false, 'override must restore the linked child access');
+    assert.equal(response.body.selected.outstanding, 2400);
+    response = await request('POST', `/api/finances/invoices/${feeSyncInvoice.id}/pay`, adminACookie, {
+      transactionId: 'FEE-SYNC-PAID-001',
+    });
+    assert.equal(response.status, 200, 'Tenant Admin may record the invoice payment');
+    response = await request('GET', '/api/users/me/student-portal', studentCookie);
+    assert.equal(response.status, 200, 'student portal must refresh after invoice payment');
+    assert.equal(response.body.studentProfile.blocked, false);
+    assert.equal(response.body.studentProfile.outstanding, 0);
+    assert(response.body.invoices.some((invoice: any) => invoice.id === feeSyncInvoice.id && invoice.state === 'Paid' && invoice.qrAvailable === false));
+    response = await request('GET', '/api/parent/portal', parentCookie);
+    assert.equal(response.status, 200, 'parent portal must refresh after invoice payment');
+    assert.equal(response.body.selected.blocked, false);
+    assert.equal(response.body.selected.outstanding, 0);
+    assert(response.body.invoices.some((invoice: any) => invoice.id === feeSyncInvoice.id && invoice.state === 'Paid' && invoice.qrAvailable === false));
     response = await request('GET', `/api/courses/timetable/student/${admissionStudentId}`, adminACookie);
     assert.equal(response.status, 200);
     assert(response.body.timetable.some((item: any) => item.classId === classAId));
+    response = await request('GET', '/api/users/me/student-portal', studentCookie);
+    assert.equal(response.status, 200, 'student mobile portal must load from the shared API');
+    assert(
+      response.body.weeklySessions.some((session: any) => String(session.id).startsWith(`${classAId}-`) && session.time === '09:00'),
+      'student mobile portal must include the enrolled class schedule',
+    );
+    response = await request('PUT', `/api/courses/classes/${classAId}`, branchAdminCookie, {
+      schedule: [{ day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date().getDay()], start: '14:15', end: '15:15' }],
+    });
+    assert.equal(response.status, 200, 'assigned Branch Admin may update the class timetable');
+    response = await request('GET', '/api/users/me/student-portal', studentCookie);
+    assert.equal(response.status, 200);
+    assert(
+      response.body.weeklySessions.some((session: any) => String(session.id).startsWith(`${classAId}-`) && session.time === '14:15' && session.endTime === '15:15'),
+      'student mobile portal must reflect Branch Admin timetable changes after refresh',
+    );
+    assert(
+      !response.body.weeklySessions.some((session: any) => session.id === foreignClassId),
+      'student mobile portal must not expose foreign-tenant class schedules',
+    );
+    response = await request('POST', '/api/courses', adminACookie, {
+      branchId: branchA.id,
+      gradeId: gradeAId,
+      name: 'Enrollment Sync Music',
+      type: 'MUSIC',
+      feeStructure: { monthlyBase: 1500 },
+    });
+    assert.equal(response.status, 201);
+    const enrollmentSyncCourseId = response.body.course.id;
+    const enrollmentSyncTeacher = await createTenantAdmin(
+      tenantA.id,
+      'enrollment-sync-teacher@integration.tms.local',
+      'Teacher',
+      branchA.id,
+      ['mark_geo_attendance'],
+    );
+    response = await request('POST', '/api/courses/classes', adminACookie, {
+      courseId: enrollmentSyncCourseId,
+      name: 'Enrollment Sync Music Class',
+      teacherId: enrollmentSyncTeacher.id,
+      schedule: [{ day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date().getDay()], start: '16:30', end: '17:30' }],
+    });
+    assert.equal(response.status, 201);
+    const enrollmentSyncClassId = response.body.class.id;
+    response = await request('POST', '/api/courses/classes', adminACookie, {
+      courseId: enrollmentSyncCourseId,
+      name: 'Enrollment Sync Music Destination Class',
+      teacherId: enrollmentSyncTeacher.id,
+      schedule: [{ day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date().getDay()], start: '18:00', end: '19:00' }],
+    });
+    assert.equal(response.status, 201);
+    const enrollmentMoveDestinationClassId = response.body.class.id;
+    response = await request('GET', '/api/users/me/student-portal', studentCookie);
+    assert.equal(response.status, 200);
+    assert(
+      !response.body.weeklySessions.some((session: any) => String(session.id).startsWith(`${enrollmentSyncClassId}-`)),
+      'student portal must not show a class before the admin enrollment write',
+    );
+    response = await request('GET', '/api/parent/portal', parentCookie);
+    assert.equal(response.status, 200);
+    assert(
+      !response.body.sessions.some((session: any) => String(session.id).startsWith(`${enrollmentSyncClassId}-`)),
+      'parent portal must not show a class before the admin enrollment write',
+    );
+    response = await request('POST', '/api/courses/enroll', adminACookie, {
+      studentId: admissionStudentId,
+      courseId: enrollmentSyncCourseId,
+      classId: enrollmentSyncClassId,
+    });
+    assert.equal(response.status, 201, 'Tenant Admin may enroll an active student into a new class');
+    const enrollmentSyncEnrollmentId = response.body.enrollment.id;
+    response = await request('GET', '/api/users/me/student-portal', studentCookie);
+    assert.equal(response.status, 200, 'student portal must refresh after admin enrollment write');
+    assert(
+      response.body.weeklySessions.some((session: any) =>
+        String(session.id).startsWith(`${enrollmentSyncClassId}-`) &&
+        session.subject === 'Enrollment Sync Music' &&
+        session.teacher === 'Teacher Integration' &&
+        session.className === 'Enrollment Sync Music Class' &&
+        session.time === '16:30' &&
+        session.endTime === '17:30',
+      ),
+      'student portal weekly timetable must include the newly enrolled class after refresh',
+    );
+    assert(
+      response.body.todaySessions.some((session: any) =>
+        String(session.id).startsWith(`${enrollmentSyncClassId}-`) &&
+        session.subject === 'Enrollment Sync Music' &&
+        session.teacher === 'Teacher Integration' &&
+        session.time === '16:30' &&
+        session.endTime === '17:30',
+      ),
+      'student portal today sessions must include the newly enrolled class when scheduled today',
+    );
+    response = await request('GET', '/api/parent/portal', parentCookie);
+    assert.equal(response.status, 200, 'parent portal must refresh after admin enrollment write');
+    assert(
+      response.body.sessions.some((session: any) =>
+        String(session.id).startsWith(`${enrollmentSyncClassId}-`) &&
+        session.childId === admissionStudentId &&
+        session.subject === 'Enrollment Sync Music' &&
+        session.teacher === 'Teacher Integration' &&
+        session.time === '16:30' &&
+        session.endTime === '17:30',
+      ),
+      'parent portal sessions must include the linked child newly enrolled class after refresh',
+    );
+    response = await request('POST', '/api/courses/enroll', adminACookie, {
+      studentId: admissionStudentId,
+      courseId: enrollmentSyncCourseId,
+      classId: enrollmentSyncClassId,
+    });
+    assert.equal(response.status, 409, 'duplicate active enrollment must be rejected');
+    response = await request('POST', '/api/courses/enroll', adminACookie, {
+      studentId: foreignStudent.id,
+      courseId: enrollmentSyncCourseId,
+      classId: enrollmentSyncClassId,
+    });
+    assert.equal(response.status, 404, 'foreign-tenant student enrollment must be hidden');
+    response = await request('POST', '/api/courses/enroll', adminACookie, {
+      studentId: admissionStudentId,
+      courseId: enrollmentSyncCourseId,
+      classId: enrollmentMoveDestinationClassId,
+    });
+    assert.equal(response.status, 201, 'Tenant Admin may enroll a student into a move destination class');
+    const enrollmentMoveDestinationEnrollmentId = response.body.enrollment.id;
+    response = await request('DELETE', `/api/courses/enrollments/${enrollmentSyncEnrollmentId}`, adminACookie);
+    assert.equal(response.status, 200, 'Tenant Admin may drop an active enrollment');
+    const droppedEnrollment = await prisma.enrollment.findUnique({
+      where: { id: enrollmentSyncEnrollmentId },
+    });
+    assert.equal(droppedEnrollment?.status, 'DROPPED', 'dropping must preserve enrollment history');
+    assert(droppedEnrollment?.validUntil, 'dropped enrollment must have a validity end date');
+    response = await request('GET', '/api/users/me/student-portal', studentCookie);
+    assert.equal(response.status, 200, 'student portal must refresh after admin enrollment drop');
+    assert(
+      !response.body.weeklySessions.some((session: any) => String(session.id).startsWith(`${enrollmentSyncClassId}-`)),
+      'student portal weekly timetable must remove the dropped class after refresh',
+    );
+    assert(
+      !response.body.todaySessions.some((session: any) => String(session.id).startsWith(`${enrollmentSyncClassId}-`)),
+      'student portal today sessions must remove the dropped class after refresh',
+    );
+    assert(
+      response.body.weeklySessions.some((session: any) =>
+        String(session.id).startsWith(`${enrollmentMoveDestinationClassId}-`) &&
+        session.subject === 'Enrollment Sync Music' &&
+        session.className === 'Enrollment Sync Music Destination Class' &&
+        session.time === '18:00' &&
+        session.endTime === '19:00',
+      ),
+      'student portal weekly timetable must retain only the move destination after refresh',
+    );
+    assert(
+      response.body.todaySessions.some((session: any) =>
+        String(session.id).startsWith(`${enrollmentMoveDestinationClassId}-`) &&
+        session.subject === 'Enrollment Sync Music' &&
+        session.time === '18:00' &&
+        session.endTime === '19:00',
+      ),
+      'student portal today sessions must retain the move destination after refresh',
+    );
+    response = await request('GET', '/api/parent/portal', parentCookie);
+    assert.equal(response.status, 200, 'parent portal must refresh after admin enrollment drop');
+    assert(
+      !response.body.sessions.some((session: any) => String(session.id).startsWith(`${enrollmentSyncClassId}-`)),
+      'parent portal sessions must remove the linked child dropped class after refresh',
+    );
+    assert(
+      response.body.sessions.some((session: any) =>
+        String(session.id).startsWith(`${enrollmentMoveDestinationClassId}-`) &&
+        session.childId === admissionStudentId &&
+        session.subject === 'Enrollment Sync Music' &&
+        session.room === 'Enrollment Sync Music Destination Class' &&
+        session.time === '18:00' &&
+        session.endTime === '19:00',
+      ),
+      'parent portal sessions must retain the linked child move destination after refresh',
+    );
+    const destinationEnrollment = await prisma.enrollment.findUnique({
+      where: { id: enrollmentMoveDestinationEnrollmentId },
+    });
+    assert.equal(destinationEnrollment?.status, 'ACTIVE', 'moving must leave the destination enrollment active');
+    response = await request('DELETE', `/api/courses/enrollments/${enrollmentSyncEnrollmentId}`, adminACookie);
+    assert.equal(response.status, 409, 'dropping an already dropped enrollment must be rejected');
+    const foreignEnrollment = await prisma.enrollment.create({
+      data: {
+        studentId: foreignStudent.id,
+        courseId: courseB.id,
+        classId: foreignClassId,
+        admissionDate: new Date(),
+        status: 'ACTIVE',
+      },
+    });
+    response = await request('DELETE', `/api/courses/enrollments/${foreignEnrollment.id}`, adminACookie);
+    assert.equal(response.status, 404, 'foreign-tenant enrollment drops must be hidden');
     response = await request('GET', `/api/courses/timetable/teacher/${staffUser.id}`, adminACookie);
     assert.equal(response.status, 200);
 
@@ -941,9 +1242,11 @@ async function main(): Promise<void> {
     const teacherA2 = await createTenantAdmin(
       tenantA.id, 'teacher-a2@integration.tms.local', 'Teacher', branchA2.id, ['mark_geo_attendance'],
     );
+    const teacherA2Cookie = await signIn(teacherA2.email);
     const studentUserA2 = await createTenantAdmin(
       tenantA.id, 'student-a2@integration.tms.local', 'Student', branchA2.id, [],
     );
+    const studentA2Cookie = await signIn(studentUserA2.email);
     const studentA2 = await prisma.student.create({
       data: {
         userId: studentUserA2.id, gradeId: gradeAId, admissionDate: new Date(),
@@ -1039,6 +1342,25 @@ async function main(): Promise<void> {
     });
     assert.equal(response.status, 201);
     const homeworkId = response.body.homework.id;
+    response = await request('GET', '/api/users/me/student-portal', studentCookie);
+    assert.equal(response.status, 200, 'student portal must refresh after homework creation');
+    assert(
+      response.body.homework.some((homework: any) =>
+        homework.id === homeworkId &&
+        homework.subject === 'Mathematics' &&
+        homework.title === 'Authorization exercise' &&
+        homework.teacher === 'Teacher Integration' &&
+        homework.completed === false,
+      ),
+      'student portal homework must include the new assignment after refresh',
+    );
+    const parentPortalAfterHomework = await request('GET', '/api/parent/portal', parentCookie);
+    assert.equal(parentPortalAfterHomework.status, 200);
+    assert.equal(
+      'homework' in parentPortalAfterHomework.body,
+      false,
+      'parent portal does not currently expose a homework feed',
+    );
     response = await request('POST', '/api/homework', teacherCookie, {
       classId: foreignClassId,
       subject: 'Mathematics',
@@ -1141,10 +1463,12 @@ async function main(): Promise<void> {
     assert.equal(response.status, 404);
     response = await request('DELETE', `/api/courses/enrollments/${specialEnrollmentId}`, adminACookie);
     assert.equal(response.status, 200);
+    response = await request('PATCH', `/api/courses/classes/${specialClassId}/archive`, adminACookie, { archived: true });
+    assert.equal(response.status, 200);
     response = await request('DELETE', `/api/courses/classes/${specialClassId}`, adminACookie);
-    assert.equal(response.status, 200);
+    assert.equal(response.status, 409, 'class deletion must preserve enrollment history');
     response = await request('DELETE', `/api/courses/${specialCourseId}`, adminACookie);
-    assert.equal(response.status, 200);
+    assert.equal(response.status, 409, 'course deletion must preserve classes with history');
 
     // Teacher and student attendance flows.
     const teacherSession = await prisma.teacherSession.findFirstOrThrow({
@@ -1157,6 +1481,49 @@ async function main(): Promise<void> {
       students: [{ studentId: admissionStudentId, status: 'PRESENT' }],
     });
     assert.equal(response.status, 201);
+    const attendanceRecordId = response.body.records[0].id;
+    response = await request('GET', '/api/users/me/student-portal', studentCookie);
+    assert.equal(response.status, 200, 'student portal must refresh after teacher attendance write');
+    assert(
+      response.body.attendance.some((record: any) =>
+        record.id === attendanceRecordId &&
+        record.subject === 'Tenant A Mathematics' &&
+        record.session === 'Class 10 Mathematics Updated' &&
+        record.state === 'Present',
+      ),
+      'student portal must include the live attendance record written by the teacher',
+    );
+    assert.equal(response.body.studentProfile.attendanceRate, 100,
+      'student portal attendance summary must reflect the teacher write');
+    assert.equal(response.body.studentProfile.attendanceCounts.present, 1,
+      'student portal attendance counts must reflect the teacher write');
+    response = await request('GET', '/api/parent/portal', parentCookie);
+    assert.equal(response.status, 200, 'parent portal must refresh after teacher attendance write');
+    assert(
+      response.body.attendance.some((record: any) =>
+        record.id === attendanceRecordId &&
+        record.childId === admissionStudentId &&
+        record.subject === 'Tenant A Mathematics' &&
+        record.session === 'Class 10 Mathematics Updated' &&
+        record.state === 'Present',
+      ),
+      'parent portal must include only the linked child attendance record written by the teacher',
+    );
+    assert(!response.body.children.some((child: any) => child.id === studentA2.id),
+      'parent portal must not expose another branch student as a linked child');
+    response = await request('GET', '/api/users/me/student-portal', studentA2Cookie);
+    assert.equal(response.status, 200, 'another branch student portal must still load');
+    assert(
+      !response.body.attendance.some((record: any) => record.id === attendanceRecordId || record.subject === 'Tenant A Mathematics'),
+      'another branch student portal must not expose Branch A attendance data',
+    );
+    response = await request('POST', '/api/attendance/student', teacherA2Cookie, {
+      classId: classAId,
+      sessionId: teacherSession.id,
+      date: teacherSession.date.toISOString(),
+      students: [{ studentId: admissionStudentId, status: 'ABSENT' }],
+    });
+    assert.equal(response.status, 403, 'wrong teacher must not write attendance for another teacher class');
     response = await request('POST', '/api/attendance/session/update', teacherCookie, {
       classId: classAId,
       date: teacherSession.date.toISOString(),

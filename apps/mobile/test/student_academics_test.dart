@@ -177,6 +177,20 @@ Dio stubPortal({Map<String, dynamic>? body, int statusCode = 200}) {
   );
 }
 
+class _SequencedAcademicsRepository extends StudentAcademicsRepository {
+  _SequencedAcademicsRepository(this.snapshots) : super(dio: Dio());
+
+  final List<StudentPortalSnapshot> snapshots;
+  var calls = 0;
+
+  @override
+  Future<StudentPortalSnapshot> fetchPortal({CancelToken? cancelToken}) async {
+    final index = calls < snapshots.length ? calls : snapshots.length - 1;
+    calls++;
+    return snapshots[index];
+  }
+}
+
 Dio stubFailure(int statusCode, [dynamic data]) {
   return ApiClient.buildDio(
     baseUrl: 'https://test.invalid',
@@ -310,6 +324,74 @@ void main() {
       state = container.read(studentAcademicsViewModelProvider);
       expect(state.pagedHomework, hasLength(12));
       expect(state.hasMoreHomework, isFalse);
+    });
+
+    test('refresh adds newly created homework from the portal snapshot',
+        () async {
+      final before = portalJson(homeworkCount: 0);
+      final after = portalJson(homeworkCount: 0)
+        ..['homework'] = [
+          {
+            'id': 'homework-created-1',
+            'subject': 'Mathematics',
+            'title': 'Authorization exercise',
+            'teacher': 'Teacher Integration',
+            'dueLabel': '18 Sep 2026',
+            'urgency': 'soon',
+            'completed': false,
+            'description': 'Complete the assigned practice.',
+          },
+        ];
+      final viewModel = StudentAcademicsViewModel(
+        repository: _SequencedAcademicsRepository([
+          StudentPortalSnapshot.fromJson(before),
+          StudentPortalSnapshot.fromJson(after),
+        ]),
+      );
+
+      await viewModel.load();
+      expect(viewModel.state.homework, isEmpty);
+
+      await viewModel.refresh();
+
+      final homework = viewModel.state.homework.single;
+      expect(homework.id, 'homework-created-1');
+      expect(homework.title, 'Authorization exercise');
+      expect(homework.teacher, 'Teacher Integration');
+      expect(homework.completed, isFalse);
+    });
+
+    test('refresh adds a newly published result from the portal snapshot',
+        () async {
+      final before = portalJson()..['results'] = [];
+      final after = portalJson()
+        ..['results'] = [
+          {
+            'id': 'published-result-1',
+            'subject': 'Tenant A Mathematics',
+            'assessment': 'Portal Integration Assessment',
+            'score': 44,
+            'maximum': 50,
+            'publishedLabel': 'Shared 17 Sep 2026',
+          },
+        ];
+      final viewModel = StudentAcademicsViewModel(
+        repository: _SequencedAcademicsRepository([
+          StudentPortalSnapshot.fromJson(before),
+          StudentPortalSnapshot.fromJson(after),
+        ]),
+      );
+
+      await viewModel.load();
+      expect(viewModel.state.results, isEmpty);
+
+      await viewModel.refresh();
+
+      final result = viewModel.state.results.single;
+      expect(result.id, 'published-result-1');
+      expect(result.assessment, 'Portal Integration Assessment');
+      expect(result.score, 44);
+      expect(result.maximum, 50);
     });
 
     test('flags offline on connection errors', () async {

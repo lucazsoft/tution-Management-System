@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'api_exception.dart';
 import 'correlation_id.dart';
 import 'retry_policy.dart';
+import 'web_credentials_adapter.dart';
 
 /// Central API client for the TMS mobile app.
 ///
@@ -101,7 +102,12 @@ class ApiClient {
       contentType: 'application/json',
       responseType: ResponseType.json,
     ));
-    if (adapter != null) client.httpClientAdapter = adapter;
+    final webAdapter = buildWebCredentialsAdapter();
+    if (adapter != null) {
+      client.httpClientAdapter = adapter;
+    } else if (webAdapter != null) {
+      client.httpClientAdapter = webAdapter;
+    }
     client.interceptors.add(CorrelationIdInterceptor());
     client.interceptors.add(RetryInterceptor(client, retryPolicy));
     if (extraInterceptors != null) {

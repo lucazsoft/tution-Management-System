@@ -15,16 +15,17 @@ void main() {
       expect(normalizeRoleCode(' TENANT_ADMIN '), 'TENANT_ADMIN');
       expect(normalizeRoleCode('branch_admin'), 'BRANCH_ADMIN');
       expect(normalizeRoleCode('janitor'), 'JANITOR');
+      expect(normalizeRoleCode('accountant'), 'ACCOUNTANT');
     });
 
     test('maps the Branch Manager product label to BRANCH_ADMIN', () {
       expect(normalizeRoleCode('Branch Manager'), 'BRANCH_ADMIN');
     });
 
-    test('returns null for absent or unsupported roles', () {
+    test('returns null only for absent roles and handoffs web/PWA roles', () {
       expect(normalizeRoleCode(null), isNull);
       expect(normalizeRoleCode(''), isNull);
-      expect(normalizeRoleCode('Super Admin'), isNull);
+      expect(normalizeRoleCode('Super Admin'), RoleCodes.webPortalOnly);
     });
   });
 
@@ -43,18 +44,17 @@ void main() {
       expect(user.role, 'JANITOR');
     });
 
-    test('throws AuthFailure for an unsupported role instead of defaulting',
+    test('maps non-mobile roles to the web/PWA handoff without mobile access',
         () {
-      expect(
-        () => AuthUser.fromJson({
-          'user': {
-            'id': 'user-1',
-            'email': 'unknown@example.com',
-            'role': 'Super Admin',
-          },
-        }),
-        throwsA(isA<AuthFailure>()),
-      );
+      final user = AuthUser.fromJson({
+        'user': {
+          'id': 'user-1',
+          'email': 'unknown@example.com',
+          'role': 'Super Admin',
+        },
+      });
+
+      expect(user.role, RoleCodes.webPortalOnly);
     });
   });
 }

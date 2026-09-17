@@ -2,7 +2,9 @@
 abstract final class RoleCodes {
   static const tenantAdmin = 'TENANT_ADMIN';
   static const branchAdmin = 'BRANCH_ADMIN';
+  static const accountant = 'ACCOUNTANT';
   static const janitor = 'JANITOR';
+  static const webPortalOnly = 'WEB_PORTAL_ONLY';
   static const teacher = 'TEACHER';
   static const student = 'STUDENT';
   static const parent = 'PARENT';
@@ -15,6 +17,7 @@ const Map<String, String> _roleCodeByNormalizedName = {
   'BRANCH_ADMIN': RoleCodes.branchAdmin,
   // Branch Manager is a product label, not a distinct permission role.
   'BRANCH MANAGER': RoleCodes.branchAdmin,
+  'ACCOUNTANT': RoleCodes.accountant,
   'JANITOR': RoleCodes.janitor,
   'TEACHER': RoleCodes.teacher,
   'STUDENT': RoleCodes.student,
@@ -23,13 +26,14 @@ const Map<String, String> _roleCodeByNormalizedName = {
 
 /// Converts a supported API role display name or role code to a mobile code.
 ///
-/// Returns `null` for missing or unsupported roles so callers can reject them
-/// rather than assigning a more privileged or unrelated default role.
+/// Returns `null` only for a missing role. Any non-mobile role is mapped to
+/// [RoleCodes.webPortalOnly], which permits the web/PWA handoff but no mobile
+/// feature access.
 String? normalizeRoleCode(String? role) {
   if (role == null) return null;
 
   final normalized = role.trim().replaceAll(RegExp(r'\s+'), ' ').toUpperCase();
   if (normalized.isEmpty) return null;
 
-  return _roleCodeByNormalizedName[normalized];
+  return _roleCodeByNormalizedName[normalized] ?? RoleCodes.webPortalOnly;
 }

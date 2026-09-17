@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/theme/app_colors.dart';
@@ -11,9 +12,7 @@ import 'package:tms_mobile/features/auth/widgets/auth_card.dart';
 import 'package:tms_mobile/features/auth/widgets/otp_input_field.dart';
 
 class TwoFactorScreen extends ConsumerStatefulWidget {
-  const TwoFactorScreen({super.key, required this.email});
-
-  final String email;
+  const TwoFactorScreen({super.key});
 
   @override
   ConsumerState<TwoFactorScreen> createState() => _TwoFactorScreenState();
@@ -33,6 +32,7 @@ class _TwoFactorScreenState extends ConsumerState<TwoFactorScreen> {
   void initState() {
     super.initState();
     _startTimer();
+    _sendInitialCode();
   }
 
   @override
@@ -61,7 +61,12 @@ class _TwoFactorScreenState extends ConsumerState<TwoFactorScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await ref.read(authProvider.notifier).verify2FA(_code);
+      await ref
+          .read(authProvider.notifier)
+          .verify2FA(_code, trustDevice: _trustDevice);
+      if (!mounted) return;
+      final auth = ref.read(authProvider);
+      if (auth.isAuthenticated) context.go(auth.roleRedirectPath);
     } on AuthFailure catch (error) {
       if (!mounted) return;
       setState(() => _failedAttempts++);
@@ -77,7 +82,7 @@ class _TwoFactorScreenState extends ConsumerState<TwoFactorScreen> {
   Future<void> _resendCode() async {
     setState(() => _isLoading = true);
     try {
-      await AuthService.sendTwoFactorCode(widget.email);
+      await ref.read(authProvider.notifier).send2FACode();
       _startTimer();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -90,6 +95,19 @@ class _TwoFactorScreenState extends ConsumerState<TwoFactorScreen> {
     }
   }
 
+  Future<void> _sendInitialCode() async {
+    setState(() => _isLoading = true);
+    try {
+      await ref.read(authProvider.notifier).send2FACode();
+    } on AuthFailure catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final attemptsColor = _failedAttempts >= 2
@@ -97,7 +115,7 @@ class _TwoFactorScreenState extends ConsumerState<TwoFactorScreen> {
         : kColorText.withValues(alpha: 0.72);
 
     return AuthCard(
-      onBack: () => Navigator.of(context).pop(),
+      onBack: () => ref.read(authProvider.notifier).cancel2FA(),
       backLabel: 'Back',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

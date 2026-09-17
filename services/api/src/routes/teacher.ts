@@ -353,9 +353,17 @@ router.post('/session/:sessionId/update', authMiddleware, async (req: TenantRequ
   const updateContent = typeof req.body?.updateContent === 'string' ? req.body.updateContent.trim() : '';
   if (!updateContent) return res.status(400).json({ error: 'A lesson summary is required.' });
   try {
-    const transition = await prisma.teacherSession.updateMany({ where: { id: req.params.sessionId, teacherId: req.user!.id, dailyUpdateSubmitted: false, class: { course: { tenantId: req.tenantId! } } }, data: { updateContent, dailyUpdateSubmitted: true, status: 'PRESENT_CONFIRMED' } });
-    if (!transition.count) return res.status(409).json({ error: 'Session not found or its update was already submitted.' });
-    return res.json({ message: 'Daily update submitted.', session: { sessionId: req.params.sessionId, dailyUpdateSubmitted: true, status: 'PRESENT_CONFIRMED' } });
+    const session = await prisma.teacherSession.findFirst({
+      where: { id: req.params.sessionId, class: { course: { tenantId: req.tenantId! } } },
+      select: { id: true, teacherId: true, dailyUpdateSubmitted: true },
+    });
+    if (!session || session.teacherId !== req.user!.id) return res.status(404).json({ error: 'Assigned session not found.' });
+    if (session.dailyUpdateSubmitted) return res.status(409).json({ error: 'Session update was already submitted.' });
+    const updated = await prisma.teacherSession.update({
+      where: { id: session.id },
+      data: { updateContent, dailyUpdateSubmitted: true, status: 'PRESENT_CONFIRMED' },
+    });
+    return res.json({ message: 'Daily update submitted.', session: { sessionId: updated.id, dailyUpdateSubmitted: true, status: updated.status } });
   } catch (error: any) { return res.status(500).json({ error: 'Failed to submit daily update.', details: error.message }); }
 });
 
