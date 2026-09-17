@@ -39,6 +39,8 @@ class TeacherPortalRepository {
   static const String geoOutPath = '/api/attendance/out';
   static String sessionUpdatePath(String sessionId) =>
       '/api/teacher/session/$sessionId/update';
+  static String classAttendancePath(String classId) =>
+      '/api/teacher/class/$classId/attendance';
 
   /// Consolidated workspace payload (home + timetable source + leaves).
   Future<TeacherWorkspace> fetchWorkspace({CancelToken? cancelToken}) async {
@@ -178,6 +180,39 @@ class TeacherPortalRepository {
     } on DioException catch (error) {
       throw _typed(error);
     }
+  }
+
+  /// Saves the authenticated teacher's attendance for an assigned class.
+  /// The server verifies today's date, teacher clock-in, enrollment, fees and
+  /// approved leave before it writes any student record.
+  Future<void> saveClassAttendance({
+    required String classId,
+    required DateTime date,
+    required Map<String, String> records,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      await _dio.post<dynamic>(
+        classAttendancePath(classId),
+        data: {
+          'date': _dateOnly(date),
+          'records': [
+            for (final entry in records.entries)
+              {'studentId': entry.key, 'status': entry.value},
+          ],
+        },
+        cancelToken: cancelToken,
+      );
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
+  static String _dateOnly(DateTime value) {
+    final local = value.toLocal();
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    return '${local.year}-$month-$day';
   }
 
   static ApiException _typed(DioException error) {

@@ -3,9 +3,8 @@ import prisma from '../utils/db';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware, hasPermission } from '../middleware/auth';
 import { LeaveType, LeaveStatus } from '@tms/types';
-import { MockSmsSender } from '../utils/notifications';
-import { PushNotificationService } from '../services/push-notification';
-import { recordNotification } from '../services/notification-records';
+import { getSmsSender } from '../utils/sms';
+import { getPushSender } from '../utils/push';
 import { canAccessBranch, hasBranchPermission, isTenantAdmin } from '../utils/access-control';
 
 const router = Router();
@@ -152,9 +151,8 @@ router.post(
         },
       });
 
-      // Notify the requester after persistence succeeds.
-      await PushNotificationService.sendPush(
-        tenantId,
+      // Mocks parent/admin notification on request submission
+      await getPushSender().sendPush(
         requesterUserId,
         'Leave Request Submitted',
         `Your request for ${leaveType} leave starting ${startDate} is pending approval.`
@@ -182,25 +180,11 @@ router.post(
           .map((enrollment) => enrollment.class.teacherId)
           .filter((id): id is string => Boolean(id));
         const recipients = [...new Set([...branchAdmins.map((admin) => admin.id), ...teacherIds])];
-        await Promise.all(recipients.map(async (userId) => {
-          await PushNotificationService.sendPush(
-            tenantId,
-            userId,
-            'Student leave requested',
-            `A linked parent requested ${leaveType} leave from ${startDate} to ${endDate}.`,
-          );
-          // Persistent inbox record. Fail-open: never rolls back the saved leave.
-          await recordNotification(prisma, {
-            tenantId,
-            userId,
-            branchId,
-            category: 'LEAVE',
-            title: 'Student leave requested',
-            body: `A linked parent requested ${leaveType} leave from ${startDate} to ${endDate}.`,
-            destination: 'leave',
-            entityId: leave.id,
-          });
-        }));
+        await Promise.all(recipients.map((userId) => getPushSender().sendPush(
+          userId,
+          'Student leave requested',
+          `A linked parent requested ${leaveType} leave from ${startDate} to ${endDate}.`,
+        )));
       }
 
       return res.status(201).json({ message: 'Leave request submitted successfully.', leave });
@@ -266,8 +250,7 @@ router.post(
         return res.status(409).json({ error: 'Leave request was already processed.' });
       }
 
-      await PushNotificationService.sendPush(
-        req.tenantId!,
+      await getPushSender().sendPush(
         leave.userId,
         `Leave Request Update`,
         `Your request has been ${newStatus.toLowerCase()}.`
@@ -337,7 +320,7 @@ router.post(
         });
 
       // Dispatch urgent SMS notification to parents
-      const smsSender = new MockSmsSender();
+      const smsSender = getSmsSender();
       await smsSender.sendSms(
         '98510XXXXX',
         `ALERT: Emergency departure logged for your child. Reason: ${reason}. Please contact the center.`

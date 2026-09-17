@@ -1,0 +1,123 @@
+.dashboard-shell {
+  --shell-focus: color-mix(in srgb, var(--color-primary) 55%, transparent);
+  --shell-control-height: 42px;
+  color: var(--color-text);
+}
+
+.dashboard-skip-link {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm, 7px);
+  background: var(--color-primary-dark);
+  color: #fff;
+  font-weight: 800;
+  text-decoration: none;
+  transform: translate(-50%, -150%);
+}
+
+.dashboard-skip-link:focus { transform: translate(-50%, 0); }
+
+.dashboard-nav-search {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .1);
+  color: #fff;
+}
+
+.dashboard-nav-search > .material-symbols-outlined { font-size: 18px; opacity: .8; }
+.dashboard-nav-search input { min-width: 0; border: 0; outline: 0; background: transparent; color: #fff; font: inherit; font-size: 13px; }
+.dashboard-nav-search input::placeholder { color: rgba(255, 255, 255, .68); }
+.dashboard-nav-search:focus-within { border-color: rgba(255, 255, 255, .72); box-shadow: 0 0 0 3px rgba(255, 255, 255, .12); }
+.dashboard-nav-search kbd { padding: 2px 5px; border: 1px solid rgba(255, 255, 255, .2); border-radius: 4px; color: rgba(255, 255, 255, .7); font: 600 9px var(--font-body); }
+.dashboard-nav-empty { display: grid; justify-items: center; gap: 4px; padding: 22px 12px; color: rgba(255, 255, 255, .78); text-align: center; }
+.dashboard-nav-empty strong { font-size: 13px; }
+.dashboard-nav-empty small { font-size: 11px; opacity: .8; }
+.dashboard-nav-item:focus-visible { outline: 3px solid rgba(255, 255, 255, .52); outline-offset: 2px; }
+.dashboard-nav-item:active { transform: translateY(1px); }
+.topbar-logo { border: 0; background: transparent; color: inherit; font: inherit; text-align: left; }
+.pd-person--preview:is(button) { width: 100%; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.remote-state { min-height: 190px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 28px; color: var(--text-muted); text-align: center; }
+.remote-state > .material-symbols-outlined { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: color-mix(in srgb, var(--color-primary) 8%, var(--bg-card)); color: var(--color-primary); font-size: 26px; }
+.remote-state strong { display: block; color: var(--color-text); font-size: 15px; }
+.remote-state p { max-width: 52ch; margin-top: 4px; font-size: 13px; line-height: 1.5; }
+.remote-state--loading > .material-symbols-outlined { animation: remote-state-spin 900ms linear infinite; }
+@keyframes remote-state-spin { to { transform: rotate(360deg); } }
+
+.dashboard-breadcrumb { display: flex; align-items: center; gap: 3px; margin-bottom: 4px; color: var(--text-muted); font-size: 11px; }
+.dashboard-breadcrumb .material-symbols-outlined { font-size: 14px; }
+.dashboard-breadcrumb strong { color: var(--color-primary); font-weight: 700; }
+
+.dashboard-shell__main { max-width: 1540px; margin: 0 auto; scroll-margin-top: 100px; }
+.dashboard-route-content { min-width: 0; }
+
+/* Shared control language for every role portal. */
+.dashboard-shell__main :where(button, a, input, select, textarea, [tabindex="0"]):focus-visible {
+  outline: 3px solid var(--shell-focus);
+  outline-offset: 2px;
+}
+
+.dashboard-shell__main :where(button, [role="button"]) { min-height: 40px; }
+.dashboard-shell__main :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  max-width: 100%;
+  border-color: var(--border, rgba(21, 96, 189, .18));
+}
+.dashboard-shell__main :where(input:not([type="checkbox"]):not([type="radio"]), select) { min-height: var(--shell-control-height); }
+.dashboard-shell__main :where(input, select, textarea)::placeholder { color: var(--text-muted); opacity: .72; }
+.dashboard-shell__main :where(button, a) { -webkit-tap-highlight-color: transparent; }
+.dashboard-shell__main :where(button:disabled, input:disabled, select:disabled, textarea:disabled) { cursor: not-allowed; opacity: .58; }
+
+.dashboard-shell__main :where(table) { width: 100%; border-collapse: separate; border-spacing: 0; }
+.dashboard-shell__main :where(th) { position: sticky; top: 0; z-index: 1; background: var(--bg-card, var(--color-surface)); color: var(--text-muted); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+.dashboard-shell__main :where(th, td) { vertical-align: middle; }
+.dashboard-shell__main :where(tbody tr) { transition: background-color 100ms cubic-bezier(0, 0, .2, 1); }
+.dashboard-shell__main :where(dialog) { max-width: min(720px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); }
+
+@media (hover: hover) {
+  .dashboard-nav-item:not(:disabled):hover { background: rgba(255, 255, 255, .1) !important; }
+  .dashboard-nav-item.is-active:hover { background: rgba(255, 188, 59, .18) !important; }
+  .dashboard-shell__main :where(tbody tr:hover) { background: color-mix(in srgb, var(--color-primary) 3%, transparent); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dashboard-route-content { animation: dashboard-content-enter 150ms cubic-bezier(0, 0, .2, 1); }
+  .dashboard-nav-item { transition: background-color 100ms cubic-bezier(0, 0, .2, 1), transform 100ms cubic-bezier(0, 0, .2, 1) !important; }
+}
+
+@keyframes dashboard-content-enter {
+  from { opacity: .72; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 900px) {
+  .dashboard-shell__main { padding: 20px !important; }
+  .dashboard-refresh-status { display: none; }
+  .dashboard-shell__main :where(.table-wrap, [class*="table-wrap"], [class*="table-container"]) { overflow-x: auto; overscroll-behavior-inline: contain; }
+}
+
+@media (max-width: 620px) {
+  .dashboard-topbar { padding: 14px 16px 14px 72px !important; }
+  .dashboard-topbar-actions { gap: 8px !important; }
+  .dashboard-topbar-actions > div:last-child > div:nth-child(2) { display: none; }
+  .dashboard-page-context > p { display: none; }
+  .dashboard-page-context h1 { font-size: 19px !important; }
+  .dashboard-breadcrumb { display: none; }
+  .dashboard-shell__main { padding: 16px !important; }
+  .dashboard-shell__main :where(button, a, input, select) { min-height: 44px; }
+  .dashboard-shell__main :where(.teacher-section, .parent-section, .student-section, .tenant-card, .branch-card) { padding: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-skip-link,
+  .dashboard-route-content,
+  .dashboard-nav-item,
+  .dashboard-shell__main :where(*) { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
+}

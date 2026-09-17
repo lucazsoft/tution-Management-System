@@ -5,6 +5,7 @@ import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware } from '../middleware/auth';
 import { studentBillingSummary } from '../utils/student-billing-summary';
 import { invoiceLineItems } from '../utils/invoice-document';
+import { persistPortalNotifications } from '../services/portal-notifications';
 import { normalizeSchedule } from '../utils/schedule';
 
 const router = Router();
@@ -70,9 +71,8 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
                 studentAttendance: {
                   include: { class: { include: { course: true } } },
                   orderBy: { date: 'desc' },
-                  take: 60,
                 },
-                invoices: { include: { branch: { select: { name: true } } }, orderBy: { dueDate: 'desc' }, take: 24 },
+                invoices: { include: { branch: { select: { name: true } } }, orderBy: { dueDate: 'desc' } },
                 certificates: { include: { template: true }, orderBy: { issuedDate: 'desc' } },
               },
             },
@@ -99,7 +99,7 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
         grade: student.grade?.name ?? 'Grade not assigned',
         branch: branch?.name ?? 'Branch not assigned',
         branchId: branch?.id,
-        rollNumber: student.id.slice(0, 6).toUpperCase(),
+        rollNumber: student.admissionNumber ?? student.id.slice(0, 6).toUpperCase(),
         blocked: student.enrollments.some((enrollment) => enrollment.status === 'BLOCKED') || student.invoices.some((invoice) => invoice.status === 'OVERDUE'),
         attendanceRate: total ? Math.round(((counts.PRESENT ?? 0) / total) * 100) : 0,
         outstanding,
@@ -129,9 +129,8 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
       prisma.academicEvent.findMany({
         where: await calendarAccessWhere(req.user!, req.tenantId!, { studentId: student.id, viewerRole: 'Parent' }),
         orderBy: { startDate: 'asc' },
-        take: 100,
       }),
-      prisma.leave.findMany({ where: { tenantId: req.tenantId!, userId: student.userId }, orderBy: { updatedAt: 'desc' }, take: 30 }),
+      prisma.leave.findMany({ where: { tenantId: req.tenantId!, userId: student.userId }, orderBy: { updatedAt: 'desc' } }),
       prisma.appointment.findMany({
         where: { tenantId: req.tenantId!, studentId: student.id, requestedById: req.user!.id },
         include: { teacher: { include: { userRoles: { include: { role: true } } } } },
@@ -169,7 +168,8 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
         type: enrollment.course.type.split('_').map((part) => part[0] + part.slice(1).toLowerCase()).join('-'),
       }));
     }).sort((a, b) => a.time.localeCompare(b.time));
-    const teachers = [...new Map([...currentEnrollments
+    type ParentContact = { id: string; childId: string; name: string; subject: string; initials: string; role: 'TEACHER' | 'BRANCH_ADMIN' };
+    const contactEntries: Array<[string, ParentContact]> = [...currentEnrollments
       .filter((enrollment) => enrollment.class.assignedTeacher)
       .map((enrollment) => {
         const teacher = enrollment.class.assignedTeacher!;
@@ -179,8 +179,10 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
           name: `${teacher.firstName} ${teacher.lastName}`,
           subject: enrollment.course.name,
           initials: `${teacher.firstName[0] ?? ''}${teacher.lastName[0] ?? ''}`.toUpperCase(),
-        }] as const;
-      }), ...branchAdmins.map((admin) => [admin.id, { id: admin.id, childId: student.id, name: `${admin.firstName} ${admin.lastName}`, subject: 'Branch administration', initials: `${admin.firstName[0] ?? ''}${admin.lastName[0] ?? ''}`.toUpperCase() }] as const)]).values()];
+          role: 'TEACHER' as const,
+        }] as [string, ParentContact];
+      }), ...branchAdmins.map((admin) => [admin.id, { id: admin.id, childId: student.id, name: `${admin.firstName} ${admin.lastName}`, subject: 'Branch administration', initials: `${admin.firstName[0] ?? ''}${admin.lastName[0] ?? ''}`.toUpperCase(), role: 'BRANCH_ADMIN' }] as [string, ParentContact])];
+    const teachers = [...new Map<string, ParentContact>(contactEntries).values()];
     const attendance = student.studentAttendance.map((record) => ({
       id: record.id, childId: student.id, date: formatDate(record.date), subject: record.class.course.name,
       session: record.class.name, state: attendanceLabel(record.status),
@@ -249,6 +251,9 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
     ];
     const mappedAppointments = appointments.map((appointment) => {
       const isBranchAdminAppointment = appointment.teacher.userRoles.some((assignment) => assignment.role.name === 'Branch Admin' && branchIds.includes(assignment.branchId || ''));
+      const participantIds = Array.isArray(appointment.participantIds) ? appointment.participantIds.filter((id): id is string => typeof id === 'string') : [appointment.teacherId];
+      const approvals = (appointment.participantApprovals && typeof appointment.participantApprovals === 'object' && !Array.isArray(appointment.participantApprovals)
+        ? appointment.participantApprovals : {}) as Record<string, string>;
       return {
       id: appointment.id, childId: student.id,
       teacher: isBranchAdminAppointment ? `Branch Admin · ${appointment.teacher.firstName} ${appointment.teacher.lastName}` : `${appointment.teacher.firstName} ${appointment.teacher.lastName}`,
@@ -258,6 +263,12 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
       responseMessage: appointment.responseRemarks || undefined,
       responseDescription: appointment.responseRemarks || undefined,
       state: appointmentState(appointment.status), group: appointment.isGroup,
+      originalAppointmentId: appointment.originalAppointmentId ?? undefined,
+      participants: participantIds.map((id) => ({
+        id,
+        name: teachers.find((teacher) => teacher.id === id)?.name ?? 'Invited staff member',
+        approval: approvals[id] === 'APPROVED' ? 'APPROVED' : approvals[id] === 'REJECTED' ? 'REJECTED' : 'PENDING',
+      })),
       };
     });
     const mappedLeaves = leaves.map((leave) => ({
@@ -287,13 +298,13 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
       sender: message.senderId === req.user!.id ? 'Parent' : 'Teacher',
       text: message.messageText, time: formatDate(message.createdAt), occurredAt: message.createdAt.toISOString(),
     }));
-    const notifications = [
+    const generatedNotifications = [
       ...student.invoices.filter((invoice) => invoice.status === 'OVERDUE' || (invoice.status === 'UNPAID' && invoice.dueDate.getTime() - Date.now() <= 3 * 86400000)).map((invoice) => ({
         id: `invoice-${invoice.id}`, childId: student.id, title: invoice.status === 'OVERDUE' ? 'Fee overdue' : 'Fee due soon',
         message: `${money(Number(invoice.netPayable))} is due on ${formatDate(invoice.dueDate)}.`, time: formatDate(invoice.updatedAt),
         occurredAt: invoice.updatedAt.toISOString(), icon: 'payments', destination: 'fees', channels: ['Push', 'SMS'], urgent: invoice.status === 'OVERDUE', unread: true,
       })),
-      ...student.studentAttendance.slice(0, 10).map((record) => ({
+      ...student.studentAttendance.map((record) => ({
         id: `attendance-${record.id}`, childId: student.id, title: 'Attendance marked',
         message: `${record.class.course.name}: ${attendanceLabel(record.status)} on ${formatDate(record.date)}.`, time: formatDate(record.updatedAt),
         occurredAt: record.updatedAt.toISOString(), icon: 'fact_check', destination: 'attendance', channels: ['Push'], urgent: false, unread: record.updatedAt.getTime() >= Date.now() - 7 * 86400000,
@@ -316,6 +327,7 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
         channels: ['Push'], urgent: false, unread: certificate.issuedDate.getTime() >= Date.now() - 7 * 86400000,
       })),
     ].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+    const notifications = await persistPortalNotifications(req.tenantId!, req.user!.id, generatedNotifications.map((notice) => ({ ...notice, studentId: student.id })));
 
     return res.json({
       generatedAt: new Date().toISOString(),

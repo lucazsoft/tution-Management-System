@@ -1,3 +1,4 @@
+import { AccountantAccountPage } from '../pages/AccountantAccountPage';
 import { AccountPage } from '../pages/AccountPage';
 import { TenantAccountPage } from '../pages/TenantAccountPage';
 import { MobileRecoveryPage } from '../pages/auth/MobileRecoveryPage';
@@ -327,6 +328,8 @@ const router = createBrowserRouter([
           {
             element: <RequireRole allowedRoles={['TEACHER']} />,
             children: [
+              { path: '/teacher/account', element: <AccountPage passwordPath="/teacher/security" /> },
+              { path: '/teacher/security', element: <Suspense fallback={<FullPageSpinner />}><SecurityPage /></Suspense> },
               { path: '/teacher', element: <Navigate to="/teacher/dashboard" replace /> },
               { path: '/teacher/*', element: <Suspense fallback={<FullPageSpinner />}><TeacherPortal /></Suspense> },
             ],
@@ -334,12 +337,16 @@ const router = createBrowserRouter([
           {
             element: <RequireRole allowedRoles={['STUDENT']} />,
             children: [
+              { path: '/student/account', element: <AccountPage passwordPath="/student/security" /> },
+              { path: '/student/security', element: <Suspense fallback={<FullPageSpinner />}><SecurityPage /></Suspense> },
               { path: '/student/*', element: <Suspense fallback={<FullPageSpinner />}><StudentPortal /></Suspense> },
             ],
           },
           {
             element: <RequireRole allowedRoles={['PARENT']} />,
             children: [
+              { path: '/parent/account', element: <AccountPage passwordPath="/parent/security" /> },
+              { path: '/parent/security', element: <Suspense fallback={<FullPageSpinner />}><SecurityPage /></Suspense> },
               { path: '/parent/*', element: <Suspense fallback={<FullPageSpinner />}><ParentStudentPortal /></Suspense> },
             ],
           },
@@ -347,6 +354,8 @@ const router = createBrowserRouter([
           {
             element: <RequireRole allowedRoles={['ACCOUNTANT']} />,
             children: [
+              { path: '/staff/account', element: <AccountantAccountPage /> },
+              { path: '/staff/security', element: <AccountantAccountPage security /> },
               { path: '/staff/finance', element: <Suspense fallback={<FullPageSpinner />}><StaffFinancePage /></Suspense> },
             ],
           },

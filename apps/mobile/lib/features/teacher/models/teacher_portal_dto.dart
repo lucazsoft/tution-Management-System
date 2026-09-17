@@ -8,7 +8,7 @@
 /// Timetable note: there is no dedicated timetable endpoint. Daily classes
 /// come from `todayClasses` (teacher sessions for today) and the weekly
 /// view is derived client-side from `classes[].schedule`. Leave status
-/// likewise comes from the embedded `leaves` array — no standalone
+/// likewise comes from the embedded `leaves` array - no standalone
 /// `GET /api/leaves/mine` exists (TODO if the backend adds one).
 library;
 
@@ -55,7 +55,7 @@ class TeacherScheduleSlot {
   final String? subject;
 
   String get label {
-    final time = start.isEmpty || end.isEmpty ? '' : ' $start–$end';
+    final time = start.isEmpty || end.isEmpty ? '' : ' $start-$end';
     return '$day$time'.trim();
   }
 
@@ -148,6 +148,8 @@ class TeacherClassInfo {
     this.scheduleLabel,
     this.branch,
     this.studentCount = 0,
+    this.students = const [],
+    this.attendance = const [],
   });
 
   final String id;
@@ -157,6 +159,8 @@ class TeacherClassInfo {
   final String? scheduleLabel;
   final TeacherBranchRef? branch;
   final int studentCount;
+  final List<TeacherStudent> students;
+  final List<TeacherClassAttendance> attendance;
 
   bool isScheduledOn(String day) => slots.any((slot) => slot.matchesDay(day));
 
@@ -173,6 +177,62 @@ class TeacherClassInfo {
           ? TeacherBranchRef.fromJson(branch)
           : null,
       studentCount: students is List ? students.length : 0,
+      students: students is List
+          ? [
+              for (final student in students)
+                if (student is Map<String, dynamic>)
+                  TeacherStudent.fromJson(student),
+            ]
+          : const [],
+      attendance: json['attendance'] is List
+          ? [
+              for (final record in json['attendance'] as List)
+                if (record is Map<String, dynamic>)
+                  TeacherClassAttendance.fromJson(record),
+            ]
+          : const [],
+    );
+  }
+}
+
+class TeacherStudent {
+  const TeacherStudent({
+    required this.id,
+    required this.name,
+    required this.status,
+  });
+
+  final String id;
+  final String name;
+  final String status;
+
+  bool get isFeeBlocked => status == 'BLOCKED';
+
+  factory TeacherStudent.fromJson(Map<String, dynamic> json) {
+    return TeacherStudent(
+      id: _str(json['id']),
+      name: _str(json['name']),
+      status: _str(json['status']).toUpperCase(),
+    );
+  }
+}
+
+class TeacherClassAttendance {
+  const TeacherClassAttendance({
+    required this.studentId,
+    required this.status,
+    this.date,
+  });
+
+  final String studentId;
+  final String status;
+  final DateTime? date;
+
+  factory TeacherClassAttendance.fromJson(Map<String, dynamic> json) {
+    return TeacherClassAttendance(
+      studentId: _str(json['studentId']),
+      status: _str(json['status']).toUpperCase(),
+      date: _date(json['date']),
     );
   }
 }
@@ -241,6 +301,10 @@ class TeacherWorkspace {
     this.lastStampAt,
     this.attendanceRate,
     this.presentDays,
+    this.requiredDays,
+    this.totalSessions,
+    this.updateCompliance,
+    this.assignedClasses,
   });
 
   final String teacherName;
@@ -257,6 +321,10 @@ class TeacherWorkspace {
   final DateTime? lastStampAt;
   final int? attendanceRate;
   final int? presentDays;
+  final int? requiredDays;
+  final int? totalSessions;
+  final int? updateCompliance;
+  final int? assignedClasses;
 
   factory TeacherWorkspace.fromJson(Map<String, dynamic> json) {
     final teacher = json['teacher'] is Map<String, dynamic>
@@ -295,6 +363,10 @@ class TeacherWorkspace {
       lastStampAt: _date(attendance['lastStampAt']),
       attendanceRate: (stats['attendanceRate'] as num?)?.toInt(),
       presentDays: (stats['presentDays'] as num?)?.toInt(),
+      requiredDays: (stats['requiredDays'] as num?)?.toInt(),
+      totalSessions: (stats['totalSessions'] as num?)?.toInt(),
+      updateCompliance: (stats['updateCompliance'] as num?)?.toInt(),
+      assignedClasses: (stats['assignedClasses'] as num?)?.toInt(),
     );
   }
 }

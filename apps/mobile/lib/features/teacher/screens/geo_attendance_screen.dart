@@ -3,7 +3,7 @@
 /// Radius gating here is UX-only (button enablement + distance readout).
 /// Records are created by `POST /api/attendance/in|out`, where the server
 /// re-validates GPS accuracy, the branch geofence and pending daily updates
-/// and is authoritative — client coordinates are never trusted for records.
+/// and is authoritative - client coordinates are never trusted for records.
 library;
 
 import 'dart:async';
@@ -161,7 +161,7 @@ class _GeoAttendanceScreenState extends ConsumerState<GeoAttendanceScreen> {
                             .titleMedium
                             ?.copyWith(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 4),
-                    Text('${widget.session.branch} • ${widget.session.room}'),
+                    Text('${widget.session.branch} - ${widget.session.room}'),
                   ],
                 ),
               ),
@@ -255,10 +255,10 @@ class _GeoAttendanceScreenState extends ConsumerState<GeoAttendanceScreen> {
             const SizedBox(height: 8),
             Text(
               radiusNote == null
-                  ? 'Branch center is not shared with the app — your position is sent and the server verifies the geofence.'
+                  ? 'Branch center is not shared with the app - your position is sent and the server verifies the geofence.'
                   : radiusNote
-                      ? 'Inside the branch radius — ready to mark.'
-                      : 'Outside the branch radius — move closer to mark.',
+                      ? 'Inside the branch radius - ready to mark.'
+                      : 'Outside the branch radius - move closer to mark.',
               style: Theme.of(context).textTheme.bodySmall,
               textAlign: TextAlign.center,
             ),

@@ -114,10 +114,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new AuthFlowError('INVALID_CREDENTIALS', 'Invalid email or password.');
       }
       if ((result?.data as any)?.twoFactorRedirect) {
-        const otpResult = await authClient.twoFactor.sendOtp();
-        if (otpResult.error) {
-          throw new AuthFlowError('TWO_FACTOR_EXPIRED', 'Unable to send a verification code right now. Please try again.');
-        }
         const pendingUser: AuthUser = {
           id: '',
           email: email.trim().toLowerCase(),
@@ -129,6 +125,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         cacheUser(pendingUser);
         setUser(pendingUser);
         setAttemptCount(0);
+        // Keep the challenge accessible when SMS is unavailable so recovery codes work.
+        try { await authClient.twoFactor.sendOtp(); } catch { /* The challenge page offers retry and recovery. */ }
         return;
       }
       const sessionData = result?.data ? (await authClient.getSession()).data : null;

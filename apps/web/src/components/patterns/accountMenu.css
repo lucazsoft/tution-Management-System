@@ -1,0 +1,17 @@
+.account-menu { position: relative; min-width: 0; color: var(--text); font-family: var(--font-ui); }
+.account-menu__trigger { display: flex; align-items: center; gap: var(--sp-2); min-height: 44px; max-width: 100%; padding: var(--sp-1) var(--sp-2); border: 1px solid transparent; border-radius: var(--radius-full); background: var(--bg-card); color: inherit; font: inherit; cursor: pointer; }
+.account-menu__avatar { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; overflow: hidden; border-radius: 50%; background: var(--color-primary); color: var(--text-light); font-size: 12px; font-weight: 700; }
+.account-menu__avatar img { width: 100%; height: 100%; object-fit: cover; }
+.account-menu__identity { display: grid; text-align: left; min-width: 0; }
+.account-menu__identity strong { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.account-menu small { color: var(--text-muted); font-size: 10px; }
+.account-menu__panel { position: absolute; right: 0; top: calc(100% + var(--sp-2)); width: min(240px, calc(100vw - 32px)); background: var(--color-bg); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-modal); z-index: 50; overflow: hidden; }
+.account-menu__heading { display: grid; gap: var(--sp-1); padding: var(--sp-4); border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.account-menu__heading strong { font-size: 13px; }
+.account-menu__panel nav { padding: var(--sp-2); }
+.account-menu__panel a, .account-menu__logout { display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-height: 44px; padding: var(--sp-3); font: inherit; font-size: 13px; color: inherit; text-decoration: none; border: 0; background: transparent; cursor: pointer; text-align: left; }
+.account-menu__logout { border-top: 1px solid var(--border); padding: var(--sp-4); color: var(--color-error); }
+.account-menu .material-symbols-outlined { font-size: 18px; }
+.account-menu__panel a:hover, .account-menu__logout:hover, .account-menu__trigger:hover { background: var(--color-surface); }
+.account-menu :focus-visible { outline: 2px solid var(--brand); outline-offset: -3px; }
+@media (max-width: 600px) { .account-menu__identity { display: none; } }

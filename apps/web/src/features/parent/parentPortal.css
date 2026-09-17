@@ -329,6 +329,18 @@
 .parent-appointment-list dl div { padding: var(--sp-2) 0; border-bottom: 1px solid var(--parent-border); }
 .parent-appointment-list dt { color: var(--parent-muted); font-size: 10px; text-transform: uppercase; }
 .parent-appointment-list dd { margin-top: 2px; font-size: 12px; font-weight: 700; }
+.parent-appointment-participants { display: grid; gap: var(--sp-2); margin: var(--sp-3) 0 0; padding: 0; list-style: none; }
+.parent-appointment-participants li { display: flex; justify-content: space-between; gap: var(--sp-3); font-size: 12px; }
+.parent-appointment-participants b { text-transform: capitalize; }
+.parent-appointment-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); border-bottom: 0 !important; }
+.parent-appointment-actions button,
+.parent-counter-time button { min-height: 40px; padding: 8px 12px; border: 1px solid var(--parent-border); border-radius: var(--radius-sm); background: var(--color-bg); color: var(--parent-text); cursor: pointer; }
+.parent-counter-time { display: grid; gap: var(--sp-2); border-bottom: 0 !important; }
+.parent-counter-time input { min-height: 40px; padding: 8px; border: 1px solid var(--parent-border); border-radius: var(--radius-sm); background: var(--color-bg); color: var(--parent-text); }
+.parent-appointment-group { display: grid; gap: var(--sp-2); margin: 0; padding: var(--sp-3); border: 1px solid var(--parent-border); border-radius: var(--radius-sm); }
+.parent-appointment-group legend { padding: 0 var(--sp-2); font-size: 12px; font-weight: 700; }
+.parent-appointment-group label { display: flex; align-items: center; gap: var(--sp-2); min-height: 40px; }
+.parent-appointment-group input { width: auto; }
 
 .parent-form { display: flex; flex-direction: column; gap: var(--sp-4); }
 .parent-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); }

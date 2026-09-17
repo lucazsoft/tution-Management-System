@@ -19,6 +19,7 @@ class TeacherPortalState extends ViewModelState {
     this.workspace,
     this.isRefreshing = false,
     this.updatingSessionId,
+    this.savingClassAttendance = false,
     this.errorKind,
     super.error,
     super.isLoading,
@@ -27,6 +28,7 @@ class TeacherPortalState extends ViewModelState {
   final TeacherWorkspace? workspace;
   final bool isRefreshing;
   final String? updatingSessionId;
+  final bool savingClassAttendance;
   final ApiErrorKind? errorKind;
 
   bool get hasData => workspace != null;
@@ -38,6 +40,7 @@ class TeacherPortalState extends ViewModelState {
     bool? isRefreshing,
     String? updatingSessionId,
     bool clearUpdatingSessionId = false,
+    bool? savingClassAttendance,
     ApiErrorKind? errorKind,
     bool clearErrorKind = false,
     bool? isLoading,
@@ -50,6 +53,8 @@ class TeacherPortalState extends ViewModelState {
       updatingSessionId: clearUpdatingSessionId
           ? null
           : (updatingSessionId ?? this.updatingSessionId),
+      savingClassAttendance:
+          savingClassAttendance ?? this.savingClassAttendance,
       errorKind: clearErrorKind ? null : (errorKind ?? this.errorKind),
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
@@ -155,6 +160,40 @@ class TeacherPortalViewModel extends BaseViewModel<TeacherPortalState> {
       }
       state = state.copyWith(
         clearUpdatingSessionId: true,
+        error: error.message,
+        errorKind: error.kind,
+      );
+      return false;
+    }
+  }
+
+  Future<bool> saveClassAttendance({
+    required String classId,
+    required Map<String, String> records,
+  }) async {
+    if (records.isEmpty) {
+      state =
+          state.copyWith(error: 'Add at least one student attendance record.');
+      return false;
+    }
+    state = state.copyWith(
+      savingClassAttendance: true,
+      clearError: true,
+      clearErrorKind: true,
+    );
+    try {
+      await _repository.saveClassAttendance(
+        classId: classId,
+        date: DateTime.now(),
+        records: records,
+        cancelToken: _canceller.tokenFor('class-attendance'),
+      );
+      await refresh();
+      state = state.copyWith(savingClassAttendance: false);
+      return true;
+    } on ApiException catch (error) {
+      state = state.copyWith(
+        savingClassAttendance: false,
         error: error.message,
         errorKind: error.kind,
       );
