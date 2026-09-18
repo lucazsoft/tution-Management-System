@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -9,7 +11,7 @@ plugins {
 // `keystore.properties.example`) with `TMS_KEYSTORE_*` env vars as fallback.
 // The keystore itself and both files with real secrets are NEVER committed —
 // see apps/mobile/README.md ("Release identity & signing").
-val keystoreProps = java.util.Properties()
+val keystoreProps = Properties()
 val keystorePropsFile = rootProject.file("keystore.properties")
 if (keystorePropsFile.exists()) {
     keystorePropsFile.inputStream().use { keystoreProps.load(it) }
@@ -23,13 +25,15 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+        jvmTarget = "17"
     }
+
 
     defaultConfig {
         applicationId = "com.tms.tmsmobile"
@@ -85,3 +89,8 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+}
+

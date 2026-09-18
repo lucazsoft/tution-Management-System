@@ -145,23 +145,23 @@ class AppShell extends ConsumerStatefulWidget {
         label: 'Dashboard',
       ),
       NavigationDestination(
-        icon: Icon(Icons.people_outlined),
-        selectedIcon: Icon(Icons.people_rounded),
-        label: 'Children',
-      ),
-      NavigationDestination(
-        icon: Icon(Icons.receipt_long_outlined),
-        selectedIcon: Icon(Icons.receipt_long_rounded),
-        label: 'Fees',
+        icon: Icon(Icons.school_outlined),
+        selectedIcon: Icon(Icons.school_rounded),
+        label: 'Academics',
       ),
       NavigationDestination(
         icon: Icon(Icons.fact_check_outlined),
         selectedIcon: Icon(Icons.fact_check_rounded),
         label: 'Attendance',
       ),
+      NavigationDestination(
+        icon: Icon(Icons.receipt_long_outlined),
+        selectedIcon: Icon(Icons.receipt_long_rounded),
+        label: 'Fees',
+      ),
     ],
-    profileRoute: '/parent/profile',
-    settingsRoute: '/parent/settings',
+    profileRoute: '/parent/change-password',
+    settingsRoute: '/parent/change-password',
     showBackButton: false,
   );
 
@@ -203,8 +203,6 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   PreferredSizeWidget _buildAppBar(
       BuildContext context, dynamic user, bool isSubScreen) {
-    final actions = <Widget>[];
-
     if (isSubScreen && widget.config.showBackButton) {
       return AppBar(
         leading: IconButton(
@@ -332,7 +330,7 @@ class AppSubScreen extends ConsumerWidget {
                 } else if (location.startsWith('/student/')) {
                   context.push('/student/profile');
                 } else if (location.startsWith('/parent/')) {
-                  context.push('/parent/profile');
+                  context.push('/parent/change-password');
                 }
               },
               tooltip: 'Profile',

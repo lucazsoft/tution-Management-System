@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/features/parent/models/parent_portal.dart';
 import 'package:tms_mobile/features/parent/widgets/child_switcher_bar.dart';
+import 'package:tms_mobile/features/parent/widgets/parent_navigation.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_portal_state_view.dart';
 import 'package:tms_mobile/shared/models/app_models.dart';
 import 'package:tms_mobile/shared/widgets/progress_ring.dart';
@@ -30,7 +30,7 @@ class _ParentAttendanceScreenState
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.pop(),
+          onPressed: () => ParentNavigation.back(context),
           tooltip: 'Back',
         ),
         title: Text(
@@ -55,6 +55,7 @@ class _ParentAttendanceScreenState
           ),
         ],
       ),
+      bottomNavigationBar: const ParentNavigationBar(selectedIndex: 2),
       body: SafeArea(
         child: ParentPortalStateView(
           builder: (context, portal, child) {

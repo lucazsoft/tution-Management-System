@@ -101,13 +101,9 @@ router.post('/request', authMiddleware, async (req: TenantRequest, res: Response
       where: { tenantId: req.tenantId!, status: 'ACTIVE', userRoles: { some: { branchId: { in: branchIds }, role: { name: 'Branch Admin' } } } },
       select: { id: true },
     });
-<<<<<<< HEAD
     await notifyAppointmentUsers(req.tenantId!, [...uniqueParticipants, ...branchAdmins.map((admin) => admin.id)], 'Appointment requested', `A parent requested an appointment about ${student.user.firstName}.`);
     return res.status(201).json({ message: 'Appointment requested.', appointment, bookingWindowHours: tenant.appointmentWindowHours });
-=======
-    const notificationDelivered = await notifyAppointmentUsers([...uniqueParticipants, ...branchAdmins.map((admin) => admin.id)], 'Appointment requested', `A parent requested an appointment about ${student.user.firstName}.`);
-    return res.status(201).json({ message: 'Appointment requested.', appointment, bookingWindowHours: tenant.appointmentWindowHours, notificationDelivered });
->>>>>>> db83765071d430861a7c993fa7eade0df189ee63
+
   } catch (error: any) {
     return res.status(500).json({ error: 'Failed to request appointment.', details: error.message });
   }
@@ -119,7 +115,7 @@ router.post('/respond/:appointmentId', authMiddleware, async (req: TenantRequest
     let notificationDelivered = true;
     if (result.notify) {
       try {
-        notificationDelivered = await notifyAppointmentUsers([result.requestedById], 'Appointment updated', `Appointment status: ${result.appointment.status}.`);
+        notificationDelivered = await notifyAppointmentUsers(req.tenantId!, [result.requestedById], 'Appointment updated', `Appointment status: ${result.appointment.status}.`);
       } catch {
         notificationDelivered = false;
       }
@@ -161,13 +157,13 @@ router.post('/parent-respond/:appointmentId', authMiddleware, async (req: Tenant
         where: { id: linkedAlternative.id },
         data: { responseRemarks: remarks || 'Parent accepted the proposed time.' },
       });
-      await notifyAppointmentUsers((Array.isArray(updated.participantIds) ? updated.participantIds : [updated.teacherId]).filter((id): id is string => typeof id === 'string'), 'Alternative time accepted', 'The parent accepted the proposed appointment time.');
+      await notifyAppointmentUsers(req.tenantId!, (Array.isArray(updated.participantIds) ? updated.participantIds : [updated.teacherId]).filter((id): id is string => typeof id === 'string'), 'Alternative time accepted', 'The parent accepted the proposed appointment time.');
       return res.json({ message: 'Alternative time accepted. Waiting for final participant approval.', appointment: updated });
     }
     if (action === 'REJECT_ALTERNATIVE') {
       if (!linkedAlternative || appointment.status !== 'ALTERNATIVE_PROPOSED') return res.status(409).json({ error: 'There is no alternative time to reject.' });
       const updated = await prisma.appointment.update({ where: { id: linkedAlternative.id }, data: { status: 'REJECTED', responseRemarks: remarks || 'Parent rejected the proposed time.' } });
-      await notifyAppointmentUsers((Array.isArray(updated.participantIds) ? updated.participantIds : [updated.teacherId]).filter((id): id is string => typeof id === 'string'), 'Alternative time rejected', 'The parent rejected the proposed appointment time.');
+      await notifyAppointmentUsers(req.tenantId!, (Array.isArray(updated.participantIds) ? updated.participantIds : [updated.teacherId]).filter((id): id is string => typeof id === 'string'), 'Alternative time rejected', 'The parent rejected the proposed appointment time.');
       return res.json({ message: 'Alternative time rejected.', appointment: updated });
     }
     const alternativeDate = new Date(req.body?.alternativeSlot);
@@ -186,7 +182,7 @@ router.post('/parent-respond/:appointmentId', authMiddleware, async (req: Tenant
         remarks: appointment.remarks, responseRemarks: remarks || 'Parent proposed another time.', originalAppointmentId: rootId,
       } });
     });
-    await notifyAppointmentUsers(participants, 'New appointment time proposed', 'The parent proposed another appointment time.');
+    await notifyAppointmentUsers(req.tenantId!, participants, 'New appointment time proposed', 'The parent proposed another appointment time.');
     return res.status(201).json({ message: 'Another time proposed.', appointment: created });
   } catch (error: any) {
     return res.status(500).json({ error: 'Failed to update appointment negotiation.', details: error.message });

@@ -6,6 +6,8 @@ import { LeaveType, LeaveStatus } from '@tms/types';
 import { getSmsSender } from '../utils/sms';
 import { getPushSender } from '../utils/push';
 import { canAccessBranch, hasBranchPermission, isTenantAdmin } from '../utils/access-control';
+import { recordNotification } from '../services/notification-records';
+
 
 const router = Router();
 

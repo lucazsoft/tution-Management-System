@@ -8,16 +8,32 @@ import { validateRuntimeConfig } from './runtime-config';
 
 const runtimeConfig = validateRuntimeConfig();
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export const auth = betterAuth({
   secret: runtimeConfig.authSecret,
   appName: 'TMS',
   baseURL: runtimeConfig.authUrl,
-  trustedOrigins: [runtimeConfig.webOrigin],
+  trustedOrigins: isDev
+    ? (request?: Request) => {
+        const origin = request?.headers.get('origin');
+        if (origin) {
+          return [origin, runtimeConfig.webOrigin];
+        }
+        return [runtimeConfig.webOrigin];
+      }
+    : [runtimeConfig.webOrigin],
+  advanced: {
+    ipAddress: { ipAddressHeaders: [] },
+    disableCSRFCheck: isDev,
+  },
+
+
   // Store counters in PostgreSQL so limits survive restarts and apply to every
   // API instance. The long default window also prevents cleanup from removing
   // an active custom-rule counter.
   rateLimit: {
-    enabled: true,
+    enabled: process.env.NODE_ENV === 'production',
     storage: 'database',
     window: 15 * 60,
     max: 100,
@@ -28,13 +44,10 @@ export const auth = betterAuth({
       '/request-password-reset': { window: 15 * 60, max: 5 },
     },
   },
-  // Do not accept a caller-supplied forwarding header until the production
-  // reverse proxy is explicitly configured as trusted. With no configured
-  // proxy, Better Auth uses its safe shared bucket instead of trusting a
-  // spoofable client IP value.
-  advanced: {
-    ipAddress: { ipAddressHeaders: [] },
-  },
+
+  // Store counters in PostgreSQL so limits survive restarts and apply to every
+  // API instance. The long default window also prevents cleanup from removing
+  // an active custom-rule counter.
   database: prismaAdapter(prisma, {
     provider: 'postgresql',
   }),

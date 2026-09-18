@@ -86,10 +86,22 @@ app.use((req, res, next) => {
 });
 
 // Enable CORS and parsing of JSON payloads
+const isDevelopment = process.env.NODE_ENV !== 'production';
+
 app.use(cors({
-  origin: runtimeConfig.webOrigin,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (isDevelopment && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      return callback(null, true);
+    }
+    if (origin === runtimeConfig.webOrigin) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
   credentials: true,
 }));
+
 
 // Health check endpoint (no tenant required)
 app.get('/api/health', (req: TenantRequest, res: Response) => {
