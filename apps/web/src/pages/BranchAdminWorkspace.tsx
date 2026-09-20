@@ -916,7 +916,7 @@ function CertificatesView() {
   const [loadError, setLoadError] = useState('');
   const [issuedId, setIssuedId] = useState('');
   const action = useAction();
-  const selectedStudent = students.find((item) => `${item.studentId}:${item.branchId}` === studentKey);
+  const selectedStudent = students.find((item) => `${item.studentId}:${item.classId}` === studentKey);
   const selectedTemplate = templates.find((item) => item.id === template);
 
   const load = useCallback(async () => {
@@ -945,7 +945,7 @@ function CertificatesView() {
           <form onSubmit={submit} style={{ ...form, marginTop: '16px' }} aria-busy={action.busy}>
             <label style={label}>
               Select Student
-              <select required style={field} value={studentKey} disabled={loading} onChange={e => { setStudentKey(e.target.value); setPreview(false); setIssuedId(''); }}><option value="">Choose a student…</option>{students.map((item) => <option key={`${item.studentId}:${item.branchId}`} value={`${item.studentId}:${item.branchId}`}>{item.studentName} · {item.gradeName} · {item.branchName}</option>)}</select>
+              <select required style={field} value={studentKey} disabled={loading} onChange={e => { setStudentKey(e.target.value); setPreview(false); setIssuedId(''); }}><option value="">Choose a student…</option>{students.map((item) => <option key={`${item.studentId}:${item.classId}`} value={`${item.studentId}:${item.classId}`}>{item.studentName} · {item.className} · {item.branchName}</option>)}</select>
             </label>
             <label style={label}>
               Select Template

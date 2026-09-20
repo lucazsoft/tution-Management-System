@@ -36,7 +36,6 @@ const TenantReportsPage = lazy(() => import('../pages/TenantOperationsPages').th
 const TenantPayrollPage = lazy(() => import('../pages/TenantOperationsPages').then((module) => ({ default: module.TenantPayrollPage })));
 const TenantResourcesPage = lazy(() => import('../pages/TenantOperationsPages').then((module) => ({ default: module.TenantResourcesPage })));
 const TenantCalendarPage = lazy(() => import('../pages/TenantOperationsPages').then((module) => ({ default: module.TenantCalendarPage })));
-const TenantHrPage = lazy(() => import('../pages/TenantOperationsPages').then((module) => ({ default: module.TenantHrPage })));
 const TenantAdmissionsPage = lazy(() => import('../pages/TenantOperationsPages').then((module) => ({ default: module.TenantAdmissionsPage })));
 const TenantCertificatesPage = lazy(() => import('../pages/TenantOperationsPages').then((module) => ({ default: module.TenantCertificatesPage })));
 const TenantLeaveRequestsPage = lazy(() => import('../pages/TenantOperationsPages').then((module) => ({ default: module.TenantLeaveRequestsPage })));
@@ -302,7 +301,6 @@ const router = createBrowserRouter([
               { path: '/tenant/petty-cash', element: <Suspense fallback={<FullPageSpinner />}><TenantPettyCashPage /></Suspense> },
               { path: '/tenant/pl-reports', element: <Suspense fallback={<FullPageSpinner />}><TenantReportsPage /></Suspense> },
               { path: '/tenant/payroll', element: <Suspense fallback={<FullPageSpinner />}><TenantPayrollPage /></Suspense> },
-              { path: '/tenant/hr-management', element: <Suspense fallback={<FullPageSpinner />}><TenantHrPage /></Suspense> },
               { path: '/tenant/resource-logs', element: <Suspense fallback={<FullPageSpinner />}><TenantResourcesPage /></Suspense> },
               { path: '/tenant/academic-calendar', element: <Suspense fallback={<FullPageSpinner />}><TenantCalendarPage /></Suspense> },
               { path: '/tenant/certificates', element: <Suspense fallback={<FullPageSpinner />}><TenantCertificatesPage /></Suspense> },
