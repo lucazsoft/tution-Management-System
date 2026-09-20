@@ -104,6 +104,7 @@ export const DASHBOARD_NAVIGATION: Record<DashboardRole, DashboardNavItem[]> = {
     { section: 'Family', label: 'Timetable', icon: 'calendar_view_week', path: '/parent/timetable' },
     { section: 'Family', label: 'Attendance', icon: 'fact_check', path: '/parent/attendance' },
     { section: 'Family', label: 'Performance', icon: 'insights', path: '/parent/performance' },
+    { section: 'Family', label: 'Syllabus Tracker', icon: 'timeline', path: '/parent/syllabus' },
     { section: 'Connect', label: 'Messages', icon: 'forum', path: '/parent/messages' },
     { section: 'Connect', label: 'Appointments', icon: 'event', path: '/parent/appointments' },
     { section: 'Connect', label: 'Leave', icon: 'event_available', path: '/parent/leave' },

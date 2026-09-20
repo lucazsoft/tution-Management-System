@@ -21,6 +21,8 @@ import { normalizeSchedule, type ScheduleSlot } from '../utils/schedule';
 import { calendarDateLabel, calendarDayNumber, calendarMonthCells, calendarMonthLabel, isInCalendarMonth, moveCalendarMonth, toDualDateLabel, type CalendarSystem } from '../utils/nepaliDate';
 import { CalendarSystemToggle } from '../components/CalendarSystemToggle';
 import { BranchClassesWorkspace as BranchClassesView } from '../features/classes/BranchClassesWorkspace';
+import { SyllabusTracker } from '../components/syllabus/SyllabusTracker';
+import { StudentAvatar } from '../components/common/StudentAvatar';
 
 function calendarDateKey(date: Date): string {
   const year = date.getFullYear();
@@ -1309,7 +1311,6 @@ function BranchStudentsView() {
 
   const filtered = students.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.class.toLowerCase().includes(search.toLowerCase()));
 
-  const initials = (name: string) => name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
   const futureBilling = (s: any) => {
     const paidMonths = s.billing.filter((b: any) => b.status === 'Paid').length;
@@ -1368,7 +1369,7 @@ function BranchStudentsView() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {filtered.map(s => (
             <div key={s.id} role="button" tabIndex={0} aria-pressed={selectedStudent?.id === s.id} aria-label={`Open ${s.name}'s student record`} onClick={() => { setSelectedStudent(s); setEditMode(false); setIsAdding(false); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedStudent(s); setEditMode(false); setIsAdding(false); } }} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px', border: `1px solid ${selectedStudent?.id === s.id ? 'var(--color-primary)' : 'var(--border)'}`, borderRadius: '12px', cursor: 'pointer', background: selectedStudent?.id === s.id ? 'var(--color-primary-soft, #e6f0fa)' : 'var(--bg-card)' }}>
-              <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: '15px', flexShrink: 0 }}>{initials(s.name)}</div>
+              <StudentAvatar name={s.name} photoUrl={(s as any).photoUrl || s.avatar} size="md" />
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: '15px' }}>{s.name}</div>
                 <div style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{s.class} · {s.email}</div>
@@ -1383,7 +1384,7 @@ function BranchStudentsView() {
         <Card hoverable={false}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
             <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-              <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: '22px' }}>{initials(selectedStudent.name)}</div>
+              <StudentAvatar name={selectedStudent.name} photoUrl={(selectedStudent as any).photoUrl || selectedStudent.avatar} size="xl" />
               <div>
                 <h2 style={{ fontSize: '20px' }}>{selectedStudent.name}</h2>
                 <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>{selectedStudent.class} · Enrolled {selectedStudent.enrollDate}</p>
@@ -1798,6 +1799,40 @@ export function BranchResultsView() {
   </Page>;
 }
 
+function BranchSyllabusTrackerView({ data, controls }: { data: any; controls: ReactNode }) {
+  const rawSyllabi = data.syllabi || [];
+  const syllabi = rawSyllabi.map((s: any) => ({
+    id: s.id,
+    subject: s.subject,
+    className: s.class?.name || 'Class',
+    teacherName: s.class?.assignedTeacher
+      ? `${s.class.assignedTeacher.firstName} ${s.class.assignedTeacher.lastName}`
+      : 'Assigned Teacher',
+    chapters: s.chapters || [],
+    dailyLogs: s.dailyLogs || [],
+  }));
+
+  return (
+    <Page title="Syllabus progress" description="Live topic progress shared by branch teachers.">
+      {controls}
+      {syllabi.length ? (
+        <SyllabusTracker
+          syllabi={syllabi}
+          role="admin"
+        />
+      ) : (
+        <Card hoverable={false}>
+          <div role="status" style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>
+            <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: 36 }}>menu_book</span>
+            <h3 style={{ marginTop: 8 }}>No syllabus has been shared</h3>
+            <p>Teacher-created subject syllabi for this branch will appear here.</p>
+          </div>
+        </Card>
+      )}
+    </Page>
+  );
+}
+
 function LiveTeacherWorkflow({ mode }: { mode: 'attendance' | 'homework' | 'results' | 'syllabus' | 'leaves' }) {
   const [data, setData] = useState<any>(null); const [branchId, setBranchId] = useState(''); const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const action = useAction();
   const [selectedHomework, setSelectedHomework] = useState<any>(null);
@@ -1814,10 +1849,70 @@ function LiveTeacherWorkflow({ mode }: { mode: 'attendance' | 'homework' | 'resu
   }, [mode, branchId, date]);
   if (loading) return <Page title="Teacher workflows" description="Loading branch records…"><Card hoverable={false}><div aria-busy="true">Loading synchronized records…</div></Card></Page>;
   if (error || !data) return <Page title="Teacher workflows" description="Branch-scoped teacher operations."><Card hoverable={false}><Feedback message="" error={error} /><Button onClick={() => void load()}>Try again</Button></Card></Page>;
-  const controls = <Card hoverable={false}><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }}><label style={label}>Branch<select style={field} value={branchId} onChange={(event) => { setBranchId(event.target.value); void load(event.target.value, date); }}>{data.branches.map((branch: any) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>{mode === 'attendance' ? <label style={label}>Academic date<input style={field} type="date" value={date} onChange={(event) => { setDate(event.target.value); void load(branchId, event.target.value); }} /></label> : null}</div></Card>;
+  const controls = (
+    <div style={{
+      display: 'inline-flex',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      gap: 12,
+      padding: '8px 16px',
+      background: 'var(--color-surface, #fff)',
+      border: '1px solid var(--border, #e2e8f0)',
+      borderRadius: '24px',
+      marginBottom: '16px',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+      width: 'fit-content',
+      maxWidth: '100%'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>
+        <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--color-primary)' }}>domain</span>
+        <span>Branch:</span>
+        <select
+          aria-label="Select branch"
+          style={{
+            height: '32px',
+            padding: '2px 10px',
+            borderRadius: '16px',
+            border: '1px solid var(--border)',
+            background: 'var(--bg-card, #fff)',
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            color: 'var(--text)'
+          }}
+          value={branchId}
+          onChange={(event) => { setBranchId(event.target.value); void load(event.target.value, date); }}
+        >
+          {data.branches.map((branch: any) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+        </select>
+      </div>
+      {mode === 'attendance' ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', borderLeft: '1px solid var(--border)', paddingLeft: 12 }}>
+          <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--color-primary)' }}>calendar_today</span>
+          <span>Date:</span>
+          <input
+            aria-label="Select academic date"
+            style={{
+              height: '32px',
+              padding: '2px 10px',
+              borderRadius: '16px',
+              border: '1px solid var(--border)',
+              background: 'var(--bg-card, #fff)',
+              fontSize: '13px',
+              fontWeight: 500,
+              color: 'var(--text)'
+            }}
+            type="date"
+            value={date}
+            onChange={(event) => { setDate(event.target.value); void load(branchId, event.target.value); }}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
   if (mode === 'attendance') return <Page title="Branch attendance" description="Teacher-marked student attendance by real academic date and class.">{controls}<Card hoverable={false}>{data.attendance.length ? <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th>Student</th><th>Class</th><th>Subject</th><th>Teacher</th><th>Status</th></tr></thead><tbody>{data.attendance.map((row: any) => <tr key={row.id}><td>{row.studentName}</td><td>{row.className}</td><td>{row.subject}</td><td>{row.teacherName}</td><td><StatusBadge variant={row.status === 'PRESENT' ? 'success' : row.status === 'EXCUSED' ? 'warning' : 'error'}>{row.status}</StatusBadge></td></tr>)}</tbody></table> : <p>No attendance was submitted for this date.</p>}</Card></Page>;
   if (mode === 'homework') return <Page title="Branch homework" description="All teacher-published homework for this branch.">{controls}<Card hoverable={false}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}><h2 style={{ fontSize: 18 }}>Published homework</h2><StatusBadge variant="info">{data.homework.length} assignments</StatusBadge></div>{data.homework.length ? <div className="admin-record-list">{data.homework.map((item: any) => <button type="button" key={item.id} onClick={() => setSelectedHomework(item)}><span><strong>{item.title}</strong><small>{item.class.name} · {item.subject} · Due {new Date(item.deadline).toLocaleDateString()}</small></span><StatusBadge variant={new Date(item.deadline) < new Date() ? 'warning' : 'info'}>{new Date(item.deadline) < new Date() ? 'Closed' : 'Active'}</StatusBadge><span className="material-symbols-outlined" aria-hidden="true">chevron_right</span></button>)}</div> : <div role="status" className="admin-empty-state"><span className="material-symbols-outlined" aria-hidden="true">assignment</span><h3>No homework published</h3><p>Teacher-published assignments will appear here.</p></div>}</Card><AdminDetailDialog open={Boolean(selectedHomework)} title={selectedHomework?.title || 'Homework details'} eyebrow="Homework details" onClose={() => setSelectedHomework(null)}>{selectedHomework ? <><dl className="admin-detail-grid"><div><dt>Class</dt><dd>{selectedHomework.class.name}</dd></div><div><dt>Subject</dt><dd>{selectedHomework.subject}</dd></div><div><dt>Teacher</dt><dd>{selectedHomework.class.assignedTeacher ? `${selectedHomework.class.assignedTeacher.firstName} ${selectedHomework.class.assignedTeacher.lastName}` : 'Not assigned'}</dd></div><div><dt>Published</dt><dd>{new Date(selectedHomework.createdAt).toLocaleString()}</dd></div><div><dt>Due date</dt><dd>{new Date(selectedHomework.deadline).toLocaleString()}</dd></div><div><dt>Status</dt><dd>{new Date(selectedHomework.deadline) < new Date() ? 'Closed' : 'Active'}</dd></div></dl><section className="admin-detail-section"><h3>Instructions</h3><p>{selectedHomework.description?.trim() || 'No additional instructions were provided.'}</p></section><div className="admin-detail-actions">{selectedHomework.contentUrl ? <a href={selectedHomework.contentUrl} target="_blank" rel="noreferrer">Open Attached File</a> : <span>No Attached File</span>}<Button variant="outline" onClick={() => setSelectedHomework(null)}>Close</Button></div></> : null}</AdminDetailDialog></Page>;
-  if (mode === 'syllabus') return <Page title="Syllabus progress" description="Live topic progress shared by branch teachers.">{controls}{data.syllabi.length ? data.syllabi.map((syllabus: any) => <Card key={syllabus.id} hoverable={false}><h2>{syllabus.subject} · {syllabus.class.name}</h2><p>{syllabus.class.assignedTeacher ? `${syllabus.class.assignedTeacher.firstName} ${syllabus.class.assignedTeacher.lastName}` : 'Teacher'}</p>{syllabus.chapters.map((chapter: any) => <section key={chapter.id} style={{ padding: 12, borderTop: '1px solid var(--border)' }}><strong>{chapter.position}. {chapter.title}</strong><StatusBadge variant={chapter.status === 'COMPLETED' ? 'success' : chapter.status === 'IN_PROGRESS' ? 'warning' : 'error'}>{chapter.status}</StatusBadge>{chapter.topics.map((topic: any) => <p key={topic.id}>{topic.position}. {topic.title} — {topic.status}{topic.logs[0]?.notes ? ` · ${topic.logs[0].notes}` : ''}</p>)}</section>)}</Card>) : <Card hoverable={false}>No syllabus has been shared.</Card>}</Page>;
+  if (mode === 'syllabus') return <BranchSyllabusTrackerView data={data} controls={controls} />;
   if (mode === 'leaves') { const decide = async (id: string, decision: 'APPROVE' | 'REJECT') => { await action.run(() => api.branchAdmin.decideLeave(id, decision, decision === 'REJECT' ? 'Rejected by Branch Admin.' : 'Reviewed by Branch Admin.'), `Leave ${decision === 'APPROVE' ? 'approved or forwarded' : 'rejected'}.`); await load(); }; return <Page title="Teacher leave requests" description="Review live teacher requests; long sick leave is forwarded after Level 1 approval.">{controls}<Feedback message={action.message} error={action.error} /><Card hoverable={false}>{data.leaves.filter((item: any) => item.status === 'PENDING').length ? data.leaves.filter((item: any) => item.status === 'PENDING').map((item: any) => <article key={item.id} style={{ padding: 12, borderBottom: '1px solid var(--border)' }}><strong>{item.user.firstName} {item.user.lastName} · {item.leaveType}</strong><p>{new Date(item.startDate).toLocaleDateString()} – {new Date(item.endDate).toLocaleDateString()} · {item.reason}</p><div style={{ display: 'flex', gap: 8 }}><Button disabled={action.busy} onClick={() => void decide(item.id, 'APPROVE')}>Approve</Button><Button variant="outline" disabled={action.busy} onClick={() => void decide(item.id, 'REJECT')}>Reject</Button></div></article>) : <p>No pending teacher leave requests.</p>}</Card></Page>; }
   const submitDefinition = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const values = new FormData(event.currentTarget); void action.run(async () => { await api.branchAdmin.createResultDefinition({ branchId, classId: String(values.get('classId')), title: String(values.get('title')), subject: String(values.get('subject')), testDate: String(values.get('testDate')) }); await load(); event.currentTarget.reset(); }, 'Result created and sent to the assigned teacher.'); };
   return <Page title="Branch results" description="Create result entry windows before teachers enter and publish marks.">{controls}<Card hoverable={false}><form style={form} onSubmit={submitDefinition} aria-busy={action.busy}><label style={label}>Assigned class<select name="classId" required style={field}>{data.classes.map((item: any) => <option key={item.id} value={item.id}>{item.name} · {item.course.name}</option>)}</select></label><label style={label}>Result title<input name="title" required style={field} placeholder="First terminal examination" /></label><label style={label}>Subject<input name="subject" required style={field} /></label><label style={label}>Test date<input name="testDate" type="date" required style={field} /></label><Feedback message={action.message} error={action.error} /><Button type="submit" disabled={action.busy}>{action.busy ? 'Creating…' : 'Create result'}</Button></form></Card><Card hoverable={false}><h2>Available results</h2>{data.resultDefinitions.map((item: any) => <p key={item.id}>{item.title} · {item.subject} · {new Date(item.testDate).toLocaleDateString()}</p>)}</Card></Page>;

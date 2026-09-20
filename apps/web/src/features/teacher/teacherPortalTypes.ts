@@ -8,7 +8,7 @@ export interface TeacherClass {
   type: string;
   schedule: unknown;
   branch: { id: string; name: string; address: string; radiusMeters: number };
-  students: Array<{ id: string; name: string; status: string }>;
+  students: Array<{ id: string; name: string; status: string; photoUrl?: string | null }>;
   attendance: Array<{ id: string; studentId: string; date: string; status: string }>;
   syllabi: Array<{
     id: string; subject: string;

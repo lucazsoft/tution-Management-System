@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button } from '../components/ui/Button';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { UserProfileDrawer } from '../components/UserProfileDrawer';
+import { StudentAvatar } from '../components/common/StudentAvatar';
 import { api } from '../services/api';
 
 interface PersonRole {
@@ -15,6 +16,7 @@ interface Person {
   name: string;
   email: string;
   phone: string;
+  photoUrl?: string | null;
   status: string;
   gradeId: string | null;
   gradeName: string | null;
@@ -35,10 +37,6 @@ interface AcademicRosterProps {
   subtitle: string;
   emptyText: string;
   showFees?: boolean;
-}
-
-function initials(name: string): string {
-  return name.split(' ').filter(Boolean).map((p) => p[0]?.toUpperCase()).join('').slice(0, 2) || '??';
 }
 
 function money(n: number): string {
@@ -219,7 +217,7 @@ export function AcademicRoster({ role, title, subtitle, emptyText, showFees = fa
                     <tr key={person.id} role="button" tabIndex={0} aria-label={`Open ${person.name}'s profile`} onClick={() => setSelectedUserId(person.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedUserId(person.id); } }} style={{ cursor: 'pointer' }}>
                       <td>
                         <div className="people-person">
-                          <div className="people-avatar">{initials(person.name)}</div>
+                          <StudentAvatar name={person.name} photoUrl={person.photoUrl} size="sm" />
                           <div>
                             <div className="people-person-name">{person.name}</div>
                             <div className="people-person-email">{person.email}</div>
