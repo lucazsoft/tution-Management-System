@@ -7,6 +7,7 @@ import { studentBillingSummary } from '../utils/student-billing-summary';
 import { invoiceLineItems } from '../utils/invoice-document';
 import { persistPortalNotifications } from '../services/portal-notifications';
 import { normalizeSchedule } from '../utils/schedule';
+import { privateImageUrl } from '../services/object-storage';
 
 const router = Router();
 
@@ -64,6 +65,20 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
                       include: {
                         assignedTeacher: { select: { id: true, firstName: true, lastName: true } },
                         branch: true,
+                        syllabi: {
+                          include: {
+                            chapters: {
+                              orderBy: { position: 'asc' },
+                              include: {
+                                topics: {
+                                  orderBy: { position: 'asc' },
+                                  include: { logs: { orderBy: { logDate: 'desc' }, take: 10 } },
+                                },
+                              },
+                            },
+                            dailyLogs: { orderBy: { logDate: 'desc' }, take: 10 },
+                          },
+                        },
                       },
                     },
                   },
@@ -82,29 +97,32 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
     });
     if (!parent) return res.status(404).json({ error: 'No parent record is linked to this account.' });
 
-    const children = parent.studentParents.map(({ student }) => {
-      const counts = student.studentAttendance.reduce<Record<string, number>>((acc, row) => {
-        acc[row.status] = (acc[row.status] ?? 0) + 1;
-        return acc;
-      }, {});
-      const total = student.studentAttendance.length;
-      const outstanding = student.invoices
-        .filter((invoice) => ['UNPAID', 'OVERDUE'].includes(invoice.status))
-        .reduce((sum, invoice) => sum + Number(invoice.netPayable), 0);
-      const branch = student.enrollments[0]?.class.branch;
-      return {
-        id: student.id,
-        name: `${student.user.firstName} ${student.user.lastName}`,
-        initials: `${student.user.firstName[0] ?? ''}${student.user.lastName[0] ?? ''}`.toUpperCase(),
-        grade: student.grade?.name ?? 'Grade not assigned',
-        branch: branch?.name ?? 'Branch not assigned',
-        branchId: branch?.id,
-        rollNumber: student.admissionNumber ?? student.id.slice(0, 6).toUpperCase(),
-        blocked: student.enrollments.some((enrollment) => enrollment.status === 'BLOCKED') || student.invoices.some((invoice) => invoice.status === 'OVERDUE'),
-        attendanceRate: total ? Math.round(((counts.PRESENT ?? 0) / total) * 100) : 0,
-        outstanding,
-      };
-    });
+    const children = await Promise.all(
+      parent.studentParents.map(async ({ student }) => {
+        const counts = student.studentAttendance.reduce<Record<string, number>>((acc, row) => {
+          acc[row.status] = (acc[row.status] ?? 0) + 1;
+          return acc;
+        }, {});
+        const total = student.studentAttendance.length;
+        const outstanding = student.invoices
+          .filter((invoice) => ['UNPAID', 'OVERDUE'].includes(invoice.status))
+          .reduce((sum, invoice) => sum + Number(invoice.netPayable), 0);
+        const branch = student.enrollments[0]?.class.branch;
+        return {
+          id: student.id,
+          name: `${student.user.firstName} ${student.user.lastName}`,
+          initials: `${student.user.firstName[0] ?? ''}${student.user.lastName[0] ?? ''}`.toUpperCase(),
+          photoUrl: await privateImageUrl(student.user.image),
+          grade: student.grade?.name ?? 'Grade not assigned',
+          branch: branch?.name ?? 'Branch not assigned',
+          branchId: branch?.id,
+          rollNumber: student.admissionNumber ?? student.id.slice(0, 6).toUpperCase(),
+          blocked: student.enrollments.some((enrollment) => enrollment.status === 'BLOCKED') || student.invoices.some((invoice) => invoice.status === 'OVERDUE'),
+          attendanceRate: total ? Math.round(((counts.PRESENT ?? 0) / total) * 100) : 0,
+          outstanding,
+        };
+      })
+    );
     const requestedId = typeof req.query.studentId === 'string' ? req.query.studentId : children[0]?.id;
     const link = parent.studentParents.find(({ student }) => student.id === requestedId);
     if (!link) {
@@ -329,6 +347,42 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
     ].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
     const notifications = await persistPortalNotifications(req.tenantId!, req.user!.id, generatedNotifications.map((notice) => ({ ...notice, studentId: student.id })));
 
+    const syllabi = student.enrollments.flatMap((enrollment) =>
+      enrollment.class.syllabi.map((syllabus) => ({
+        id: syllabus.id,
+        className: enrollment.class.name,
+        subject: syllabus.subject,
+        teacherName: enrollment.class.assignedTeacher
+          ? `${enrollment.class.assignedTeacher.firstName} ${enrollment.class.assignedTeacher.lastName}`
+          : undefined,
+        chapters: syllabus.chapters.map((chapter) => ({
+          id: chapter.id,
+          title: chapter.title,
+          position: chapter.position,
+          status: chapter.status,
+          topics: chapter.topics.map((topic) => ({
+            id: topic.id,
+            title: topic.title,
+            position: topic.position,
+            status: topic.status,
+            logs: topic.logs.map((log) => ({
+              id: log.id,
+              status: log.status,
+              notes: log.notes,
+              logDate: formatDate(log.logDate),
+            })),
+          })),
+        })),
+        dailyLogs: syllabus.dailyLogs.map((log) => ({
+          id: log.id,
+          chapterId: log.chapterId,
+          status: log.status,
+          notes: log.notes,
+          logDate: formatDate(log.logDate),
+        })),
+      }))
+    );
+
     return res.json({
       generatedAt: new Date().toISOString(),
       bookingWindowHours: tenant?.appointmentWindowHours ?? 24,
@@ -357,6 +411,7 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
       certificates,
       events: mappedEvents,
       notifications,
+      syllabi,
     });
   } catch (error: any) {
     return res.status(500).json({ error: 'Failed to load parent portal.', details: error.message });

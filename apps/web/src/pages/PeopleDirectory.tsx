@@ -4,6 +4,7 @@ import { Button } from '../components/ui/Button';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { useToast } from '../components/ui/Toast';
 import { UserProfileDrawer } from '../components/UserProfileDrawer';
+import { StudentAvatar } from '../components/common/StudentAvatar';
 import { api } from '../services/api';
 
 interface PersonRole {
@@ -17,6 +18,7 @@ interface Person {
   studentId?: string | null;
   name: string;
   email: string;
+  photoUrl?: string | null;
   status: string;
   roles: PersonRole[];
   createdAt: string;
@@ -60,17 +62,6 @@ const EMPTY_FORM: FormState = {
 const STAFF_ROLES = ['Teacher', 'Accountant', 'Receptionist', 'Janitor'];
 const SUPPORT_ROLES = ['Accountant', 'Receptionist', 'Janitor'];
 const DIRECTORY_ROLES = ['Tenant Admin', 'Branch Admin', ...STAFF_ROLES, 'Parent'];
-
-function initials(name: string): string {
-  return (
-    name
-      .split(' ')
-      .filter(Boolean)
-      .map((part) => part[0]?.toUpperCase())
-      .join('')
-      .slice(0, 2) || '??'
-  );
-}
 
 function primaryRole(person: Person): string {
   const order = ['Branch Admin', 'Teacher', 'Accountant', 'Receptionist', 'Janitor', 'Student', 'Parent', 'Tenant Admin'];
@@ -387,7 +378,7 @@ export function PeopleDirectory() {
                 <div className="pd-card-body">
                   {preview.map((person) => (
                     <button type="button" key={person.id} className="pd-person pd-person--preview" aria-label={`Open ${person.name}'s profile`} onClick={(e) => { e.stopPropagation(); setSelectedUserId(person.id); }}>
-                      <div className="people-avatar pd-av">{initials(person.name)}</div>
+                      <StudentAvatar name={person.name} photoUrl={person.photoUrl} size="xs" className="pd-av" />
                       <div className="pd-info">
                         <span className="pd-name">{person.name}</span>
                         <span className="pd-meta">{person.email}</span>

@@ -518,12 +518,13 @@ router.get('/', authMiddleware, async (req: TenantRequest, res: Response) => {
       },
     });
 
-    return res.json({
-      users: users.map((u) => ({
+    const userList = await Promise.all(
+      users.map(async (u) => ({
         id: u.id,
         name: `${u.firstName} ${u.lastName}`,
         email: u.email,
         phone: u.phone,
+        photoUrl: await privateImageUrl(u.image),
         status: u.status,
         gradeId: u.student?.grade?.id ?? null,
         gradeName: u.student?.grade?.name ?? null,
@@ -535,7 +536,11 @@ router.get('/', authMiddleware, async (req: TenantRequest, res: Response) => {
           branchName: ur.branch?.name ?? null,
         })),
         createdAt: u.createdAt,
-      })),
+      }))
+    );
+
+    return res.json({
+      users: userList,
     });
   } catch (error: any) {
     return res.status(500).json({ error: 'Failed to list users.', details: error.message });

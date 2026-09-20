@@ -3,6 +3,7 @@ export type ParentView =
   | 'timetable'
   | 'attendance'
   | 'performance'
+  | 'syllabus'
   | 'messages'
   | 'appointments'
   | 'leave'
@@ -29,6 +30,7 @@ export interface ParentChild {
   attendanceRate: number;
   outstanding: number;
   branchId?: string;
+  photoUrl?: string | null;
 }
 
 export interface ParentProfile {
@@ -185,6 +187,7 @@ export interface ParentPortalDataset {
   certificates: ParentCertificate[];
   events: ParentEvent[];
   notifications: ParentNotification[];
+  syllabi?: ParentSyllabus[];
 }
 
 export interface NepalPayPayload {
@@ -197,4 +200,43 @@ export interface NepalPayPayload {
   studentName: string;
   qrString: string;
 }
+
+export interface ParentSyllabusTopicLog {
+  id: string;
+  status: string;
+  notes?: string | null;
+  logDate: string;
+}
+
+export interface ParentSyllabusTopic {
+  id: string;
+  title: string;
+  position: number;
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | string;
+  logs: ParentSyllabusTopicLog[];
+}
+
+export interface ParentSyllabusChapter {
+  id: string;
+  title: string;
+  position: number;
+  status: 'LEFT' | 'IN_PROGRESS' | 'COMPLETED' | string;
+  topics: ParentSyllabusTopic[];
+}
+
+export interface ParentSyllabus {
+  id: string;
+  className: string;
+  subject: string;
+  teacherName?: string;
+  chapters: ParentSyllabusChapter[];
+  dailyLogs?: Array<{
+    id: string;
+    chapterId?: string | null;
+    status: string;
+    notes?: string | null;
+    logDate: string;
+  }>;
+}
+
 import type { InvoiceDocumentData } from '../../components/InvoiceDocument';
