@@ -1,7 +1,7 @@
 import { AcademicCalendarView } from "../components/calendar/AcademicCalendarView";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SyllabusTracker } from "../components/syllabus/SyllabusTracker";
 import { StudentAvatar } from "../components/common/StudentAvatar";
-import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "../components/ui/Toast";
 import { ChangePasswordForm } from "../components/ChangePasswordForm";
@@ -880,18 +880,12 @@ function Attendance({
 function Syllabus({
   data,
   reload,
-  classId: propClassId,
-  onClassChange,
 }: {
   data: TeacherDashboard;
   reload: () => Promise<void>;
-  classId?: string;
-  onClassChange?: (id: string) => void;
 }) {
   const { showToast } = useToast();
-  const [internalClassId, setInternalClassId] = useState(data.classes[0]?.id || "");
-  const classId = propClassId ?? internalClassId;
-  const setClassId = onClassChange ?? setInternalClassId;
+  const [classId, setClassId] = useState(data.classes[0]?.id || "");
   const selected = data.classes.find((item) => item.id === classId);
   const syllabus = selected?.syllabi[0];
   const [subject, setSubject] = useState(selected?.subject || "");
@@ -1068,15 +1062,19 @@ function Syllabus({
       </div>
     </form>
   );
+  const completeCount =
+    syllabus?.chapters.filter((chapter) => chapter.status === "COMPLETED")
+      .length || 0;
+  const progress = syllabus?.chapters.length
+    ? Math.round((completeCount / syllabus.chapters.length) * 100)
+    : 0;
   return (
     <div className="teacher-view">
-      {!propClassId && (
-        <ClassPicker
-          classes={data.classes}
-          value={classId}
-          onChange={setClassId}
-        />
-      )}
+      <ClassPicker
+        classes={data.classes}
+        value={classId}
+        onChange={setClassId}
+      />
       {!syllabus || editing ? (
         <section className="teacher-section">
           <header>
@@ -1093,21 +1091,100 @@ function Syllabus({
           {editor}
         </section>
       ) : (
-        <SyllabusTracker
-          syllabus={{
-            id: syllabus.id,
-            subject: syllabus.subject,
-            className: `${selected.name} · ${selected.branch.name}`,
-            teacherName: data.teacher.name,
-            chapters: syllabus.chapters,
-            dailyLogs: syllabus.dailyLogs,
-          }}
-          role="teacher"
-          onEditPlan={() => {
-            loadEditor();
-            setEditing(true);
-          }}
-        />
+        <>
+          <section
+            className="teacher-syllabus-summary"
+            aria-labelledby="syllabus-title"
+          >
+            <div>
+              <span className="teacher-eyebrow">
+                {selected.name} · {selected.branch.name}
+              </span>
+              <h2 id="syllabus-title">{syllabus.subject}</h2>
+              <p>
+                {completeCount} of {syllabus.chapters.length} chapters completed
+              </p>
+            </div>
+            <div
+              className="teacher-syllabus-progress"
+              aria-label={`${progress}% of syllabus completed`}
+            >
+              <strong>{progress}%</strong>
+              <div>
+                <span style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+            <button
+              type="button"
+              className="teacher-edit-syllabus"
+              onClick={() => {
+                loadEditor();
+                setEditing(true);
+              }}
+            >
+              {icon("edit")}Edit plan
+            </button>
+          </section>
+          <section className="teacher-section">
+            <header>
+              <div>
+                <h2>Teaching plan</h2>
+                <p>
+                  Chapter progress updates automatically from the daily log.
+                </p>
+              </div>
+              <Status tone={progress === 100 ? "success" : "info"}>
+                {progress === 100
+                  ? "Complete"
+                  : `${syllabus.chapters.length - completeCount} remaining`}
+              </Status>
+            </header>
+            <ol className="teacher-chapter-list">
+              {syllabus.chapters.map((chapter) => (
+                <li
+                  key={chapter.id}
+                  className={`is-${chapter.status.toLowerCase().replace("_", "-")}`}
+                >
+                  <span className="teacher-chapter-number">
+                    {chapter.position}
+                  </span>
+                  <div>
+                    <h3>{chapter.title}</h3>
+                    <small>
+                      {chapter.status === "COMPLETED"
+                        ? "Completed"
+                        : chapter.status === "IN_PROGRESS"
+                          ? "Currently teaching"
+                          : "Not started"}
+                    </small>
+                  </div>
+                  <Status
+                    tone={
+                      chapter.status === "COMPLETED"
+                        ? "success"
+                        : chapter.status === "IN_PROGRESS"
+                          ? "warning"
+                          : "info"
+                    }
+                  >
+                    {chapter.status === "COMPLETED"
+                      ? "Done"
+                      : chapter.status === "IN_PROGRESS"
+                        ? "In progress"
+                        : "Upcoming"}
+                  </Status>
+                </li>
+              ))}
+            </ol>
+            <div className="teacher-info teacher-syllabus-hint">
+              {icon("edit_note")}
+              <span>
+                After class, open Daily class update, choose one chapter, and
+                save what you covered.
+              </span>
+            </div>
+          </section>
+        </>
       )}
     </div>
   );
@@ -1539,555 +1616,6 @@ function TopicSyllabus({
           if (firstClass) setEditingClassId(firstClass);
         }}
       />
-    </div>
-  );
-}
-
-function DailyUpdate({
-  data,
-  reload,
-}: {
-  data: TeacherDashboard;
-  reload: () => Promise<void>;
-}) {
-  const { showToast } = useToast();
-  const [classId, setClassId] = useState(data.classes[0]?.id || "");
-  const selected = data.classes.find((item) => item.id === classId);
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
-  const [chapterId, setChapterId] = useState("");
-  const [draftStatus, setDraftStatus] = useState<ChapterStatus>("IN_PROGRESS");
-  useEffect(() => {
-    const first =
-      selected?.syllabi
-        .flatMap((item) => item.chapters)
-        .find((chapter) => chapter.status !== "COMPLETED") ||
-      selected?.syllabi[0]?.chapters[0];
-    setChapterId(first?.id || "");
-    setDraftStatus(
-      first?.status === "LEFT" ? "IN_PROGRESS" : first?.status || "IN_PROGRESS",
-    );
-  }, [classId, selected?.syllabi]);
-  const selectedSyllabus = selected?.syllabi.find((item) =>
-    item.chapters.some((chapter) => chapter.id === chapterId),
-  );
-  const selectedChapter = selectedSyllabus?.chapters.find(
-    (chapter) => chapter.id === chapterId,
-  );
-  const updateChapter = async () => {
-    if (!selectedSyllabus || !selectedChapter) return;
-    setBusy(true);
-    try {
-      await api.teacher.updateSyllabusLog(selectedSyllabus.id, {
-        chapterId: selectedChapter.id,
-        status: draftStatus,
-        notes: values[selectedChapter.id],
-        logDate: dateInput(),
-      });
-      showToast("Daily progress saved and shared with students.", "success");
-      setValues((old) => ({ ...old, [selectedChapter.id]: "" }));
-      await reload();
-    } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : "Progress update failed.",
-        "error",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-  const submit = async (id: string) => {
-    if (!values[id]?.trim())
-      return showToast("Enter what was covered.", "error");
-    setBusy(true);
-    try {
-      await api.teacher.submitSessionUpdate(id, values[id]);
-      showToast("Daily update submitted and session confirmed.", "success");
-      await reload();
-    } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : "Update failed.",
-        "error",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-  if (!selected)
-    return (
-      <Empty
-        iconName="note_alt"
-        title="No assigned class"
-        text="Daily syllabus updates require an assigned class."
-      />
-    );
-  const allLogs = selected.syllabi
-    .flatMap((syllabus) =>
-      syllabus.dailyLogs.map((log) => ({
-        ...log,
-        subject: syllabus.subject,
-        chapter: syllabus.chapters.find(
-          (chapter) => chapter.id === log.chapterId,
-        ),
-      })),
-    )
-    .sort(
-      (a, b) => new Date(b.logDate).getTime() - new Date(a.logDate).getTime(),
-    );
-  const chapters = selected.syllabi.flatMap((syllabus) =>
-    syllabus.chapters.map((chapter) => ({
-      ...chapter,
-      subject: syllabus.subject,
-      latest: syllabus.dailyLogs.find((log) => log.chapterId === chapter.id),
-    })),
-  );
-  return (
-    <div className="teacher-view">
-      <ClassPicker
-        classes={data.classes}
-        value={classId}
-        onChange={setClassId}
-      />
-      {chapters.length ? (
-        <div className="teacher-daily-workspace">
-          <section className="teacher-section teacher-chapter-picker">
-            <header>
-              <div>
-                <span className="teacher-eyebrow">STEP 1</span>
-                <h2>Choose today’s chapter</h2>
-                <p>
-                  {
-                    chapters.filter((chapter) => chapter.status !== "COMPLETED")
-                      .length
-                  }{" "}
-                  chapters still in progress or upcoming
-                </p>
-              </div>
-            </header>
-            <div role="list" className="teacher-daily-chapters">
-              {chapters.map((chapter) => (
-                <button
-                  type="button"
-                  role="listitem"
-                  key={chapter.id}
-                  className={chapter.id === chapterId ? "is-selected" : ""}
-                  aria-pressed={chapter.id === chapterId}
-                  onClick={() => {
-                    setChapterId(chapter.id);
-                    setDraftStatus(
-                      chapter.status === "LEFT"
-                        ? "IN_PROGRESS"
-                        : chapter.status,
-                    );
-                  }}
-                >
-                  <span
-                    className={`teacher-progress-dot is-${chapter.status.toLowerCase().replace("_", "-")}`}
-                  />
-                  <span>
-                    <strong>
-                      {chapter.position}. {chapter.title}
-                    </strong>
-                    <small>
-                      {chapter.subject} ·{" "}
-                      {chapter.latest
-                        ? `Updated ${new Date(chapter.latest.logDate).toLocaleDateString()}`
-                        : "No update yet"}
-                    </small>
-                  </span>
-                  {icon("chevron_right")}
-                </button>
-              ))}
-            </div>
-          </section>
-          <section className="teacher-section teacher-daily-editor">
-            <header>
-              <div>
-                <span className="teacher-eyebrow">STEP 2</span>
-                <h2>Record class progress</h2>
-                <p>
-                  {selectedChapter
-                    ? `${selectedChapter.position}. ${selectedChapter.title}`
-                    : "Select a chapter to continue"}
-                </p>
-              </div>
-              <Status tone="info">Today</Status>
-            </header>
-            {selectedChapter ? (
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void updateChapter();
-                }}
-                aria-busy={busy}
-              >
-                <fieldset className="teacher-chapter-status">
-                  <legend>Progress after class</legend>
-                  <button
-                    type="button"
-                    className="is-left"
-                    aria-pressed={draftStatus === "LEFT"}
-                    disabled={busy}
-                    onClick={() => setDraftStatus("LEFT")}
-                  >
-                    <i />
-                    Not started
-                  </button>
-                  <button
-                    type="button"
-                    className="is-in-progress"
-                    aria-pressed={draftStatus === "IN_PROGRESS"}
-                    disabled={busy}
-                    onClick={() => setDraftStatus("IN_PROGRESS")}
-                  >
-                    <i />
-                    In progress
-                  </button>
-                  <button
-                    type="button"
-                    className="is-completed"
-                    aria-pressed={draftStatus === "COMPLETED"}
-                    disabled={busy}
-                    onClick={() => setDraftStatus("COMPLETED")}
-                  >
-                    <i />
-                    Completed
-                  </button>
-                </fieldset>
-                <label htmlFor="daily-chapter-note">
-                  What did you cover? <span>(optional)</span>
-                </label>
-                <textarea
-                  id="daily-chapter-note"
-                  value={values[selectedChapter.id] || ""}
-                  onChange={(event) =>
-                    setValues((old) => ({
-                      ...old,
-                      [selectedChapter.id]: event.target.value,
-                    }))
-                  }
-                  placeholder="Example: Completed examples 1–4 and assigned exercise 2."
-                  rows={4}
-                />
-                <button
-                  type="submit"
-                  className="teacher-primary-cta"
-                  disabled={busy}
-                >
-                  {busy ? "Saving update…" : "Save daily update"}
-                </button>
-                <p className="teacher-form-help">
-                  Students will see the new progress and note immediately.
-                </p>
-              </form>
-            ) : null}
-          </section>
-        </div>
-      ) : (
-        <section className="teacher-section">
-          <Empty
-            iconName="menu_book"
-            title="Create a syllabus first"
-            text="Add the subject and chapters in the Syllabus section before posting daily progress."
-          />
-        </section>
-      )}
-      <section className="teacher-section">
-        <header>
-          <div>
-            <h2>Recent daily updates</h2>
-            <p>
-              {allLogs.length} saved{" "}
-              {allLogs.length === 1 ? "entry" : "entries"} for {selected.name}
-            </p>
-          </div>
-        </header>
-        {allLogs.length ? (
-          <div className="teacher-daily-log-history">
-            {allLogs.map((log) => (
-              <article key={log.id}>
-                <time dateTime={log.logDate}>
-                  {new Date(log.logDate).toLocaleDateString()}
-                </time>
-                <div>
-                  <strong>
-                    {log.chapter?.position}. {log.chapter?.title || "Chapter"}{" "}
-                    <small>· {log.subject}</small>
-                  </strong>
-                  <p>{log.notes || "No class note was added."}</p>
-                </div>
-                <Status
-                  tone={
-                    log.status === "COMPLETED"
-                      ? "success"
-                      : log.status === "IN_PROGRESS"
-                        ? "warning"
-                        : "info"
-                  }
-                >
-                  {log.status === "LEFT"
-                    ? "Not started"
-                    : statusLabel(log.status)}
-                </Status>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <Empty
-            iconName="history_edu"
-            title="No daily updates yet"
-            text="Your first saved chapter update will appear here."
-          />
-        )}
-      </section>
-      <section className="teacher-section">
-        <header>
-          <div>
-            <h2>Pending class confirmations</h2>
-            <p>
-              {data.pendingUpdates.length} update
-              {data.pendingUpdates.length === 1 ? "" : "s"} pending
-            </p>
-          </div>
-        </header>
-        {data.pendingUpdates.length ? (
-          data.pendingUpdates.map((item) => (
-            <article className="teacher-update-card" key={item.sessionId}>
-              <div>
-                <div>
-                  <span className="teacher-eyebrow">
-                    {new Date(item.date).toLocaleDateString()}
-                  </span>
-                  <h3>
-                    {item.className} · {item.courseName}
-                  </h3>
-                </div>
-                <Status tone="warning">Update pending</Status>
-              </div>
-              <label htmlFor={`update-${item.sessionId}`}>
-                Class summary for attendance confirmation
-              </label>
-              <textarea
-                id={`update-${item.sessionId}`}
-                value={values[item.sessionId] || ""}
-                onChange={(event) =>
-                  setValues((old) => ({
-                    ...old,
-                    [item.sessionId]: event.target.value,
-                  }))
-                }
-                placeholder="Summarize the completed session"
-              />
-              <button
-                type="button"
-                className="teacher-primary-cta"
-                disabled={busy}
-                onClick={() => void submit(item.sessionId)}
-              >
-                Submit and confirm
-              </button>
-            </article>
-          ))
-        ) : (
-          <Empty
-            iconName="task_alt"
-            title="All confirmations complete"
-            text="There are no pending class confirmations."
-          />
-        )}
-      </section>
-    </div>
-  );
-}
-
-function TopicSyllabus({
-  data,
-  reload,
-}: {
-  data: TeacherDashboard;
-  reload: () => Promise<void>;
-}) {
-  const { showToast } = useToast();
-  const [classId, setClassId] = useState(data.classes[0]?.id || "");
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
-  const selected = data.classes.find((item) => item.id === classId);
-  const syllabus = selected?.syllabi[0];
-  if (!selected)
-    return (
-      <Empty
-        iconName="menu_book"
-        title="No assigned subject"
-        text="A class assignment is required before creating a syllabus."
-      />
-    );
-  if (!syllabus)
-    return (
-      <Syllabus
-        data={data}
-        reload={reload}
-        classId={classId}
-        onClassChange={setClassId}
-      />
-    );
-  const add = async (chapterId: string) => {
-    const title = drafts[chapterId]?.trim();
-    if (!title) return showToast("Enter a topic title.", "error");
-    setBusy(true);
-    try {
-      await api.teacher.createSyllabusTopic(syllabus.id, { chapterId, title });
-      setDrafts((old) => ({ ...old, [chapterId]: "" }));
-      showToast("Topic added and shared.", "success");
-      await reload();
-    } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : "Topic could not be added.",
-        "error",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-  const rename = async (topicId: string, current: string) => {
-    const title = drafts[topicId]?.trim() || current;
-    setBusy(true);
-    try {
-      await api.teacher.updateSyllabusTopic(syllabus.id, topicId, title);
-      showToast("Topic updated.", "success");
-      await reload();
-    } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : "Topic could not be updated.",
-        "error",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-  const remove = async (topicId: string) => {
-    setBusy(true);
-    try {
-      await api.teacher.deleteSyllabusTopic(syllabus.id, topicId);
-      showToast("Topic removed.", "success");
-      await reload();
-    } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : "Topic could not be removed.",
-        "error",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <div className="teacher-view">
-      <ClassPicker
-        classes={data.classes}
-        value={classId}
-        onChange={setClassId}
-      />
-      <Syllabus
-        data={data}
-        reload={reload}
-        classId={classId}
-        onClassChange={setClassId}
-      />
-      <section className="teacher-section">
-        <header>
-          <div>
-            <h2>Chapter topics</h2>
-            <p>
-              Create, rename, and remove topics. Topics with progress history
-              remain protected.
-            </p>
-          </div>
-        </header>
-        <div className="teacher-topic-editor">
-          {syllabus.chapters.map((chapter) => (
-            <section key={chapter.id}>
-              <h3>
-                {chapter.position}. {chapter.title}
-              </h3>
-              {chapter.topics.length ? (
-                <div>
-                  {chapter.topics.map((topic) => (
-                    <form
-                      key={topic.id}
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void rename(topic.id, topic.title);
-                      }}
-                    >
-                      <label className="sr-only" htmlFor={`topic-${topic.id}`}>
-                        Topic title
-                      </label>
-                      <input
-                        id={`topic-${topic.id}`}
-                        value={drafts[topic.id] ?? topic.title}
-                        onChange={(event) =>
-                          setDrafts((old) => ({
-                            ...old,
-                            [topic.id]: event.target.value,
-                          }))
-                        }
-                      />
-                      <Status
-                        tone={
-                          topic.status === "COMPLETED"
-                            ? "success"
-                            : topic.status === "IN_PROGRESS"
-                              ? "warning"
-                              : "error"
-                        }
-                      >
-                        {topic.status === "LEFT"
-                          ? "Left to start"
-                          : statusLabel(topic.status)}
-                      </Status>
-                      <button type="submit" disabled={busy}>
-                        {icon("save")}Save
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        aria-label={`Delete ${topic.title}`}
-                        onClick={() => void remove(topic.id)}
-                      >
-                        {icon("delete")}
-                      </button>
-                    </form>
-                  ))}
-                </div>
-              ) : (
-                <p>No topics yet.</p>
-              )}
-              <form
-                className="teacher-topic-add"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void add(chapter.id);
-                }}
-              >
-                <label htmlFor={`new-topic-${chapter.id}`}>New topic</label>
-                <input
-                  id={`new-topic-${chapter.id}`}
-                  value={drafts[chapter.id] || ""}
-                  onChange={(event) =>
-                    setDrafts((old) => ({
-                      ...old,
-                      [chapter.id]: event.target.value,
-                    }))
-                  }
-                  placeholder="e.g. Linear equations"
-                />
-                <button type="submit" disabled={busy}>
-                  {icon("add")}Add topic
-                </button>
-              </form>
-            </section>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }
