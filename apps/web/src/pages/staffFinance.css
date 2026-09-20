@@ -550,6 +550,34 @@
 @media (max-width: 980px) { .payroll-period-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); } .payroll-search { grid-column: 1 / -1; } .payroll-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .payroll-heading { align-items: stretch; flex-direction: column; } .payroll-heading > button { width: 100%; } .payroll-period-controls, .payroll-summary { grid-template-columns: 1fr; } .payroll-search { grid-column: auto; } .payroll-search > div { grid-template-columns: 1fr; } .payroll-search .material-symbols-outlined { top: 11px; } }
 @media (prefers-reduced-motion: reduce) { .payroll-list-skeleton span { animation: none; } }
+.resource-page { display: grid; gap: 18px; }
+.resource-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.resource-summary article { display: grid; gap: 6px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--color-surface); }
+.resource-summary span { color: var(--text-muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.resource-summary strong { font-size: 24px; font-variant-numeric: tabular-nums; }
+.resource-filter, .resource-add-form label, .resource-row-editor label { display: grid; gap: 6px; color: var(--color-text); font-size: 12px; font-weight: 700; }
+.resource-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.resource-section-head h2 { font-size: 18px; }
+.resource-section-head p { margin-top: 4px; color: var(--text-muted); font-size: 13px; }
+.resource-add-form { display: grid; grid-template-columns: 1.3fr 1fr 110px 1fr 1fr; align-items: end; gap: 12px; }
+.resource-add-form .resource-notes { grid-column: 1 / -2; }
+.resource-table-wrap { overflow-x: auto; }
+.resource-table { width: 100%; min-width: 880px; border-collapse: collapse; }
+.resource-table th { padding: 11px 12px; border-bottom: 1px solid var(--border); color: var(--text-muted); background: color-mix(in srgb, var(--color-primary) 4%, var(--color-surface)); font-size: 11px; text-align: left; text-transform: uppercase; letter-spacing: .05em; }
+.resource-table td { padding: 13px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.resource-table tbody tr:last-child td { border-bottom: 0; }
+.resource-table td strong, .resource-table td small { display: block; }
+.resource-table td small { max-width: 42ch; margin-top: 4px; color: var(--text-muted); font-size: 11px; }
+.resource-row-editor { display: grid; grid-template-columns: repeat(2, minmax(150px, 1fr)); gap: 8px; min-width: 340px; }
+.resource-row-editor label:last-of-type { grid-column: 1 / -1; }
+.resource-row-editor select, .resource-row-editor textarea { min-height: 40px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-card); color: var(--color-text); font: inherit; }
+.resource-row-editor textarea { resize: vertical; }
+.resource-row-editor select:focus-visible, .resource-row-editor textarea:focus-visible { outline: 3px solid var(--color-primary-soft); outline-offset: 1px; border-color: var(--color-primary); }
+.resource-loading { padding: 24px; color: var(--text-muted); text-align: center; }
+.resource-empty { min-height: 220px; display: grid; place-content: center; justify-items: center; gap: 6px; color: var(--text-muted); text-align: center; }
+.resource-empty .material-symbols-outlined { color: var(--color-primary); font-size: 40px; }
+@media (max-width: 900px) { .resource-add-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } .resource-add-form .resource-notes { grid-column: 1 / -1; } }
+@media (max-width: 640px) { .resource-summary, .resource-add-form { grid-template-columns: 1fr; } .resource-add-form .resource-notes { grid-column: auto; } }
 .admin-detail-dialog {
   width: min(920px, calc(100vw - 32px));
   max-height: min(860px, calc(100dvh - 32px));

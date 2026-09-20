@@ -15,7 +15,7 @@ import { Card } from '../components/ui/Card';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { AcademicFees } from './AcademicFees';
 import { api, type BranchAppointment } from '../services/api';
-import { resourcesApi, type MaintenanceTask } from '../services/api/resources';
+import { resourcesApi, type InventoryItem } from '../services/api/resources';
 import { API_BASE_URL, request } from '../services/api/client';
 import { normalizeSchedule, type ScheduleSlot } from '../utils/schedule';
 import { calendarDateLabel, calendarDayNumber, calendarMonthCells, calendarMonthLabel, isInCalendarMonth, moveCalendarMonth, toDualDateLabel, type CalendarSystem } from '../utils/nepaliDate';
@@ -570,69 +570,69 @@ function ResourceTasks() {
   const action = useAction();
   const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([]);
   const [branchId, setBranchId] = useState('');
-  const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [janitors, setJanitors] = useState<Array<{ id: string; name: string }>>([]);
+  const [drafts, setDrafts] = useState<Record<string, { status: string; notes: string; assignedStaffId: string }>>({});
+  const [newItem, setNewItem] = useState({ itemName: '', category: 'Classroom', quantity: '1', location: '', status: 'GOOD', notes: '' });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
-  const load = useCallback(async (requestedBranchId?: string) => {
-    setLoading(true); setLoadError('');
+  const load = useCallback(async (requestedBranchId?: string, quiet = false) => {
+    if (!quiet) setLoading(true); setLoadError('');
     try {
       const dashboard = await api.branchAdmin.getDashboard(requestedBranchId);
       const selected = requestedBranchId || dashboard.selectedBranch.id;
       setBranches(dashboard.branches);
       setBranchId(selected);
-      setTasks((await resourcesApi.tasks(selected)).tasks);
+      const [inventory, staff] = await Promise.all([resourcesApi.inventory(selected), resourcesApi.janitors(selected)]);
+      setItems(inventory.items); setJanitors(staff.janitors);
+      setDrafts((current) => Object.fromEntries(inventory.items.map((item) => [item.id, current[item.id] ?? { status: item.itemStatus, notes: item.notes, assignedStaffId: item.assignedStaffId ?? '' }])));
     } catch (cause) {
-      setTasks([]);
+      setItems([]);
       setLoadError(cause instanceof Error ? cause.message : 'Maintenance tasks could not be loaded.');
-    } finally { setLoading(false); }
+    } finally { if (!quiet) setLoading(false); }
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { if (!branchId) return; const timer = window.setInterval(() => void load(branchId, true), 5000); return () => window.clearInterval(timer); }, [branchId, load]);
 
-  const handleComplete = (id: string) => {
+  const addItem = (event: FormEvent) => {
+    event.preventDefault();
     void action.run(async () => {
-      await resourcesApi.complete(id);
+      await resourcesApi.addInventoryItem({ ...newItem, branchId, quantity: Number(newItem.quantity) });
+      setNewItem({ itemName: '', category: 'Classroom', quantity: '1', location: '', status: 'GOOD', notes: '' });
       await load(branchId);
-    }, 'Task marked complete with actor and timestamp recorded.');
+    }, 'Item added to the branch inventory.');
   };
 
-  const openTasks = tasks.filter((task) => task.status !== 'COMPLETED');
+  const saveItem = (item: InventoryItem) => {
+    const draft = drafts[item.id]; if (!draft) return;
+    const needsRepair = ['NEEDS_REPAIR', 'DAMAGED'].includes(draft.status);
+    void action.run(async () => {
+      const result = await resourcesApi.updateInventoryItem(item.id, { status: draft.status, notes: draft.notes, ...(needsRepair && draft.assignedStaffId ? { assignedStaffId: draft.assignedStaffId } : {}) });
+      await load(branchId);
+      if (needsRepair && draft.assignedStaffId && !result.notificationDelivered) throw new Error('The task was assigned, but push delivery failed. The janitor will still see it in their portal.');
+    }, needsRepair && draft.assignedStaffId ? 'Item updated and the assigned janitor was notified.' : 'Item status updated.');
+  };
+
+  const units = items.reduce((sum, item) => sum + item.quantity, 0);
+  const attention = items.filter((item) => item.itemStatus !== 'GOOD' && item.itemStatus !== 'RETIRED').length;
 
   return (
-    <Page title="Resource and maintenance" description="Action-required logs auto-assign maintenance staff; escalated tasks remain visible for direct follow-up.">
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '20px' }}>
-        <Card hoverable={false}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'end', marginBottom: 16 }}><h2 style={{ fontSize: '18px' }}>Pending Maintenance Tasks</h2>{branches.length > 1 ? <label style={label}>Branch<select style={field} value={branchId} disabled={loading} onChange={(event) => void load(event.target.value)}>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label> : null}</div>
-          <Feedback message={action.message} error={loadError || action.error} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {loading ? <p aria-busy="true" style={{ color: 'var(--text-muted)' }}>Loading maintenance tasks…</p> : openTasks.map(task => (
-              <div key={task.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--color-surface)' }}>
-                <div>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '4px' }}>
-                    <span style={{ fontWeight: 600, fontSize: '15px' }}>{task.id}</span>
-                    <StatusBadge variant={task.status === 'ESCALATED' ? 'error' : 'warning'}>{task.status.replaceAll('_', ' ')}</StatusBadge>
-                  </div>
-                  <div style={{ color: 'var(--color-text)', fontSize: '14px' }}>{task.description}</div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '4px' }}>Classroom: {task.classroomId} · Logged {new Date(task.createdAt).toLocaleString('en-NP')}</div>
-                </div>
-                <Button disabled={action.busy} onClick={() => handleComplete(task.id)}>Mark Complete</Button>
-              </div>
-            ))}
-            {!loading && !loadError && !openTasks.length ? <p role="status" style={{ color: 'var(--text-muted)', padding: 24, textAlign: 'center' }}>All caught up. No maintenance tasks need action.</p> : null}
-          </div>
-        </Card>
-        
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <Card hoverable={false}>
-            <h2 style={{ fontSize: 16 }}>Escalation policy</h2>
-            <p style={{ marginTop: 8, color: 'var(--color-text-muted, rgba(44,62,80,.7))', fontSize: '13px' }}>Tasks unresolved after the Tenant Admin-configured threshold are marked escalated. Default assignment remains branch-scoped.</p>
-            <div style={{ marginTop: '12px' }}>
-              <StatusBadge variant="warning">Requires follow-up</StatusBadge>
-            </div>
-          </Card>
-        </div>
-      </div>
+    <Page title="Resource inventory" description="List every branch item, keep its condition current, and assign repairs to a specific maintenance staff member.">
+      <section className="resource-summary" aria-label="Branch inventory summary"><article><span>Inventory entries</span><strong>{items.length}</strong></article><article><span>Total units</span><strong>{units}</strong></article><article><span>Need attention</span><strong>{attention}</strong></article></section>
+      <Feedback message={action.message} error={loadError || action.error} />
+      {branches.length > 1 ? <Card hoverable={false}><label style={label} htmlFor="resource-branch">Branch<select id="resource-branch" style={field} value={branchId} disabled={loading} onChange={(event) => void load(event.target.value)}>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label></Card> : null}
+      <Card hoverable={false}><div className="resource-section-head"><div><h2>Add inventory item</h2><p>Record furniture, equipment, supplies, or facilities in this branch.</p></div></div><form className="resource-add-form" onSubmit={addItem}>
+        <label htmlFor="resource-name">Item name *<input id="resource-name" style={field} value={newItem.itemName} onChange={(event) => setNewItem((old) => ({ ...old, itemName: event.target.value }))} required /></label>
+        <label htmlFor="resource-category">Category<select id="resource-category" style={field} value={newItem.category} onChange={(event) => setNewItem((old) => ({ ...old, category: event.target.value }))}><option>Classroom</option><option>IT equipment</option><option>Furniture</option><option>Cleaning</option><option>Facility</option><option>Other</option></select></label>
+        <label htmlFor="resource-quantity">Quantity *<input id="resource-quantity" style={field} type="text" inputMode="numeric" pattern="[0-9]+" value={newItem.quantity} onChange={(event) => setNewItem((old) => ({ ...old, quantity: event.target.value }))} required /></label>
+        <label htmlFor="resource-location">Location *<input id="resource-location" style={field} placeholder="Room 204" value={newItem.location} onChange={(event) => setNewItem((old) => ({ ...old, location: event.target.value }))} required /></label>
+        <label htmlFor="resource-initial-status">Condition<select id="resource-initial-status" style={field} value={newItem.status} onChange={(event) => setNewItem((old) => ({ ...old, status: event.target.value }))}><option value="GOOD">Good</option><option value="NEEDS_REPAIR">Needs repair</option><option value="DAMAGED">Damaged</option><option value="MISSING">Missing</option><option value="RETIRED">Retired</option></select></label>
+        <label className="resource-notes" htmlFor="resource-notes">Notes<textarea id="resource-notes" style={field} rows={2} value={newItem.notes} onChange={(event) => setNewItem((old) => ({ ...old, notes: event.target.value }))} /></label>
+        <Button type="submit" disabled={action.busy || !branchId}>{action.busy ? 'Saving…' : 'Add item'}</Button>
+      </form></Card>
+      {loading ? <Card hoverable={false}><p aria-busy="true" className="resource-loading">Loading inventory…</p></Card> : !items.length && !loadError ? <Card hoverable={false}><div className="resource-empty"><span className="material-symbols-outlined" aria-hidden="true">inventory_2</span><strong>No items listed</strong><p>Add the first item to start this branch’s inventory tally.</p></div></Card> : <Card hoverable={false}><div className="resource-section-head"><div><h2>Branch inventory</h2><p>Status changes are visible to the tenant admin within seconds.</p></div><StatusBadge variant="info">{items.length} entries</StatusBadge></div><div className="resource-table-wrap"><table className="resource-table"><thead><tr><th>Item</th><th>Location</th><th>Qty</th><th>Status and assignment</th><th>Action</th></tr></thead><tbody>{items.map((item) => { const draft = drafts[item.id] ?? { status: item.itemStatus, notes: item.notes, assignedStaffId: item.assignedStaffId ?? '' }; const needsRepair = ['NEEDS_REPAIR', 'DAMAGED'].includes(draft.status); return <tr key={item.id}><td><strong>{item.itemName}</strong><small>{item.category}</small></td><td>{item.location}</td><td>{item.quantity}</td><td><div className="resource-row-editor"><label htmlFor={`resource-status-${item.id}`}>Condition<select id={`resource-status-${item.id}`} value={draft.status} onChange={(event) => setDrafts((old) => ({ ...old, [item.id]: { ...draft, status: event.target.value } }))}><option value="GOOD">Good</option><option value="NEEDS_REPAIR">Needs repair</option><option value="DAMAGED">Damaged</option><option value="MISSING">Missing</option><option value="RETIRED">Retired</option></select></label>{needsRepair ? <label htmlFor={`resource-janitor-${item.id}`}>Assign janitor<select id={`resource-janitor-${item.id}`} value={draft.assignedStaffId} onChange={(event) => setDrafts((old) => ({ ...old, [item.id]: { ...draft, assignedStaffId: event.target.value } }))}><option value="">Choose janitor</option>{janitors.map((janitor) => <option key={janitor.id} value={janitor.id}>{janitor.name}</option>)}</select></label> : null}<label htmlFor={`resource-note-${item.id}`}>Notes<textarea id={`resource-note-${item.id}`} rows={2} value={draft.notes} onChange={(event) => setDrafts((old) => ({ ...old, [item.id]: { ...draft, notes: event.target.value } }))} /></label>{item.taskStatus ? <StatusBadge variant={item.taskStatus === 'COMPLETED' ? 'success' : item.taskStatus === 'ESCALATED' ? 'error' : 'info'}>Task {item.taskStatus.replaceAll('_', ' ')}</StatusBadge> : null}</div></td><td><Button disabled={action.busy || (needsRepair && !draft.assignedStaffId)} onClick={() => saveItem(item)}>{needsRepair ? 'Save & notify' : 'Update'}</Button></td></tr>; })}</tbody></table></div></Card>}
     </Page>
   );
 }
