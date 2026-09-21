@@ -1,7 +1,7 @@
 import { AcademicCalendarView } from "../components/calendar/AcademicCalendarView";
 import { SyllabusTracker } from "../components/syllabus/SyllabusTracker";
 import { StudentAvatar } from "../components/common/StudentAvatar";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "../components/ui/Toast";
 import { ChangePasswordForm } from "../components/ChangePasswordForm";
@@ -1479,10 +1479,26 @@ function TopicSyllabus({
 }) {
   const { showToast } = useToast();
   const [classId, setClassId] = useState(data.classes[0]?.id || "");
+  const [editingClassId, setEditingClassId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const selected = data.classes.find((item) => item.id === classId);
   const syllabus = selected?.syllabi[0];
+  const teacherSyllabi = useMemo(
+    () =>
+      data.classes.flatMap((klass) =>
+        (klass.syllabi || []).map((item) => ({
+          id: item.id,
+          subject: item.subject || klass.subject,
+          className: `${klass.name} · ${klass.branch.name}`,
+          teacherName: data.teacher.name,
+          chapters: item.chapters || [],
+          dailyLogs: item.dailyLogs || [],
+          classId: klass.id,
+        })),
+      ),
+    [data.classes, data.teacher.name],
+  );
   if (!selected)
     return (
       <Empty
@@ -1491,14 +1507,38 @@ function TopicSyllabus({
         text="A class assignment is required before creating a syllabus."
       />
     );
+  if (!editingClassId)
+    return (
+      <div className="teacher-view">
+        <SyllabusTracker
+          syllabi={teacherSyllabi}
+          role="teacher"
+          onEditPlan={() => {
+            const firstClassId = data.classes[0]?.id;
+            if (!firstClassId) return;
+            setClassId(firstClassId);
+            setEditingClassId(firstClassId);
+          }}
+        />
+      </div>
+    );
   if (!syllabus)
     return (
-      <Syllabus
-        data={data}
-        reload={reload}
-        classId={classId}
-        onClassChange={setClassId}
-      />
+      <div className="teacher-view">
+        <button
+          type="button"
+          className="teacher-secondary-action"
+          onClick={() => setEditingClassId(null)}
+        >
+          ← Back to syllabus directory
+        </button>
+        <Syllabus
+          data={data}
+          reload={reload}
+          classId={classId}
+          onClassChange={setClassId}
+        />
+      </div>
     );
   const add = async (chapterId: string) => {
     const title = drafts[chapterId]?.trim();
@@ -1551,6 +1591,13 @@ function TopicSyllabus({
   };
   return (
     <div className="teacher-view">
+      <button
+        type="button"
+        className="teacher-secondary-action"
+        onClick={() => setEditingClassId(null)}
+      >
+        ← Back to syllabus directory
+      </button>
       <ClassPicker
         classes={data.classes}
         value={classId}
