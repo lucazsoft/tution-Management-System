@@ -880,12 +880,21 @@ function Attendance({
 function Syllabus({
   data,
   reload,
+  classId: propClassId,
+  onClassChange,
 }: {
   data: TeacherDashboard;
   reload: () => Promise<void>;
+  classId?: string;
+  onClassChange?: (id: string) => void;
 }) {
   const { showToast } = useToast();
-  const [classId, setClassId] = useState(data.classes[0]?.id || "");
+  const [internalClassId, setInternalClassId] = useState(propClassId || data.classes[0]?.id || "");
+  const classId = propClassId || internalClassId;
+  const setClassId = (nextId: string) => {
+    setInternalClassId(nextId);
+    onClassChange?.(nextId);
+  };
   const selected = data.classes.find((item) => item.id === classId);
   const syllabus = selected?.syllabi[0];
   const [subject, setSubject] = useState(selected?.subject || "");
@@ -1589,7 +1598,7 @@ function TopicSyllabus({
           data={data}
           reload={reload}
           classId={editingClassId}
-          onClassChange={setEditingClassId}
+          onClassChange={(id) => setEditingClassId(id)}
         />
         <div style={{ marginTop: 12 }}>
           <button

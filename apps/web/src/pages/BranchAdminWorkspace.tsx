@@ -909,6 +909,7 @@ function ResultsView() {
 
 function CertificatesView() {
   type CertificateOptions = Awaited<ReturnType<typeof api.branchAdmin.getCertificateOptions>>;
+  const [classId, setClassId] = useState('');
   const [studentKey, setStudentKey] = useState('');
   const [template, setTemplate] = useState('');
   const [preview, setPreview] = useState(false);
@@ -918,6 +919,12 @@ function CertificatesView() {
   const [loadError, setLoadError] = useState('');
   const [issuedId, setIssuedId] = useState('');
   const action = useAction();
+  const classes = useMemo(() => Array.from(new Map(students.map((item) => [item.classId, {
+    id: item.classId,
+    name: item.className,
+    branchName: item.branchName,
+  }])).values()).sort((a, b) => a.name.localeCompare(b.name)), [students]);
+  const studentsInClass = useMemo(() => students.filter((item) => item.classId === classId), [classId, students]);
   const selectedStudent = students.find((item) => `${item.studentId}:${item.classId}` === studentKey);
   const selectedTemplate = templates.find((item) => item.id === template);
 
@@ -946,8 +953,18 @@ function CertificatesView() {
           <h2 style={{ fontSize: '18px' }}>Certificate details</h2>
           <form onSubmit={submit} style={{ ...form, marginTop: '16px' }} aria-busy={action.busy}>
             <label style={label}>
+              Select Class
+              <select required style={field} value={classId} disabled={loading || !classes.length} onChange={e => { setClassId(e.target.value); setStudentKey(''); setPreview(false); setIssuedId(''); }}>
+                <option value="">Choose a class…</option>
+                {classes.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.branchName}</option>)}
+              </select>
+            </label>
+            <label style={label}>
               Select Student
-              <select required style={field} value={studentKey} disabled={loading} onChange={e => { setStudentKey(e.target.value); setPreview(false); setIssuedId(''); }}><option value="">Choose a student…</option>{students.map((item) => <option key={`${item.studentId}:${item.classId}`} value={`${item.studentId}:${item.classId}`}>{item.studentName} · {item.className} · {item.branchName}</option>)}</select>
+              <select required style={field} value={studentKey} disabled={loading || !classId} onChange={e => { setStudentKey(e.target.value); setPreview(false); setIssuedId(''); }}>
+                <option value="">{classId ? 'Choose a student…' : 'Choose a class first'}</option>
+                {studentsInClass.map((item) => <option key={`${item.studentId}:${item.classId}`} value={`${item.studentId}:${item.classId}`}>{item.studentName} · {item.gradeName}</option>)}
+              </select>
             </label>
             <label style={label}>
               Select Template
