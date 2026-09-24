@@ -112,18 +112,18 @@ class StudentStatusPill extends StatelessWidget {
       label: 'Status: $label',
       child: Container(
         padding: const EdgeInsets.symmetric(
-          horizontal: StudentSpace.sm,
-          vertical: StudentSpace.xs,
+          horizontal: TmsSpace.sm,
+          vertical: TmsSpace.xs,
         ),
         decoration: BoxDecoration(
           color: color.withValues(alpha: .10),
-          borderRadius: BorderRadius.circular(StudentRadius.pill),
+          borderRadius: BorderRadius.circular(TmsRadius.pill),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 16, color: color),
-            const SizedBox(width: StudentSpace.xxs),
+            const SizedBox(width: TmsSpace.xxs),
             Text(
               label,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(

@@ -26,9 +26,9 @@ class ChildSwitcherBar extends ConsumerWidget {
             padding: const EdgeInsets.only(right: 10),
             child: Material(
               color: selected ? kColorPrimary : Colors.white,
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: BorderRadius.circular(TmsRadius.rFull),
               child: InkWell(
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: BorderRadius.circular(TmsRadius.rFull),
                 onTap: state.isLoading
                     ? null
                     : () => ref

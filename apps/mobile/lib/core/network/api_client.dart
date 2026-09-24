@@ -31,6 +31,15 @@ class ApiClient {
 
   /// Set per build using `--dart-define=API_BASE_URL=<url>`.
   ///
+  /// Native clients do not receive a browser Origin header, but Better Auth
+  /// requires one whenever its session cookie is sent. Set this to the web
+  /// origin configured by the API (`WEB_ORIGIN`) for staging or local builds.
+  static String get authOrigin {
+    const fromEnv = String.fromEnvironment('AUTH_ORIGIN');
+    if (fromEnv.isNotEmpty) return fromEnv;
+    return 'https://tms.sanskardipshikshalaya.com.np';
+  }
+
   /// The debug default targets the Android emulator. Release builds must
   /// provide an HTTPS endpoint explicitly; a package must never be released
   /// with an emulator URL or clear-text API traffic.
@@ -101,6 +110,12 @@ class ApiClient {
       receiveTimeout: const Duration(seconds: 15),
       contentType: 'application/json',
       responseType: ResponseType.json,
+      // Android/iOS do not add Origin automatically. Better Auth validates
+      // this header when the session cookie is present (for example on
+      // get-session immediately after sign-in). Browsers add it themselves.
+      headers: {
+        if (!kIsWeb) 'Origin': authOrigin,
+      },
     ));
     final webAdapter = buildWebCredentialsAdapter();
     if (adapter != null) {

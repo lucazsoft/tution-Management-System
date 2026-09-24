@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tms_mobile/core/auth/role_codes.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
+import 'package:tms_mobile/core/notifications/push_notification_service.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/features/auth/screens/login_screen.dart';
 import 'package:tms_mobile/features/auth/screens/forgot_password_screen.dart';
@@ -98,7 +99,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   ApiClient.onSessionInvalidated =
       () => ref.read(authProvider.notifier).forceLogout();
 
-  return GoRouter(
+  final router = GoRouter(
     initialLocation: '/login',
     debugLogDiagnostics: true,
     refreshListenable: authRefresh,
@@ -261,4 +262,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
     ],
   );
+  PushNotifications.deepLinkHandler = router.go;
+  return router;
 });

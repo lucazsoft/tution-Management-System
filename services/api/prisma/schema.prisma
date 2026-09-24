@@ -138,9 +138,38 @@ enum NotificationDeliveryStatus {
   FAILED
 }
 
+enum PushPlatform {
+  ANDROID
+  IOS
+  WEB
+}
+
 enum AdmissionLoginRecipient {
   STUDENT
   PARENT
+}
+
+enum SocialPlatform {
+  META
+  TIKTOK
+  LINKEDIN
+}
+
+enum SocialPostStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  BLOCKED
+  FAILED
+}
+
+enum SocialPublishOutcome {
+  PUBLISHED
+  BLOCKED
+  FAILED
 }
 
 // Client tenant onboarding request flow (Super Admin reviews, then manually provisions)
@@ -238,6 +267,10 @@ model Tenant {
   admissionLoginDeliveries  AdmissionLoginDelivery[]
   branchPaymentSettings     BranchPaymentSettings[]
   mediaObjects              MediaObject[]
+  devicePushTokens          DevicePushToken[]
+  socialMediaPosts          SocialMediaPost[]
+  socialPublishAttempts     SocialPublishAttempt[]
+  notifications             Notification[]
 }
 
 // 2. Branch / Center
@@ -264,6 +297,7 @@ model Branch {
   maintenanceTasks   MaintenanceTask[]
   teacherAttendance  TeacherAttendance[]
   paymentSettings    BranchPaymentSettings?
+  notifications      Notification[]
   // Phase 2 relations
   academicEvents     AcademicEvent[]
   certificates       Certificate[]
@@ -317,6 +351,8 @@ model User {
   recordedStudentScores    StudentScore[]           @relation("StudentScoreRecorder")
   admissionLoginDeliveries AdmissionLoginDelivery[] @relation("AdmissionLoginRecipientUser")
   authoredBroadcasts       Broadcast[]              @relation("BroadcastAuthor")
+  devicePushTokens         DevicePushToken[]
+  notifications            Notification[]
 
   // Better Auth support
   name             String
@@ -326,6 +362,40 @@ model User {
   sessions         Session[]
   accounts         Account[]
   twoFactor        TwoFactor?
+}
+
+model DevicePushToken {
+  id        String       @id @default(uuid())
+  tenantId String
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token    String       @unique
+  platform PushPlatform
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([tenantId, userId])
+}
+
+model Notification {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branchId    String?
+  branch      Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    String
+  title       String
+  body        String
+  destination String?
+  entityId    String?
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([tenantId, userId, createdAt])
+  @@index([tenantId, userId, readAt])
 }
 
 model TwoFactor {
@@ -502,6 +572,44 @@ model Broadcast {
   createdAt     DateTime @default(now())
 
   @@index([tenantId, createdAt])
+}
+
+model SocialMediaPost {
+  id             String             @id @default(uuid())
+  tenantId       String
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  platform       SocialPlatform
+  content        String
+  mediaUrls      Json?
+  status         SocialPostStatus   @default(DRAFT)
+  approvedAt     DateTime?
+  approvedById   String?
+  scheduledFor   DateTime?
+  scheduledById  String?
+  attemptCount   Int                @default(0)
+  lastAttemptAt  DateTime?
+  providerPostId String?
+  lastError      String?
+  publishedAt    DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  attempts       SocialPublishAttempt[]
+
+  @@index([tenantId, status, scheduledFor])
+}
+
+model SocialPublishAttempt {
+  id             String               @id @default(uuid())
+  tenantId       String
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  postId         String
+  post           SocialMediaPost      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  outcome        SocialPublishOutcome
+  detail         String
+  providerPostId String?
+  attemptedAt    DateTime             @default(now())
+
+  @@index([tenantId, postId, attemptedAt])
 }
 
 model Appointment {

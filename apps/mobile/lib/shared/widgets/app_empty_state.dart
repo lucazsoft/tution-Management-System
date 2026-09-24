@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../app/theme/app_colors.dart';
+import 'package:tms_mobile/core/theme/app_colors.dart';
+import 'package:tms_mobile/core/theme/app_tokens.dart';
 
 class AppEmptyState extends StatelessWidget {
   const AppEmptyState({
@@ -26,10 +27,10 @@ class AppEmptyState extends StatelessWidget {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: TmsAppColors.tint(TmsAppColors.primary, 0.08),
-                borderRadius: BorderRadius.circular(18),
+                color: kColorPrimary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(TmsRadius.modal),
               ),
-              child: Icon(icon, color: TmsAppColors.primary, size: 30),
+              child: Icon(icon, color: kColorPrimary, size: 30),
             ),
             const SizedBox(height: 16),
             Text(
@@ -41,7 +42,7 @@ class AppEmptyState extends StatelessWidget {
             Text(
               message,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: TmsAppColors.mutedText,
+                    color: kColorMutedText,
                   ),
               textAlign: TextAlign.center,
             ),

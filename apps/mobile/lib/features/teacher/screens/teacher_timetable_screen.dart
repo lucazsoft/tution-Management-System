@@ -15,6 +15,7 @@ import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_portal_dto.dart';
 import 'package:tms_mobile/features/teacher/viewmodels/teacher_portal_viewmodel.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_record_states.dart';
+import 'package:tms_mobile/core/theme/app_tokens.dart';
 
 class TeacherTimetableScreen extends ConsumerStatefulWidget {
   const TeacherTimetableScreen({super.key});
@@ -221,7 +222,7 @@ class _TimetableCard extends StatelessWidget {
               height: 56,
               decoration: BoxDecoration(
                 color: kColorAccent,
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: BorderRadius.circular(TmsRadius.r2),
               ),
             ),
             const SizedBox(width: 12),

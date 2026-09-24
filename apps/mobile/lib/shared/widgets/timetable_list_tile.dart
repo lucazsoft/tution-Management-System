@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../app/theme/app_colors.dart';
+import 'package:tms_mobile/core/theme/app_colors.dart';
 import '../models/app_models.dart';
 import 'status_chip.dart';
+import 'package:tms_mobile/core/theme/app_tokens.dart';
 
 class TimetableListTile extends StatelessWidget {
   const TimetableListTile({
@@ -19,8 +20,8 @@ class TimetableListTile extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: TmsAppColors.divider),
+        borderRadius: BorderRadius.circular(TmsRadius.r14),
+        border: Border.all(color: kColorDivider),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -28,13 +29,13 @@ class TimetableListTile extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
-              color: TmsAppColors.tint(TmsAppColors.primary, 0.1),
-              borderRadius: BorderRadius.circular(12),
+              color: kColorPrimary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(TmsRadius.r12),
             ),
             child: Text(
               entry.time,
               style: const TextStyle(
-                color: TmsAppColors.primary,
+                color: kColorPrimary,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
@@ -55,7 +56,7 @@ class TimetableListTile extends StatelessWidget {
                 Text(
                   '${entry.teacher} · ${entry.room}',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: TmsAppColors.mutedText,
+                        color: kColorMutedText,
                       ),
                 ),
               ],

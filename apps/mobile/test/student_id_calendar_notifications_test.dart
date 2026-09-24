@@ -132,11 +132,9 @@ void main() {
       vm.dispose();
     });
 
-    test('outstanding dues keep the card active with a dues notice',
-        () async {
+    test('outstanding dues keep the card active with a dues notice', () async {
       final vm = StudentIdViewModel(
-        repository:
-            stubRepository(portalPayload(outstanding: 4500)),
+        repository: stubRepository(portalPayload(outstanding: 4500)),
       );
       await pumpSettled();
       final card = vm.state.card!;
@@ -205,8 +203,7 @@ void main() {
       vm.dispose();
     });
 
-    test('markRead and markAllRead clear the unread badge locally',
-        () async {
+    test('markRead and markAllRead clear the unread badge locally', () async {
       final vm = StudentNotificationsViewModel(
         repository: stubRepository(portalPayload()),
       );

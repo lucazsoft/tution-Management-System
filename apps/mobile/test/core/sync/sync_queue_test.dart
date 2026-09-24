@@ -16,8 +16,7 @@ class FakeSyncQueueStore implements SyncQueueStore {
 
   @override
   Future<List<SyncOperation>> pendingForUser(String userId) async {
-    final list =
-        rows.values.where((o) => o.ownerUserId == userId).toList();
+    final list = rows.values.where((o) => o.ownerUserId == userId).toList();
     list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     return list;
   }
@@ -109,8 +108,7 @@ void main() {
       queue.dispose();
     });
 
-    test('server wins: conflict dropped + notified, drain continues',
-        () async {
+    test('server wins: conflict dropped + notified, drain continues', () async {
       final store = FakeSyncQueueStore();
       final queue = SyncQueueService(store);
       await store.insert(op('k1', 'u1', 1));

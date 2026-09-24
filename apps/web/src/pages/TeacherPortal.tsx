@@ -1,7 +1,7 @@
 import { AcademicCalendarView } from "../components/calendar/AcademicCalendarView";
-import { useEffect, useMemo, useRef, useState } from "react";
 import { SyllabusTracker } from "../components/syllabus/SyllabusTracker";
 import { StudentAvatar } from "../components/common/StudentAvatar";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "../components/ui/Toast";
 import { ChangePasswordForm } from "../components/ChangePasswordForm";
@@ -889,12 +889,9 @@ function Syllabus({
   onClassChange?: (id: string) => void;
 }) {
   const { showToast } = useToast();
-  const [internalClassId, setInternalClassId] = useState(propClassId || data.classes[0]?.id || "");
-  const classId = propClassId || internalClassId;
-  const setClassId = (nextId: string) => {
-    setInternalClassId(nextId);
-    onClassChange?.(nextId);
-  };
+  const [internalClassId, setInternalClassId] = useState(data.classes[0]?.id || "");
+  const classId = propClassId ?? internalClassId;
+  const setClassId = onClassChange ?? setInternalClassId;
   const selected = data.classes.find((item) => item.id === classId);
   const syllabus = selected?.syllabi[0];
   const [subject, setSubject] = useState(selected?.subject || "");
@@ -1071,19 +1068,15 @@ function Syllabus({
       </div>
     </form>
   );
-  const completeCount =
-    syllabus?.chapters.filter((chapter) => chapter.status === "COMPLETED")
-      .length || 0;
-  const progress = syllabus?.chapters.length
-    ? Math.round((completeCount / syllabus.chapters.length) * 100)
-    : 0;
   return (
     <div className="teacher-view">
-      <ClassPicker
-        classes={data.classes}
-        value={classId}
-        onChange={setClassId}
-      />
+      {!propClassId && (
+        <ClassPicker
+          classes={data.classes}
+          value={classId}
+          onChange={setClassId}
+        />
+      )}
       {!syllabus || editing ? (
         <section className="teacher-section">
           <header>
@@ -1100,100 +1093,21 @@ function Syllabus({
           {editor}
         </section>
       ) : (
-        <>
-          <section
-            className="teacher-syllabus-summary"
-            aria-labelledby="syllabus-title"
-          >
-            <div>
-              <span className="teacher-eyebrow">
-                {selected.name} · {selected.branch.name}
-              </span>
-              <h2 id="syllabus-title">{syllabus.subject}</h2>
-              <p>
-                {completeCount} of {syllabus.chapters.length} chapters completed
-              </p>
-            </div>
-            <div
-              className="teacher-syllabus-progress"
-              aria-label={`${progress}% of syllabus completed`}
-            >
-              <strong>{progress}%</strong>
-              <div>
-                <span style={{ width: `${progress}%` }} />
-              </div>
-            </div>
-            <button
-              type="button"
-              className="teacher-edit-syllabus"
-              onClick={() => {
-                loadEditor();
-                setEditing(true);
-              }}
-            >
-              {icon("edit")}Edit plan
-            </button>
-          </section>
-          <section className="teacher-section">
-            <header>
-              <div>
-                <h2>Teaching plan</h2>
-                <p>
-                  Chapter progress updates automatically from the daily log.
-                </p>
-              </div>
-              <Status tone={progress === 100 ? "success" : "info"}>
-                {progress === 100
-                  ? "Complete"
-                  : `${syllabus.chapters.length - completeCount} remaining`}
-              </Status>
-            </header>
-            <ol className="teacher-chapter-list">
-              {syllabus.chapters.map((chapter) => (
-                <li
-                  key={chapter.id}
-                  className={`is-${chapter.status.toLowerCase().replace("_", "-")}`}
-                >
-                  <span className="teacher-chapter-number">
-                    {chapter.position}
-                  </span>
-                  <div>
-                    <h3>{chapter.title}</h3>
-                    <small>
-                      {chapter.status === "COMPLETED"
-                        ? "Completed"
-                        : chapter.status === "IN_PROGRESS"
-                          ? "Currently teaching"
-                          : "Not started"}
-                    </small>
-                  </div>
-                  <Status
-                    tone={
-                      chapter.status === "COMPLETED"
-                        ? "success"
-                        : chapter.status === "IN_PROGRESS"
-                          ? "warning"
-                          : "info"
-                    }
-                  >
-                    {chapter.status === "COMPLETED"
-                      ? "Done"
-                      : chapter.status === "IN_PROGRESS"
-                        ? "In progress"
-                        : "Upcoming"}
-                  </Status>
-                </li>
-              ))}
-            </ol>
-            <div className="teacher-info teacher-syllabus-hint">
-              {icon("edit_note")}
-              <span>
-                After class, open Daily class update, choose one chapter, and
-                save what you covered.
-              </span>
-            </div>
-          </section>
-        </>
+        <SyllabusTracker
+          syllabus={{
+            id: syllabus.id,
+            subject: syllabus.subject,
+            className: `${selected.name} · ${selected.branch.name}`,
+            teacherName: data.teacher.name,
+            chapters: syllabus.chapters,
+            dailyLogs: syllabus.dailyLogs,
+          }}
+          role="teacher"
+          onEditPlan={() => {
+            loadEditor();
+            setEditing(true);
+          }}
+        />
       )}
     </div>
   );
@@ -1563,24 +1477,29 @@ function TopicSyllabus({
   data: TeacherDashboard;
   reload: () => Promise<void>;
 }) {
+  const { showToast } = useToast();
+  const [classId, setClassId] = useState(data.classes[0]?.id || "");
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
-
-  // Collect all syllabi across teacher's classes
-  const teacherSyllabi = useMemo(() => {
-    return data.classes.flatMap((cls) =>
-      (cls.syllabi || []).map((s) => ({
-        id: s.id,
-        subject: s.subject || cls.subject,
-        className: `${cls.name} · ${cls.branch.name}`,
-        teacherName: data.teacher.name,
-        chapters: s.chapters || [],
-        dailyLogs: s.dailyLogs || [],
-        classId: cls.id,
-      }))
-    );
-  }, [data.classes, data.teacher.name]);
-
-  if (!data.classes.length) {
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const selected = data.classes.find((item) => item.id === classId);
+  const syllabus = selected?.syllabi[0];
+  const teacherSyllabi = useMemo(
+    () =>
+      data.classes.flatMap((klass) =>
+        (klass.syllabi || []).map((item) => ({
+          id: item.id,
+          subject: item.subject || klass.subject,
+          className: `${klass.name} · ${klass.branch.name}`,
+          teacherName: data.teacher.name,
+          chapters: item.chapters || [],
+          dailyLogs: item.dailyLogs || [],
+          classId: klass.id,
+        })),
+      ),
+    [data.classes, data.teacher.name],
+  );
+  if (!selected)
     return (
       <Empty
         iconName="menu_book"
@@ -1588,43 +1507,204 @@ function TopicSyllabus({
         text="A class assignment is required before creating a syllabus."
       />
     );
-  }
-
-  // If teacher is editing a class's syllabus plan, show the editor
-  if (editingClassId) {
+  if (!editingClassId)
     return (
       <div className="teacher-view">
+        <SyllabusTracker
+          syllabi={teacherSyllabi}
+          role="teacher"
+          onEditPlan={() => {
+            const firstClassId = data.classes[0]?.id;
+            if (!firstClassId) return;
+            setClassId(firstClassId);
+            setEditingClassId(firstClassId);
+          }}
+        />
+      </div>
+    );
+  if (!syllabus)
+    return (
+      <div className="teacher-view">
+        <button
+          type="button"
+          className="teacher-secondary-action"
+          onClick={() => setEditingClassId(null)}
+        >
+          ← Back to syllabus directory
+        </button>
         <Syllabus
           data={data}
           reload={reload}
-          classId={editingClassId}
-          onClassChange={(id) => setEditingClassId(id)}
+          classId={classId}
+          onClassChange={setClassId}
         />
-        <div style={{ marginTop: 12 }}>
-          <button
-            type="button"
-            className="teacher-secondary-action"
-            onClick={() => setEditingClassId(null)}
-          >
-            ← Back to syllabus directory
-          </button>
-        </div>
       </div>
     );
-  }
-
-  // Otherwise, render SyllabusTracker with all teacher syllabi
-  // Teacher sees subjects in Grid or List view and the dropdown to expand/click any subject
+  const add = async (chapterId: string) => {
+    const title = drafts[chapterId]?.trim();
+    if (!title) return showToast("Enter a topic title.", "error");
+    setBusy(true);
+    try {
+      await api.teacher.createSyllabusTopic(syllabus.id, { chapterId, title });
+      setDrafts((old) => ({ ...old, [chapterId]: "" }));
+      showToast("Topic added and shared.", "success");
+      await reload();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Topic could not be added.",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const rename = async (topicId: string, current: string) => {
+    const title = drafts[topicId]?.trim() || current;
+    setBusy(true);
+    try {
+      await api.teacher.updateSyllabusTopic(syllabus.id, topicId, title);
+      showToast("Topic updated.", "success");
+      await reload();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Topic could not be updated.",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async (topicId: string) => {
+    setBusy(true);
+    try {
+      await api.teacher.deleteSyllabusTopic(syllabus.id, topicId);
+      showToast("Topic removed.", "success");
+      await reload();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Topic could not be removed.",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <div className="teacher-view">
-      <SyllabusTracker
-        syllabi={teacherSyllabi}
-        role="teacher"
-        onEditPlan={() => {
-          const firstClass = data.classes[0]?.id;
-          if (firstClass) setEditingClassId(firstClass);
-        }}
+      <button
+        type="button"
+        className="teacher-secondary-action"
+        onClick={() => setEditingClassId(null)}
+      >
+        ← Back to syllabus directory
+      </button>
+      <ClassPicker
+        classes={data.classes}
+        value={classId}
+        onChange={setClassId}
       />
+      <Syllabus
+        data={data}
+        reload={reload}
+        classId={classId}
+        onClassChange={setClassId}
+      />
+      <section className="teacher-section">
+        <header>
+          <div>
+            <h2>Chapter topics</h2>
+            <p>
+              Create, rename, and remove topics. Topics with progress history
+              remain protected.
+            </p>
+          </div>
+        </header>
+        <div className="teacher-topic-editor">
+          {syllabus.chapters.map((chapter) => (
+            <section key={chapter.id}>
+              <h3>
+                {chapter.position}. {chapter.title}
+              </h3>
+              {chapter.topics.length ? (
+                <div>
+                  {chapter.topics.map((topic) => (
+                    <form
+                      key={topic.id}
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void rename(topic.id, topic.title);
+                      }}
+                    >
+                      <label className="sr-only" htmlFor={`topic-${topic.id}`}>
+                        Topic title
+                      </label>
+                      <input
+                        id={`topic-${topic.id}`}
+                        value={drafts[topic.id] ?? topic.title}
+                        onChange={(event) =>
+                          setDrafts((old) => ({
+                            ...old,
+                            [topic.id]: event.target.value,
+                          }))
+                        }
+                      />
+                      <Status
+                        tone={
+                          topic.status === "COMPLETED"
+                            ? "success"
+                            : topic.status === "IN_PROGRESS"
+                              ? "warning"
+                              : "error"
+                        }
+                      >
+                        {topic.status === "LEFT"
+                          ? "Left to start"
+                          : statusLabel(topic.status)}
+                      </Status>
+                      <button type="submit" disabled={busy}>
+                        {icon("save")}Save
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-label={`Delete ${topic.title}`}
+                        onClick={() => void remove(topic.id)}
+                      >
+                        {icon("delete")}
+                      </button>
+                    </form>
+                  ))}
+                </div>
+              ) : (
+                <p>No topics yet.</p>
+              )}
+              <form
+                className="teacher-topic-add"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void add(chapter.id);
+                }}
+              >
+                <label htmlFor={`new-topic-${chapter.id}`}>New topic</label>
+                <input
+                  id={`new-topic-${chapter.id}`}
+                  value={drafts[chapter.id] || ""}
+                  onChange={(event) =>
+                    setDrafts((old) => ({
+                      ...old,
+                      [chapter.id]: event.target.value,
+                    }))
+                  }
+                  placeholder="e.g. Linear equations"
+                />
+                <button type="submit" disabled={busy}>
+                  {icon("add")}Add topic
+                </button>
+              </form>
+            </section>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

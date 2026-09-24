@@ -25,28 +25,29 @@ import 'student_fees_models.dart';
 /// Repository for student fees and payments. All calls go through the shared
 /// [ApiClient.dio] so the Better Auth session cookie is attached.
 class StudentFeesRepository {
-  StudentFeesRepository({Dio? dio})
-      : _dio = dio ?? ApiClient.instance.dio;
+  StudentFeesRepository({Dio? dio}) : _dio = dio ?? ApiClient.instance.dio;
 
   final Dio _dio;
 
   /// Payment instructions are scoped by the authorized invoice's branch.
   Future<Map<String, dynamic>> fetchPaymentSettings(String invoiceId) async {
-    for (var attempt = 0; ; attempt++) {
+    for (var attempt = 0;; attempt++) {
       try {
         final response = await _dio.get<Map<String, dynamic>>(
           '/api/finances/invoices/${Uri.encodeComponent(invoiceId)}/payment-settings',
         );
         return response.data ?? const {};
       } on DioException catch (error) {
-        if (attempt >= 2 || ![
-          DioExceptionType.connectionError,
-          DioExceptionType.connectionTimeout,
-          DioExceptionType.receiveTimeout,
-        ].contains(error.type)) {
+        if (attempt >= 2 ||
+            ![
+              DioExceptionType.connectionError,
+              DioExceptionType.connectionTimeout,
+              DioExceptionType.receiveTimeout,
+            ].contains(error.type)) {
           throw ApiException.from(error);
         }
-        await Future<void>.delayed(Duration(milliseconds: 300 * (1 << attempt)));
+        await Future<void>.delayed(
+            Duration(milliseconds: 300 * (1 << attempt)));
       }
     }
   }
@@ -197,9 +198,7 @@ class StudentFeesRepository {
     final due = DateTime.tryParse(dueRaw);
     final overdue = json['overdue'] as bool? ??
         status == 'OVERDUE' ||
-        (status == 'UNPAID' &&
-            due != null &&
-            due.isBefore(DateTime.now()));
+            (status == 'UNPAID' && due != null && due.isBefore(DateTime.now()));
     final state = status == 'PAID'
         ? ApiFeeState.paid
         : overdue
@@ -209,8 +208,19 @@ class StudentFeesRepository {
       json['billingCycleStart']?.toString() ?? '',
     );
     const months = [
-      '', 'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
+      '',
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
     final cycle = cycleStart == null
         ? dueRaw
@@ -218,12 +228,10 @@ class StudentFeesRepository {
     final amount = (json['amount'] as num?)?.toDouble() ?? 0;
     final discount = (json['discount'] as num?)?.toDouble() ?? 0;
     final fine = (json['fine'] as num?)?.toDouble() ?? 0;
-    final net = (json['netPayable'] as num?)?.toDouble() ??
-        amount - discount + fine;
-    final type =
-        (json['invoiceType'] ?? 'Tuition').toString().toLowerCase();
-    final typeLabel =
-        '${type[0].toUpperCase()}${type.substring(1)} dues';
+    final net =
+        (json['netPayable'] as num?)?.toDouble() ?? amount - discount + fine;
+    final type = (json['invoiceType'] ?? 'Tuition').toString().toLowerCase();
+    final typeLabel = '${type[0].toUpperCase()}${type.substring(1)} dues';
     return ApiStudentInvoice(
       id: (json['id'] ?? '').toString(),
       cycle: cycle,
@@ -237,8 +245,8 @@ class StudentFeesRepository {
         if (fine != 0) ApiInvoiceLine(label: 'Fine', amount: fine),
       ],
       qrAvailable: status != 'PAID',
-      paymentReference: json['transactionId']?.toString() ??
-          json['paymentDate']?.toString(),
+      paymentReference:
+          json['transactionId']?.toString() ?? json['paymentDate']?.toString(),
       overdue: overdue,
     );
   }

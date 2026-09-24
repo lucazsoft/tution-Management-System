@@ -138,8 +138,7 @@ class StudentFeesViewModel extends BaseViewModel<StudentFeesState> {
       isEmpty: false,
     );
     try {
-      final result =
-          await _repository.fetchPortal(cancelToken: token);
+      final result = await _repository.fetchPortal(cancelToken: token);
       state = state.copyWith(
         isLoading: false,
         invoices: result.invoices,

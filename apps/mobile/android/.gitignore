@@ -12,3 +12,6 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+# Release signing secrets (local-only, NEVER commit).
+keystore.properties
+release.keystore

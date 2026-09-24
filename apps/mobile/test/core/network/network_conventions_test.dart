@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
 import 'package:tms_mobile/core/network/api_exception.dart';
@@ -98,6 +99,15 @@ void main() {
   });
 
   group('Correlation id', () {
+    test('native client sends an Origin accepted by Better Auth', () {
+      final dio = ApiClient.buildDio(baseUrl: 'https://test.invalid');
+
+      expect(
+        dio.options.headers['Origin'],
+        kIsWeb ? isNull : ApiClient.authOrigin,
+      );
+    });
+
     test('x-request-id uuid is stamped on outgoing requests', () async {
       RequestOptions? captured;
       final dio = ApiClient.buildDio(

@@ -28,9 +28,8 @@ class AcademicResult {
       score: _asDouble(json['score']),
       maximum: _asDouble(json['maximum'], fallback: 100),
       publishedLabel: json['publishedLabel'] as String?,
-      classAverage: json['classAverage'] == null
-          ? null
-          : _asDouble(json['classAverage']),
+      classAverage:
+          json['classAverage'] == null ? null : _asDouble(json['classAverage']),
     );
   }
 
@@ -74,9 +73,8 @@ class HomeworkTask {
   /// Parses the teacher-scoped `GET /api/homework/:classId` shape, which
   /// returns raw rows (`deadline`, `description`) instead of portal labels.
   factory HomeworkTask.fromClassRow(Map<String, dynamic> json) {
-    final teacher = json['class'] is Map
-        ? (json['class'] as Map)['assignedTeacher']
-        : null;
+    final teacher =
+        json['class'] is Map ? (json['class'] as Map)['assignedTeacher'] : null;
     final teacherName = teacher is Map
         ? '${teacher['firstName'] ?? ''} ${teacher['lastName'] ?? ''}'.trim()
         : 'Teacher';
@@ -153,9 +151,7 @@ class PerformanceInsight {
         fallback: _asDouble(json['average']),
       ),
       history: json['history'] is List
-          ? (json['history'] as List)
-              .map((v) => _asDouble(v).round())
-              .toList()
+          ? (json['history'] as List).map((v) => _asDouble(v).round()).toList()
           : const [],
     );
   }
@@ -166,8 +162,11 @@ class PerformanceInsight {
   final List<int> history;
 
   double get change => average - previousAverage;
-  String get trend =>
-      change > 2 ? 'Improving' : change < -2 ? 'Declining' : 'Stable';
+  String get trend => change > 2
+      ? 'Improving'
+      : change < -2
+          ? 'Declining'
+          : 'Stable';
 }
 
 /// Approved/rejected leave surfaced to the student as an explanation.
@@ -285,9 +284,8 @@ class StudentPortalSnapshot {
     }
 
     final profile = json['studentProfile'];
-    final enrollmentId = profile is Map
-        ? '${profile['enrollmentId'] ?? ''}'
-        : '';
+    final enrollmentId =
+        profile is Map ? '${profile['enrollmentId'] ?? ''}' : '';
 
     final notifications = json['notifications'] is List
         ? (json['notifications'] as List).whereType<Map<String, dynamic>>()

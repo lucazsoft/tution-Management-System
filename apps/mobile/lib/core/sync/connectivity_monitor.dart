@@ -42,7 +42,9 @@ class ConnectivityMonitor extends StateNotifier<ConnectivityState> {
   /// Run one check now and publish the result.
   Future<ConnectivityState> refresh() async {
     final ok = await _check();
-    if (!_disposed) state = ok ? ConnectivityState.online : ConnectivityState.offline;
+    if (!_disposed) {
+      state = ok ? ConnectivityState.online : ConnectivityState.offline;
+    }
     return state;
   }
 
@@ -70,4 +72,3 @@ final connectivityMonitorProvider =
   ref.onDispose(monitor.dispose);
   return monitor;
 });
-

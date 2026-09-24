@@ -27,8 +27,7 @@ import 'package:tms_mobile/core/network/pagination.dart';
 import '../models/student_academics_api.dart';
 
 class StudentAcademicsRepository {
-  StudentAcademicsRepository({Dio? dio})
-      : _dio = dio ?? ApiClient.instance.dio;
+  StudentAcademicsRepository({Dio? dio}) : _dio = dio ?? ApiClient.instance.dio;
 
   final Dio _dio;
 

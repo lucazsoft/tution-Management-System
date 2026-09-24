@@ -21,8 +21,7 @@ final availableChildrenProvider = Provider<List<String>>((ref) {
 
 /// Notifier managing the selected child state.
 class ChildSelectionNotifier extends StateNotifier<String> {
-  ChildSelectionNotifier()
-      : super(_defaultChild);
+  ChildSelectionNotifier() : super(_defaultChild);
 
   /// Default child name
   static const String _defaultChild = 'Aarav';
@@ -57,5 +56,6 @@ extension ChildSelectionExt on WidgetRef {
   ChildSelectionNotifier get childSelectionNotifier =>
       read(childSelectionProvider.notifier);
 
-  List<String> get availableChildren => ChildSelectionNotifier.availableChildren;
+  List<String> get availableChildren =>
+      ChildSelectionNotifier.availableChildren;
 }

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:tms_mobile/core/theme/app_tokens.dart';
+
+export 'package:tms_mobile/core/theme/app_tokens.dart';
 
 abstract final class StudentColors {
   static const primary = Color(0xFF1560BD);
@@ -18,26 +21,8 @@ abstract final class StudentColors {
   static const info = Color(0xFF1560BD);
 }
 
-abstract final class StudentSpace {
-  static const xxs = 4.0;
-  static const xs = 8.0;
-  static const sm = 12.0;
-  static const md = 16.0;
-  static const lg = 24.0;
-  static const xl = 32.0;
-  static const xxl = 40.0;
-  static const display = 56.0;
-}
-
-abstract final class StudentRadius {
-  static const control = 7.0;
-  static const card = 12.0;
-  static const modal = 18.0;
-  static const pill = 20.0;
-}
-
 ThemeData buildStudentTheme(ThemeData base) {
-  final roboto = GoogleFonts.robotoTextTheme(base.textTheme);
+  final outfit = GoogleFonts.outfitTextTheme(base.textTheme);
   return base.copyWith(
     scaffoldBackgroundColor: StudentColors.surface,
     colorScheme: base.colorScheme.copyWith(
@@ -46,7 +31,7 @@ ThemeData buildStudentTheme(ThemeData base) {
       surface: StudentColors.background,
       error: StudentColors.error,
     ),
-    textTheme: roboto.copyWith(
+    textTheme: outfit.copyWith(
       displaySmall: GoogleFonts.fraunces(
         fontSize: 28,
         height: 1.15,
@@ -65,28 +50,28 @@ ThemeData buildStudentTheme(ThemeData base) {
         fontWeight: FontWeight.w700,
         color: StudentColors.text,
       ),
-      titleMedium: GoogleFonts.roboto(
+      titleMedium: GoogleFonts.outfit(
         fontSize: 16,
         height: 1.35,
         fontWeight: FontWeight.w700,
         color: StudentColors.text,
       ),
-      bodyLarge: GoogleFonts.roboto(
+      bodyLarge: GoogleFonts.outfit(
         fontSize: 16,
         height: 1.45,
         color: StudentColors.text,
       ),
-      bodyMedium: GoogleFonts.roboto(
+      bodyMedium: GoogleFonts.outfit(
         fontSize: 14,
         height: 1.45,
         color: StudentColors.text,
       ),
-      bodySmall: GoogleFonts.roboto(
+      bodySmall: GoogleFonts.outfit(
         fontSize: 12,
         height: 1.4,
         color: StudentColors.mutedText,
       ),
-      labelLarge: GoogleFonts.roboto(
+      labelLarge: GoogleFonts.outfit(
         fontSize: 14,
         fontWeight: FontWeight.w700,
       ),
@@ -109,7 +94,7 @@ ThemeData buildStudentTheme(ThemeData base) {
       color: StudentColors.background,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(StudentRadius.card),
+        borderRadius: BorderRadius.circular(TmsRadius.card),
         side: const BorderSide(color: StudentColors.border),
       ),
     ),
@@ -118,9 +103,9 @@ ThemeData buildStudentTheme(ThemeData base) {
       elevation: 0,
       backgroundColor: StudentColors.background,
       surfaceTintColor: Colors.transparent,
-      indicatorColor: StudentColors.primary.withOpacity(.10),
+      indicatorColor: StudentColors.primary.withValues(alpha: .10),
       labelTextStyle: WidgetStateProperty.resolveWith(
-        (states) => GoogleFonts.roboto(
+        (states) => GoogleFonts.outfit(
           fontSize: 11,
           fontWeight: states.contains(WidgetState.selected)
               ? FontWeight.w700

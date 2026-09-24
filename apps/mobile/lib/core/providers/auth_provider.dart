@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/core/auth/role_codes.dart';
+import 'package:tms_mobile/core/notifications/push_notification_service.dart';
 import 'package:tms_mobile/core/sync/sync.dart';
 import 'package:tms_mobile/features/auth/data/auth_service.dart';
 
@@ -81,6 +82,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           isAuthenticated: true,
           isLoading: false,
         );
+        await PushNotifications.startAuthenticatedSession();
       } else {
         state = const AuthState(isLoading: false);
       }
@@ -116,6 +118,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           isAuthenticated: true,
           isLoading: false,
         );
+        await PushNotifications.startAuthenticatedSession();
       }
     } on AuthFailure catch (error) {
       state = AuthState(
@@ -173,6 +176,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         isAuthenticated: true,
         isLoading: false,
       );
+      await PushNotifications.startAuthenticatedSession();
     } on AuthFailure {
       state = state.copyWith(isLoading: false);
       rethrow;
@@ -186,6 +190,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// wipe safely.
   Future<void> logout() async {
     final userId = state.user?.id;
+    await PushNotifications.unregisterForLogout();
     await AuthService.signOut();
     if (userId != null && userId.isNotEmpty) {
       await clearOfflineCache(userId);
@@ -203,6 +208,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> forceLogout() async {
     final userId = state.user?.id;
     state = const AuthState(isLoading: false);
+    await PushNotifications.invalidateLocalSession();
     if (userId != null && userId.isNotEmpty) {
       await clearOfflineCache(userId);
     }

@@ -95,8 +95,7 @@ class AppDatabase extends _$AppDatabase {
   /// `lib/core/network/`) can call it from `ApiClient.clearAuth`-equivalent
   /// flows without importing sync internals: see `clearOfflineCache()`.
   Future<void> clearUserData(String userId) async {
-    await (delete(syncQueue)..where((t) => t.ownerUserId.equals(userId)))
-        .go();
+    await (delete(syncQueue)..where((t) => t.ownerUserId.equals(userId))).go();
     await (delete(entityCache)..where((t) => t.ownerUserId.equals(userId)))
         .go();
   }
