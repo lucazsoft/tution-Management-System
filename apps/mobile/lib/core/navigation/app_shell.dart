@@ -115,9 +115,9 @@ class AppShell extends ConsumerStatefulWidget {
         label: 'Academics',
       ),
       NavigationDestination(
-        icon: Icon(Icons.receipt_long_outlined),
-        selectedIcon: Icon(Icons.receipt_long_rounded),
-        label: 'Fees',
+        icon: Icon(Icons.calendar_view_week_outlined),
+        selectedIcon: Icon(Icons.calendar_view_week_rounded),
+        label: 'Timetable',
       ),
       NavigationDestination(
         icon: Icon(Icons.calendar_month_outlined),

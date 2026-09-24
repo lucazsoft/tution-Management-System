@@ -119,7 +119,7 @@ void main() {
       final repo =
           StudentCertificatesRepository(dio: stubCertDio(), saveDir: dir);
 
-      final file = await repo.downloadCertificate(
+      final result = await repo.downloadCertificate(
         const ApiStudentCertificate(
           id: 'CERT-2026-0192',
           title: 'Course Completion Certificate',
@@ -129,6 +129,7 @@ void main() {
         ),
       );
 
+      final file = File(result.path);
       expect(await file.exists(), isTrue);
       expect((await file.readAsBytes()).length, greaterThan(0));
     });
@@ -160,7 +161,7 @@ void main() {
       final repo =
           StudentCertificatesRepository(dio: stubDownloadDio(), saveDir: dir);
 
-      final file = await repo.downloadCertificate(
+      final result = await repo.downloadCertificate(
         const ApiStudentCertificate(
           id: 'CERT-2026-0192',
           title: 't',
@@ -170,12 +171,12 @@ void main() {
         ),
       );
 
-      expect(file.path.startsWith(dir.path), isTrue);
-      final name = file.path.split(Platform.pathSeparator).last;
+      expect(result.path.startsWith(dir.path), isTrue);
+      final name = result.path.split(Platform.pathSeparator).last;
       expect(name.contains('/'), isFalse);
       expect(name.contains('\\'), isFalse);
       expect(name.endsWith('.pdf'), isTrue);
-      expect(await file.exists(), isTrue);
+      expect(await File(result.path).exists(), isTrue);
     });
 
     test('non-pdf extension is coerced to pdf', () async {
@@ -184,7 +185,7 @@ void main() {
       final repo =
           StudentCertificatesRepository(dio: stubDownloadDio(), saveDir: dir);
 
-      final file = await repo.downloadCertificate(
+      final result = await repo.downloadCertificate(
         const ApiStudentCertificate(
           id: 'CERT-2026-0192',
           title: 't',
@@ -194,8 +195,8 @@ void main() {
         ),
       );
 
-      expect(file.path.endsWith('.pdf'), isTrue);
-      expect(file.path.contains('evil.exe'), isFalse);
+      expect(result.path.endsWith('.pdf'), isTrue);
+      expect(result.path.contains('evil.exe'), isFalse);
     });
 
     test('oversize download throws and writes nothing', () async {
@@ -278,7 +279,7 @@ void main() {
 
       await vm.download(vm.state.certificates.first);
       expect(vm.state.downloadingId, isNull);
-      expect(vm.state.savedFile, isNotNull);
+      expect(vm.state.savedPath, isNotNull);
       expect(vm.state.savedForId, 'CERT-2026-0192');
     });
 

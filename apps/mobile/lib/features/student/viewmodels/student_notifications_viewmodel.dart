@@ -12,6 +12,7 @@ import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/core/network/api_exception.dart';
+import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/network/request_cancellation.dart';
 import 'package:tms_mobile/core/viewmodel/base_viewmodel.dart';
 
@@ -199,5 +200,6 @@ class StudentNotificationsViewModel
 
 final studentNotificationsViewModelProvider = StateNotifierProvider<
     StudentNotificationsViewModel, StudentNotificationsState>((ref) {
+  ref.watch(authProvider.select((state) => state.user?.id));
   return StudentNotificationsViewModel();
 });

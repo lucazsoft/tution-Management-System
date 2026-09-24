@@ -7,7 +7,7 @@ export 'package:tms_mobile/core/theme/app_colors.dart';
 export 'package:tms_mobile/core/theme/app_tokens.dart';
 
 ThemeData buildTmsTheme() {
-  final textTheme = GoogleFonts.outfitTextTheme();
+  final textTheme = GoogleFonts.robotoTextTheme();
 
   return ThemeData(
     useMaterial3: true,
@@ -34,20 +34,36 @@ ThemeData buildTmsTheme() {
         fontWeight: FontWeight.w700,
         color: kColorText,
       ),
-      titleLarge: GoogleFonts.outfit(
+      titleLarge: GoogleFonts.fraunces(
         fontSize: 20,
         fontWeight: FontWeight.w700,
         color: kColorText,
       ),
-      titleMedium: GoogleFonts.outfit(
+      titleMedium: GoogleFonts.roboto(
         fontSize: 18,
         fontWeight: FontWeight.w700,
         color: kColorText,
       ),
-      bodyLarge: GoogleFonts.outfit(fontSize: 16, color: kColorText),
-      bodyMedium: GoogleFonts.outfit(fontSize: 14, color: kColorText),
-      bodySmall: GoogleFonts.outfit(
+      bodyLarge:
+          GoogleFonts.roboto(fontSize: 16, height: 1.5, color: kColorText),
+      bodyMedium:
+          GoogleFonts.roboto(fontSize: 14, height: 1.5, color: kColorText),
+      bodySmall: GoogleFonts.roboto(
           fontSize: 12, color: kColorText.withValues(alpha: 0.74)),
+      labelLarge: GoogleFonts.roboto(fontWeight: FontWeight.w700),
+    ),
+    appBarTheme: AppBarTheme(
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      centerTitle: false,
+      backgroundColor: kColorBg,
+      foregroundColor: kColorText,
+      surfaceTintColor: Colors.transparent,
+      titleTextStyle: GoogleFonts.fraunces(
+        fontSize: 21,
+        fontWeight: FontWeight.w700,
+        color: kColorPrimaryDark,
+      ),
     ),
     cardTheme: CardThemeData(
       color: kColorBg,
@@ -61,7 +77,7 @@ ThemeData buildTmsTheme() {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: kColorBg,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(TmsRadius.input),
         borderSide: const BorderSide(color: kColorBorder),
@@ -82,9 +98,9 @@ ThemeData buildTmsTheme() {
         borderRadius: BorderRadius.circular(TmsRadius.input),
         borderSide: const BorderSide(color: kColorError, width: 2),
       ),
-      labelStyle: GoogleFonts.outfit(color: kColorText.withValues(alpha: 0.75)),
+      labelStyle: GoogleFonts.roboto(color: kColorText.withValues(alpha: 0.75)),
       helperStyle:
-          GoogleFonts.outfit(color: kColorText.withValues(alpha: 0.72)),
+          GoogleFonts.roboto(color: kColorText.withValues(alpha: 0.72)),
     ),
     checkboxTheme: CheckboxThemeData(
       fillColor: WidgetStateProperty.resolveWith(
@@ -98,7 +114,7 @@ ThemeData buildTmsTheme() {
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: kColorText,
-      contentTextStyle: GoogleFonts.outfit(color: Colors.white, fontSize: 14),
+      contentTextStyle: GoogleFonts.roboto(color: Colors.white, fontSize: 14),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(TmsRadius.input)),
@@ -106,26 +122,31 @@ ThemeData buildTmsTheme() {
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: kColorAccent,
-        foregroundColor: Colors.white,
+        foregroundColor: kColorText,
         disabledBackgroundColor: const Color(0xFFD6DCE5),
         disabledForegroundColor: const Color(0xFF7E8A9A),
-        minimumSize: const Size.fromHeight(56),
+        minimumSize: const Size.fromHeight(48),
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(TmsRadius.input)),
         textStyle:
-            GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700),
+            GoogleFonts.roboto(fontSize: 14, fontWeight: FontWeight.w700),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: kColorPrimaryLight,
-        textStyle: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+        textStyle: GoogleFonts.roboto(fontWeight: FontWeight.w700),
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
+      height: 68,
+      elevation: 0,
+      backgroundColor: kColorBg,
+      surfaceTintColor: Colors.transparent,
       indicatorColor: kColorAccent.withValues(alpha: 0.16),
       labelTextStyle: WidgetStateProperty.resolveWith(
-        (states) => GoogleFonts.outfit(
+        (states) => GoogleFonts.roboto(
+          fontSize: 11,
           fontWeight: states.contains(WidgetState.selected)
               ? FontWeight.w700
               : FontWeight.w500,
@@ -134,6 +155,23 @@ ThemeData buildTmsTheme() {
               : kColorText.withValues(alpha: 0.7),
         ),
       ),
+    ),
+    dividerColor: kColorDivider,
+    dialogTheme: DialogThemeData(
+      backgroundColor: kColorBg,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(TmsRadius.modal),
+      ),
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: kColorSurface,
+      selectedColor: kColorPrimary.withValues(alpha: .1),
+      side: const BorderSide(color: kColorDivider),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(TmsRadius.pill),
+      ),
+      labelStyle: GoogleFonts.roboto(fontSize: 12, fontWeight: FontWeight.w600),
     ),
   );
 }

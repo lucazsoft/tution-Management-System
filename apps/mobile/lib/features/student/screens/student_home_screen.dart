@@ -8,6 +8,7 @@ import '../models/student_portal_dto.dart';
 import '../student_design.dart';
 import '../viewmodels/student_home_viewmodel.dart';
 import '../widgets/student_scaffold.dart';
+import '../widgets/nepal_date_time.dart';
 
 /// Student home screen backed by the authenticated student portal.
 ///
@@ -121,6 +122,8 @@ class StudentHomeScreen extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
+        const NepalDateTimeHeader(),
+        const SizedBox(height: TmsSpace.lg),
         _buildWelcomeCard(context, portal),
         if (portal.overdueAmount > 0) ...[
           const SizedBox(height: TmsSpace.md),
@@ -132,6 +135,10 @@ class StudentHomeScreen extends ConsumerWidget {
         _buildHomeworkSection(context, portal),
         const SizedBox(height: TmsSpace.sm),
         _buildQuickActions(context, portal),
+        const SizedBox(height: TmsSpace.lg),
+        _buildNextEventCard(context, portal),
+        const SizedBox(height: TmsSpace.lg),
+        _buildCertificatesCard(context, portal),
       ],
     );
   }
@@ -145,6 +152,8 @@ class StudentHomeScreen extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(24, 8, 12, 24),
             children: [
+              const NepalDateTimeHeader(),
+              const SizedBox(height: TmsSpace.lg),
               _buildWelcomeCard(context, portal),
               if (portal.overdueAmount > 0) ...[
                 const SizedBox(height: TmsSpace.md),
@@ -198,6 +207,8 @@ class StudentHomeScreen extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(24, 8, 12, 24),
             children: [
+              const NepalDateTimeHeader(),
+              const SizedBox(height: TmsSpace.lg),
               _buildWelcomeCard(context, portal),
               if (portal.overdueAmount > 0) ...[
                 const SizedBox(height: TmsSpace.md),
@@ -262,12 +273,14 @@ class StudentHomeScreen extends ConsumerWidget {
             children: [
               const Icon(Icons.schedule_rounded, color: StudentColors.accent),
               const SizedBox(width: TmsSpace.xs),
-              Text(
-                '${portal.todaySessions.length} sessions today',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(color: Colors.white),
+              Expanded(
+                child: Text(
+                  '${portal.todaySessions.length} sessions today',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(color: Colors.white),
+                ),
               ),
             ],
           ),
@@ -281,7 +294,7 @@ class StudentHomeScreen extends ConsumerWidget {
       color: StudentColors.error.withValues(alpha: .06),
       child: InkWell(
         borderRadius: BorderRadius.circular(TmsRadius.card),
-        onTap: () => context.go('/student/fees'),
+        onTap: () => context.push('/student/fees'),
         child: Padding(
           padding: const EdgeInsets.all(TmsSpace.md),
           child: Row(
@@ -321,7 +334,7 @@ class StudentHomeScreen extends ConsumerWidget {
         _SectionHeader(
           title: "Today's timetable",
           action: 'Full timetable',
-          onTap: () => context.push('/student/timetable'),
+          onTap: () => context.go('/student/timetable'),
         ),
         const SizedBox(height: TmsSpace.sm),
         if (portal.todaySessions.isEmpty)
@@ -341,7 +354,7 @@ class StudentHomeScreen extends ConsumerWidget {
             ),
           )
         else
-          for (final session in portal.todaySessions) ...[
+          for (final session in portal.todaySessions.take(2)) ...[
             _SessionTile(session: session),
             const SizedBox(height: TmsSpace.sm),
           ],
@@ -509,85 +522,92 @@ class StudentHomeScreen extends ConsumerWidget {
 
   Widget _buildNextEventCard(BuildContext context, StudentPortal portal) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(TmsSpace.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.event_outlined, color: StudentColors.primary),
-                const SizedBox(width: TmsSpace.sm),
-                Expanded(
-                  child: Text('Upcoming Events',
-                      style: Theme.of(context).textTheme.titleMedium),
-                ),
-              ],
-            ),
-            const SizedBox(height: TmsSpace.md),
-            if (portal.events.isEmpty)
-              Text(
-                'No upcoming events.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              )
-            else
-              ...portal.events.take(3).map((e) => Padding(
-                    padding: const EdgeInsets.only(bottom: TmsSpace.sm),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: StudentColors.primary.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(TmsRadius.card),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(TmsRadius.card),
+        onTap: () => context.push('/student/calendar'),
+        child: Padding(
+          padding: const EdgeInsets.all(TmsSpace.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.event_outlined,
+                      color: StudentColors.primary),
+                  const SizedBox(width: TmsSpace.sm),
+                  Expanded(
+                    child: Text('Upcoming Events',
+                        style: Theme.of(context).textTheme.titleMedium),
+                  ),
+                ],
+              ),
+              const SizedBox(height: TmsSpace.md),
+              if (portal.events.isEmpty)
+                Text(
+                  'No upcoming events.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                )
+              else
+                ...portal.events.take(3).map((e) => Padding(
+                      padding: const EdgeInsets.only(bottom: TmsSpace.sm),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color:
+                                  StudentColors.primary.withValues(alpha: 0.1),
+                              borderRadius:
+                                  BorderRadius.circular(TmsRadius.card),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  e.day,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleLarge
+                                      ?.copyWith(
+                                        color: StudentColors.primary,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
+                                Text(
+                                  e.month,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: StudentColors.primary,
+                                      ),
+                                ),
+                              ],
+                            ),
                           ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                e.day,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleLarge
-                                    ?.copyWith(
-                                      color: StudentColors.primary,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                              ),
-                              Text(
-                                e.month,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      color: StudentColors.primary,
-                                    ),
-                              ),
-                            ],
+                          const SizedBox(width: TmsSpace.md),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(e.title,
+                                    style:
+                                        Theme.of(context).textTheme.titleSmall),
+                                Text(
+                                  e.details.isEmpty
+                                      ? '${e.kind} · ${e.dateLabel}'
+                                      : '${e.details} · ${e.dateLabel}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: TmsSpace.md),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(e.title,
-                                  style:
-                                      Theme.of(context).textTheme.titleSmall),
-                              Text(
-                                e.details.isEmpty
-                                    ? '${e.kind} · ${e.dateLabel}'
-                                    : '${e.details} · ${e.dateLabel}',
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  )),
-          ],
+                        ],
+                      ),
+                    )),
+            ],
+          ),
         ),
       ),
     );

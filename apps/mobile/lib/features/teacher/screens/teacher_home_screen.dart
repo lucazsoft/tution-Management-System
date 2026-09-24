@@ -19,6 +19,8 @@ import 'package:tms_mobile/features/teacher/screens/geo_attendance_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_class_detail_screen.dart';
 import 'package:tms_mobile/features/teacher/viewmodels/teacher_portal_viewmodel.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_record_states.dart';
+import 'package:tms_mobile/features/auth/widgets/account_actions.dart';
+import 'package:tms_mobile/features/student/widgets/nepal_date_time.dart';
 
 class TeacherHomeScreen extends ConsumerStatefulWidget {
   const TeacherHomeScreen({super.key});
@@ -288,6 +290,8 @@ class _TodayTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
+        const NepalDateTimeHeader(),
+        const SizedBox(height: 20),
         _HeaderCard(workspace: workspace),
         const SizedBox(height: 16),
         Text('Pending daily updates: ${workspace.pendingUpdateCount}',
@@ -1149,10 +1153,10 @@ class _MoreTab extends StatelessWidget {
           subtitle: Text('Coming from the web teacher panel'),
           enabled: false,
         ),
-        ListTile(
-          leading: const Icon(Icons.lock_outline),
-          title: const Text('Change password'),
-          onTap: () => context.push('/teacher/change-password'),
+        const Divider(),
+        const AccountActions(
+          accountRoute: '/teacher/account',
+          passwordRoute: '/teacher/change-password',
         ),
       ],
     );

@@ -130,7 +130,7 @@ class StudentNotificationsScreen extends ConsumerWidget {
                     viewModel.markRead(notice.raw.id);
                     final destination = notice.raw.destination;
                     if (destination.isNotEmpty) {
-                      context.go(destination);
+                      context.push(destination);
                     }
                   },
                   child: Padding(

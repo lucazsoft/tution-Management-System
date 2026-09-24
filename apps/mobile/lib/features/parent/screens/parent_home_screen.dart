@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/theme/app_theme.dart';
 import 'package:tms_mobile/features/parent/models/parent_portal.dart';
 import 'package:tms_mobile/features/parent/widgets/child_switcher_bar.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_navigation.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_portal_state_view.dart';
+import 'package:tms_mobile/features/student/widgets/nepal_date_time.dart';
 
 class ParentHomeScreen extends ConsumerWidget {
   const ParentHomeScreen({super.key});
@@ -17,18 +17,6 @@ class ParentHomeScreen extends ConsumerWidget {
       backgroundColor: kColorSurface,
       appBar: AppBar(
         title: const Text('Family Overview'),
-        actions: [
-          IconButton(
-            tooltip: 'Change password',
-            onPressed: () => context.push('/parent/change-password'),
-            icon: const Icon(Icons.key_outlined),
-          ),
-          IconButton(
-            tooltip: 'Logout',
-            onPressed: () => ref.read(authProvider.notifier).logout(),
-            icon: const Icon(Icons.logout_rounded),
-          ),
-        ],
       ),
       bottomNavigationBar: const ParentNavigationBar(selectedIndex: 0),
       body: SafeArea(
@@ -40,6 +28,8 @@ class ParentHomeScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const NepalDateTimeHeader(),
+                  const SizedBox(height: TmsSpace.lg),
                   _PageHeading(child: child),
                   const SizedBox(height: TmsSpace.md),
                   const ChildSwitcherBar(),
@@ -510,7 +500,7 @@ class _SummaryGrid extends StatelessWidget {
       _SummaryItem(Icons.insights_outlined, 'Remarks',
           '${portal.remarks.length}', () => context.push('/parent/academics')),
       _SummaryItem(Icons.event_available_outlined, 'Upcoming events',
-          '${portal.events.length}', () => context.push('/parent/academics')),
+          '${portal.events.length}', () => context.push('/parent/calendar')),
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -576,7 +566,10 @@ class _UpcomingEvents extends StatelessWidget {
   final List<ParentEventItem> events;
 
   @override
-  Widget build(BuildContext context) => Column(
+  Widget build(BuildContext context) => InkWell(
+        borderRadius: BorderRadius.circular(TmsRadius.card),
+        onTap: () => context.push('/parent/calendar'),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Upcoming calendar',
@@ -598,6 +591,7 @@ class _UpcomingEvents extends StatelessWidget {
               ),
             ),
         ],
+        ),
       );
 }
 

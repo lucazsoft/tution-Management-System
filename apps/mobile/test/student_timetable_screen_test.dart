@@ -136,6 +136,29 @@ Future<void> _pumpTimetable(
 
 void main() {
   group('StudentTimetableScreen', () {
+    test('keeps every same-day class and sorts them by start time', () {
+      final body = _portalJson();
+      final weekly = body['weeklySessions']! as List<dynamic>;
+      weekly.insert(0, {
+        'id': 'c2-0',
+        'day': 'Monday',
+        'time': '06:00',
+        'endTime': '06:45',
+        'subject': 'English',
+        'teacher': 'Mr. Kiran Rai',
+        'room': 'Room 1B',
+        'type': 'Regular',
+      });
+
+      final monday = StudentPortal.fromJson(body)
+          .weeklyByDay
+          .firstWhere((day) => day.key == 'mon');
+
+      expect(monday.sessions, hasLength(2));
+      expect(monday.sessions.map((session) => session.subject),
+          ['English', 'Mathematics']);
+    });
+
     testWidgets('renders weekly day tabs with course-type pills',
         (tester) async {
       final fake = _FakePortalRepository()
@@ -145,6 +168,13 @@ void main() {
       expect(find.text('Monday'), findsOneWidget);
       expect(find.text('Wednesday'), findsOneWidget);
       expect(find.text('1 session scheduled for today.'), findsOneWidget);
+      expect(find.widgetWithText(NavigationDestination, 'Timetable'),
+          findsOneWidget);
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        2,
+      );
+      expect(find.widgetWithText(NavigationDestination, 'Fees'), findsNothing);
 
       // Switch to the Wednesday tab to see the short-term session.
       await tester.tap(find.text('Wednesday'));

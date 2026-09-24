@@ -55,7 +55,7 @@ class _ParentAttendanceScreenState
           ),
         ],
       ),
-      bottomNavigationBar: const ParentNavigationBar(selectedIndex: 2),
+      bottomNavigationBar: const ParentNavigationBar(selectedIndex: 0),
       body: SafeArea(
         child: ParentPortalStateView(
           builder: (context, portal, child) {
@@ -215,7 +215,7 @@ class _StatBadge extends StatelessWidget {
         children: [
           Text(
             count,
-            style: GoogleFonts.outfit(
+            style: GoogleFonts.roboto(
               fontWeight: FontWeight.w700,
               fontSize: 15,
               color: color,

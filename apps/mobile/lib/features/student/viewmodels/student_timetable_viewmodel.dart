@@ -10,6 +10,7 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/core/network/api_exception.dart';
+import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/network/request_cancellation.dart';
 import 'package:tms_mobile/core/viewmodel/base_viewmodel.dart';
 import 'package:tms_mobile/features/student/data/student_portal_repository.dart';
@@ -183,6 +184,15 @@ class StudentTimetableViewModel extends BaseViewModel<StudentTimetableState> {
     for (final session in sessions) {
       groups.putIfAbsent(session.dayGroupKey, () => []).add(session);
     }
+    for (final sessions in groups.values) {
+      sessions.sort((a, b) {
+        final byStart = a.time.compareTo(b.time);
+        if (byStart != 0) return byStart;
+        final byEnd = a.endTime.compareTo(b.endTime);
+        if (byEnd != 0) return byEnd;
+        return a.subject.compareTo(b.subject);
+      });
+    }
     final days = groups.entries
         .map((entry) => PortalDaySchedule(
               key: entry.key,
@@ -214,5 +224,6 @@ class StudentTimetableViewModel extends BaseViewModel<StudentTimetableState> {
 final studentTimetableViewModelProvider =
     StateNotifierProvider<StudentTimetableViewModel, StudentTimetableState>(
         (ref) {
+  ref.watch(authProvider.select((state) => state.user?.id));
   return StudentTimetableViewModel();
 });

@@ -27,7 +27,7 @@ class ParentFeesScreen extends ConsumerWidget {
               GoogleFonts.fraunces(fontWeight: FontWeight.w700, fontSize: 22),
         ),
       ),
-      bottomNavigationBar: const ParentNavigationBar(selectedIndex: 3),
+      bottomNavigationBar: const ParentNavigationBar(selectedIndex: 0),
       body: SafeArea(
         child: ParentPortalStateView(
           builder: (context, portal, child) {
@@ -49,7 +49,7 @@ class ParentFeesScreen extends ConsumerWidget {
                           children: [
                             Text(
                               'Outstanding Balance',
-                              style: GoogleFonts.outfit(
+                              style: GoogleFonts.roboto(
                                 color: Colors.white.withValues(alpha: 0.85),
                                 fontWeight: FontWeight.w500,
                               ),

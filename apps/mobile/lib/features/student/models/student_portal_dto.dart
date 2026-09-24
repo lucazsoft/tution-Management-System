@@ -448,6 +448,15 @@ class StudentPortal {
     for (final session in weeklySessions) {
       groups.putIfAbsent(session.dayGroupKey, () => []).add(session);
     }
+    for (final sessions in groups.values) {
+      sessions.sort((a, b) {
+        final byStart = a.time.compareTo(b.time);
+        if (byStart != 0) return byStart;
+        final byEnd = a.endTime.compareTo(b.endTime);
+        if (byEnd != 0) return byEnd;
+        return a.subject.compareTo(b.subject);
+      });
+    }
     final days = groups.entries
         .map((entry) => PortalDaySchedule(
               key: entry.key,

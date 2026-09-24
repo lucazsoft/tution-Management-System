@@ -59,6 +59,8 @@ class TeacherScheduleSlot {
     return '$day$time'.trim();
   }
 
+  String get timeLabel => start.isEmpty || end.isEmpty ? '' : '$start-$end';
+
   bool matchesDay(String candidate) =>
       _dayKey(day) == _dayKey(candidate) && _dayKey(day).isNotEmpty;
 

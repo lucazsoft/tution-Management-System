@@ -142,8 +142,60 @@ class ParentPortalRepository {
   static const String connectIpsInitiatePath =
       '/api/finances/connectips/initiate';
   static const String connectIpsStatusPath = '/api/finances/connectips/status';
+  static const String messagesPath = '/api/communication/messages';
+  static const String appointmentsPath = '/api/appointments';
 
   final List<ParentInvoice> _invoiceCache = [];
+
+  Future<void> sendMessage(
+      {required String studentId,
+      required String receiverId,
+      required String text}) async {
+    try {
+      await _dio.post(messagesPath, data: {
+        'studentId': studentId,
+        'receiverId': receiverId,
+        'messageText': text.trim()
+      });
+    } on DioException catch (error) {
+      throw ApiException.from(error);
+    }
+  }
+
+  Future<void> requestAppointment({
+    required ParentChild child,
+    required ParentContact contact,
+    required DateTime scheduledTime,
+    required String remarks,
+  }) async {
+    try {
+      await _dio.post('$appointmentsPath/request', data: {
+        'studentId': child.id,
+        if (contact.role == 'BRANCH_ADMIN')
+          'branchId': child.branchId
+        else
+          'teacherId': contact.id,
+        'target': contact.role,
+        'scheduledTime': scheduledTime.toUtc().toIso8601String(),
+        'remarks': remarks.trim(),
+        'isGroup': false,
+        'participantIds': <String>[],
+      });
+    } on DioException catch (error) {
+      throw ApiException.from(error);
+    }
+  }
+
+  Future<void> respondToAppointment(String appointmentId, String action) async {
+    try {
+      await _dio.post(
+        '$appointmentsPath/parent-respond/${Uri.encodeComponent(appointmentId)}',
+        data: {'action': action},
+      );
+    } on DioException catch (error) {
+      throw ApiException.from(error);
+    }
+  }
 
   /// Drops session-scoped snapshot data owned by this repository.
   void dispose() {

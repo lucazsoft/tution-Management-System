@@ -20,6 +20,7 @@ class ParentChild {
     required this.initials,
     required this.grade,
     required this.branch,
+    required this.branchId,
     required this.rollNumber,
     required this.blocked,
     required this.attendanceRate,
@@ -31,6 +32,7 @@ class ParentChild {
   final String initials;
   final String grade;
   final String branch;
+  final String branchId;
   final String rollNumber;
   final bool blocked;
   final int attendanceRate;
@@ -42,11 +44,89 @@ class ParentChild {
         initials: _str(json['initials']),
         grade: _str(json['grade'], 'Grade not assigned'),
         branch: _str(json['branch'], 'Branch not assigned'),
+        branchId: _str(json['branchId']),
         rollNumber: _str(json['rollNumber']),
         blocked: json['blocked'] == true,
         attendanceRate: (json['attendanceRate'] as num?)?.toInt() ?? 0,
         outstanding: _num(json['outstanding']),
       );
+}
+
+class ParentContact {
+  const ParentContact(
+      {required this.id,
+      required this.childId,
+      required this.name,
+      required this.subject,
+      required this.initials,
+      required this.role});
+  factory ParentContact.fromJson(Map<String, dynamic> json) => ParentContact(
+      id: _str(json['id']),
+      childId: _str(json['childId']),
+      name: _str(json['name']),
+      subject: _str(json['subject']),
+      initials: _str(json['initials']),
+      role: _str(json['role'], 'TEACHER'));
+  final String id;
+  final String childId;
+  final String name;
+  final String subject;
+  final String initials;
+  final String role;
+}
+
+class ParentMessageItem {
+  const ParentMessageItem(
+      {required this.id,
+      required this.childId,
+      required this.teacherId,
+      required this.sender,
+      required this.text,
+      required this.time});
+  factory ParentMessageItem.fromJson(Map<String, dynamic> json) =>
+      ParentMessageItem(
+          id: _str(json['id']),
+          childId: _str(json['childId']),
+          teacherId: _str(json['teacherId']),
+          sender: _str(json['sender']),
+          text: _str(json['text']),
+          time: _str(json['time']));
+  final String id;
+  final String childId;
+  final String teacherId;
+  final String sender;
+  final String text;
+  final String time;
+}
+
+class ParentAppointmentItem {
+  const ParentAppointmentItem(
+      {required this.id,
+      required this.childId,
+      required this.teacher,
+      required this.subject,
+      required this.requestedTime,
+      required this.state,
+      this.alternativeTime,
+      this.responseMessage});
+  factory ParentAppointmentItem.fromJson(Map<String, dynamic> json) =>
+      ParentAppointmentItem(
+          id: _str(json['id']),
+          childId: _str(json['childId']),
+          teacher: _str(json['teacher']),
+          subject: _str(json['subject']),
+          requestedTime: _str(json['requestedTime']),
+          state: _str(json['state']),
+          alternativeTime: json['alternativeTime']?.toString(),
+          responseMessage: json['responseMessage']?.toString());
+  final String id;
+  final String childId;
+  final String teacher;
+  final String subject;
+  final String requestedTime;
+  final String state;
+  final String? alternativeTime;
+  final String? responseMessage;
 }
 
 /// One of today's class sessions for the selected child.
@@ -293,6 +373,9 @@ class ParentPortal {
     required this.invoices,
     required this.events,
     required this.notifications,
+    required this.contacts,
+    required this.messages,
+    required this.appointments,
     required this.bookingWindowHours,
   });
 
@@ -305,6 +388,9 @@ class ParentPortal {
   final List<ParentInvoice> invoices;
   final List<ParentEventItem> events;
   final List<ParentNotification> notifications;
+  final List<ParentContact> contacts;
+  final List<ParentMessageItem> messages;
+  final List<ParentAppointmentItem> appointments;
   final int bookingWindowHours;
 
   static List<T> _list<T>(
@@ -331,6 +417,10 @@ class ParentPortal {
         events: _list(json['events'], ParentEventItem.fromJson),
         notifications:
             _list(json['notifications'], ParentNotification.fromJson),
+        contacts: _list(json['teachers'], ParentContact.fromJson),
+        messages: _list(json['messages'], ParentMessageItem.fromJson),
+        appointments:
+            _list(json['appointments'], ParentAppointmentItem.fromJson),
         bookingWindowHours: (json['bookingWindowHours'] as num?)?.toInt() ?? 24,
       );
 

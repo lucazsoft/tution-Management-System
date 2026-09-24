@@ -7,6 +7,7 @@ import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/shared/widgets/kpi_card.dart';
 import 'package:tms_mobile/core/theme/app_tokens.dart';
+import 'package:tms_mobile/features/student/widgets/nepal_date_time.dart';
 
 class BranchAdminHomeScreen extends ConsumerStatefulWidget {
   const BranchAdminHomeScreen({super.key});
@@ -195,6 +196,8 @@ class _BranchAdminHomeScreenState extends ConsumerState<BranchAdminHomeScreen> {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
+        const NepalDateTimeHeader(),
+        const SizedBox(height: 20),
         const Row(
           children: [
             Expanded(

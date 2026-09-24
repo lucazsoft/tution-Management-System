@@ -18,6 +18,8 @@ class AcademicResult {
     required this.maximum,
     this.publishedLabel,
     this.classAverage,
+    this.resultSheetUrl,
+    this.teacherRemarks,
   });
 
   factory AcademicResult.fromJson(Map<String, dynamic> json) {
@@ -30,6 +32,8 @@ class AcademicResult {
       publishedLabel: json['publishedLabel'] as String?,
       classAverage:
           json['classAverage'] == null ? null : _asDouble(json['classAverage']),
+      resultSheetUrl: json['resultSheetUrl'] as String?,
+      teacherRemarks: json['teacherRemarks'] as String?,
     );
   }
 
@@ -40,6 +44,8 @@ class AcademicResult {
   final double maximum;
   final String? publishedLabel;
   final double? classAverage;
+  final String? resultSheetUrl;
+  final String? teacherRemarks;
 
   double get percentage => maximum <= 0 ? 0 : (score / maximum) * 100;
 }
@@ -55,6 +61,9 @@ class HomeworkTask {
     required this.urgency,
     required this.completed,
     this.description,
+    this.contentUrl,
+    this.submissionUrl,
+    this.teacherRemarks,
   });
 
   factory HomeworkTask.fromJson(Map<String, dynamic> json) {
@@ -67,6 +76,9 @@ class HomeworkTask {
       urgency: '${json['urgency'] ?? 'normal'}',
       completed: json['completed'] == true,
       description: json['description'] as String?,
+      contentUrl: json['contentUrl'] as String?,
+      submissionUrl: json['submissionUrl'] as String?,
+      teacherRemarks: json['teacherRemarks'] as String?,
     );
   }
 
@@ -87,6 +99,9 @@ class HomeworkTask {
       urgency: 'normal',
       completed: false,
       description: json['description'] as String?,
+      contentUrl: json['contentUrl'] as String?,
+      submissionUrl: null,
+      teacherRemarks: null,
     );
   }
 
@@ -98,8 +113,12 @@ class HomeworkTask {
   final String urgency;
   final bool completed;
   final String? description;
+  final String? contentUrl;
+  final String? submissionUrl;
+  final String? teacherRemarks;
 
   bool get isOverdue => urgency == 'overdue';
+  bool get isDueSoon => urgency == 'soon';
 }
 
 /// One marked attendance session for the signed-in student.
@@ -205,6 +224,8 @@ class SyllabusChapter {
   const SyllabusChapter({
     required this.id,
     required this.title,
+    this.position = 0,
+    this.status = 'LEFT',
     this.topics = const [],
   });
 
@@ -212,11 +233,12 @@ class SyllabusChapter {
     return SyllabusChapter(
       id: '${json['id'] ?? ''}',
       title: '${json['title'] ?? ''}',
+      position: _asInt(json['position']),
+      status: '${json['status'] ?? 'LEFT'}',
       topics: json['topics'] is List
           ? (json['topics'] as List)
               .whereType<Map<String, dynamic>>()
-              .map((t) => '${t['title'] ?? ''}')
-              .where((t) => t.isNotEmpty)
+              .map(SyllabusTopic.fromJson)
               .toList()
           : const [],
     );
@@ -224,7 +246,52 @@ class SyllabusChapter {
 
   final String id;
   final String title;
-  final List<String> topics;
+  final int position;
+  final String status;
+  final List<SyllabusTopic> topics;
+}
+
+class SyllabusLog {
+  const SyllabusLog(
+      {required this.status,
+      required this.notes,
+      required this.logDate,
+      this.chapterId = ''});
+  factory SyllabusLog.fromJson(Map<String, dynamic> json) => SyllabusLog(
+      status: '${json['status'] ?? ''}',
+      notes: '${json['notes'] ?? ''}',
+      logDate: '${json['logDate'] ?? ''}',
+      chapterId: '${json['chapterId'] ?? ''}');
+  final String status;
+  final String notes;
+  final String logDate;
+  final String chapterId;
+}
+
+class SyllabusTopic {
+  const SyllabusTopic(
+      {required this.id,
+      required this.title,
+      this.position = 0,
+      this.status = 'LEFT',
+      this.logs = const []});
+  factory SyllabusTopic.fromJson(Map<String, dynamic> json) => SyllabusTopic(
+        id: '${json['id'] ?? ''}',
+        title: '${json['title'] ?? ''}',
+        position: _asInt(json['position']),
+        status: '${json['status'] ?? 'LEFT'}',
+        logs: json['logs'] is List
+            ? (json['logs'] as List)
+                .whereType<Map<String, dynamic>>()
+                .map(SyllabusLog.fromJson)
+                .toList()
+            : const [],
+      );
+  final String id;
+  final String title;
+  final int position;
+  final String status;
+  final List<SyllabusLog> logs;
 }
 
 /// Syllabus shared with one of the student's classes.
@@ -233,7 +300,9 @@ class SyllabusSummary {
     required this.id,
     required this.subject,
     required this.className,
+    this.teacherName = '',
     this.chapters = const [],
+    this.dailyLogs = const [],
   });
 
   factory SyllabusSummary.fromJson(Map<String, dynamic> json) {
@@ -241,10 +310,17 @@ class SyllabusSummary {
       id: '${json['id'] ?? ''}',
       subject: '${json['subject'] ?? ''}',
       className: '${json['className'] ?? ''}',
+      teacherName: '${json['teacherName'] ?? ''}',
       chapters: json['chapters'] is List
           ? (json['chapters'] as List)
               .whereType<Map<String, dynamic>>()
               .map(SyllabusChapter.fromJson)
+              .toList()
+          : const [],
+      dailyLogs: json['dailyLogs'] is List
+          ? (json['dailyLogs'] as List)
+              .whereType<Map<String, dynamic>>()
+              .map(SyllabusLog.fromJson)
               .toList()
           : const [],
     );
@@ -253,7 +329,9 @@ class SyllabusSummary {
   final String id;
   final String subject;
   final String className;
+  final String teacherName;
   final List<SyllabusChapter> chapters;
+  final List<SyllabusLog> dailyLogs;
 
   int get topicCount => chapters.fold(0, (n, c) => n + c.topics.length);
 }

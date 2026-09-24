@@ -26,6 +26,7 @@ Map<String, dynamic> portalJson({int homeworkCount = 12}) {
         'score': 44,
         'maximum': 50,
         'publishedLabel': 'Shared 01 Sep 2026',
+        'resultSheetUrl': '/demo/results/algebra.pdf',
       },
       {
         'id': 'r2',
@@ -45,6 +46,10 @@ Map<String, dynamic> portalJson({int homeworkCount = 12}) {
           'dueLabel': '02 Sep 2026',
           'urgency': i == 0 ? 'overdue' : 'normal',
           'completed': i == 1,
+          'description': 'Complete every question and show your working.',
+          'contentUrl': '/demo/homework/task.pdf',
+          'submissionUrl': i == 1 ? '/demo/homework/submission.pdf' : null,
+          'teacherRemarks': i == 1 ? 'Accurate work.' : null,
         },
     ],
     'insights': [
@@ -223,8 +228,14 @@ void main() {
       expect(snapshot.enrollmentId, 'stu-1');
       expect(snapshot.results, hasLength(2));
       expect(snapshot.results.first.percentage, 88);
+      expect(
+          snapshot.results.first.resultSheetUrl, '/demo/results/algebra.pdf');
       expect(snapshot.homework, hasLength(12));
       expect(snapshot.homework.first.isOverdue, isTrue);
+      expect(snapshot.homework.first.contentUrl, '/demo/homework/task.pdf');
+      expect(
+          snapshot.homework[1].submissionUrl, '/demo/homework/submission.pdf');
+      expect(snapshot.homework[1].teacherRemarks, 'Accurate work.');
       expect(snapshot.insights.single.trend, 'Improving');
       expect(snapshot.syllabi.single.topicCount, 2);
       expect(snapshot.attendance.last.isExcused, isTrue);

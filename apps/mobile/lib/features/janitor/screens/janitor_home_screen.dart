@@ -11,7 +11,6 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/sync/sync.dart';
 import 'package:tms_mobile/core/theme/app_colors.dart';
 
@@ -19,6 +18,8 @@ import '../models/janitor_task.dart';
 import '../viewmodels/janitor_portal_viewmodel.dart';
 import '../widgets/janitor_task_card.dart';
 import 'package:tms_mobile/core/theme/app_tokens.dart';
+import 'package:tms_mobile/features/auth/widgets/account_actions.dart';
+import 'package:tms_mobile/features/student/widgets/nepal_date_time.dart';
 
 enum JanitorTaskFilter { today, upcoming, completed }
 
@@ -70,16 +71,6 @@ class _JanitorHomeScreenState extends ConsumerState<JanitorHomeScreen> {
       appBar: AppBar(
         title: const Text('My tasks'),
         actions: [
-          IconButton(
-            tooltip: 'Change password',
-            icon: const Icon(Icons.key_rounded),
-            onPressed: () => context.push('/janitor/change-password'),
-          ),
-          IconButton(
-            tooltip: 'Log out',
-            icon: const Icon(Icons.logout_rounded),
-            onPressed: () => ref.read(authProvider.notifier).logout(),
-          ),
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Center(child: Text('$activeCount active')),
@@ -100,6 +91,30 @@ class _JanitorHomeScreenState extends ConsumerState<JanitorHomeScreen> {
             ),
           ),
         ),
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: 0,
+        onDestinationSelected: (index) {
+          if (index == 1) {
+            showAccountActionsSheet(
+              context,
+              accountRoute: '/janitor/account',
+              passwordRoute: '/janitor/change-password',
+            );
+          }
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.cleaning_services_outlined),
+            selectedIcon: Icon(Icons.cleaning_services_rounded),
+            label: 'Tasks',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.more_horiz_rounded),
+            selectedIcon: Icon(Icons.more_rounded),
+            label: 'More',
+          ),
+        ],
       ),
     );
   }
@@ -159,6 +174,8 @@ class _JanitorHomeScreenState extends ConsumerState<JanitorHomeScreen> {
       child: ListView(
         padding: EdgeInsets.fromLTRB(wide ? 32 : 16, 16, wide ? 32 : 16, 28),
         children: [
+          const NepalDateTimeHeader(),
+          const SizedBox(height: 24),
           _WelcomeCard(activeCount: activeCount),
           const SizedBox(height: 24),
           Text('Assigned work', style: Theme.of(context).textTheme.titleLarge),

@@ -12,12 +12,28 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:tms_mobile/core/network/api_client.dart';
 
 import '../models/student_academics_api.dart';
 import '../student_design.dart';
 import '../viewmodels/student_academics_viewmodel.dart';
 import '../widgets/student_record_states.dart';
 import '../widgets/student_scaffold.dart';
+
+Future<void> _openStudentFile(BuildContext context, String path) async {
+  final raw = path.trim();
+  final parsed = Uri.tryParse(raw);
+  final uri = parsed?.hasScheme == true
+      ? parsed!
+      : Uri.parse(ApiClient.baseUrl).resolve(raw);
+  if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+      context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Could not open this file.')),
+    );
+  }
+}
 
 class StudentAcademicsScreen extends ConsumerStatefulWidget {
   const StudentAcademicsScreen({super.key});
@@ -48,23 +64,9 @@ class _StudentAcademicsScreenState
       selectedIndex: 1,
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: SizedBox(
-              width: double.infinity,
-              child: SegmentedButton<int>(
-                showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(value: 0, label: Text('Results')),
-                  ButtonSegment(value: 1, label: Text('Syllabus')),
-                  ButtonSegment(value: 2, label: Text('Homework')),
-                  ButtonSegment(value: 3, label: Text('Analytics')),
-                ],
-                selected: {_segment},
-                onSelectionChanged: (selection) =>
-                    setState(() => _segment = selection.first),
-              ),
-            ),
+          _AcademicsTabBar(
+            selectedIndex: _segment,
+            onSelected: (index) => setState(() => _segment = index),
           ),
           Expanded(child: _buildBody(state, viewModel)),
         ],
@@ -124,6 +126,100 @@ class _StudentAcademicsScreenState
         _HomeworkView(state: state, viewModel: viewModel),
         _InsightsView(state: state, viewModel: viewModel),
       ],
+    );
+  }
+}
+
+class _AcademicsTabBar extends StatelessWidget {
+  const _AcademicsTabBar({
+    required this.selectedIndex,
+    required this.onSelected,
+  });
+
+  static const _labels = ['Results', 'Syllabus', 'Homework', 'Analytics'];
+
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: TmsSpace.sm),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).dividerColor.withValues(alpha: .55),
+          ),
+        ),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: TmsSpace.sm),
+        child: Row(
+          children: [
+            for (var index = 0; index < _labels.length; index++)
+              _AcademicsTab(
+                label: _labels[index],
+                selected: selectedIndex == index,
+                onTap: () => onSelected(index),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AcademicsTab extends StatelessWidget {
+  const _AcademicsTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected
+        ? StudentColors.primary
+        : Theme.of(context).colorScheme.onSurfaceVariant;
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(TmsRadius.r10),
+        ),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
+          decoration: BoxDecoration(
+            color: selected
+                ? StudentColors.primary.withValues(alpha: .07)
+                : Colors.transparent,
+            border: Border(
+              bottom: BorderSide(
+                color: selected ? StudentColors.primary : Colors.transparent,
+                width: 3,
+              ),
+            ),
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: color,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -253,6 +349,32 @@ class _ResultCard extends StatelessWidget {
                   ),
               ],
             ),
+            if (result.teacherRemarks?.isNotEmpty == true) ...[
+              const SizedBox(height: TmsSpace.sm),
+              Text(
+                'Teacher feedback: ${result.teacherRemarks}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+            const Divider(height: TmsSpace.lg),
+            Row(
+              children: [
+                const Icon(Icons.description_outlined,
+                    color: StudentColors.primary),
+                const SizedBox(width: TmsSpace.sm),
+                const Expanded(child: Text('Teacher-shared exam sheet')),
+                if (result.resultSheetUrl?.isNotEmpty == true)
+                  TextButton.icon(
+                    onPressed: () =>
+                        _openStudentFile(context, result.resultSheetUrl!),
+                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                    label: const Text('View'),
+                  )
+                else
+                  Text('Not shared',
+                      style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
           ],
         ),
       ),
@@ -260,14 +382,22 @@ class _ResultCard extends StatelessWidget {
   }
 }
 
-class _SyllabusView extends StatelessWidget {
+class _SyllabusView extends StatefulWidget {
   const _SyllabusView({required this.state, required this.viewModel});
 
   final StudentAcademicsState state;
   final StudentAcademicsViewModel viewModel;
 
   @override
+  State<_SyllabusView> createState() => _SyllabusViewState();
+}
+
+class _SyllabusViewState extends State<_SyllabusView> {
+  String? selectedId;
+
+  @override
   Widget build(BuildContext context) {
+    final state = widget.state;
     if (state.syllabi.isEmpty) {
       return const StudentEmptyView(
         icon: Icons.menu_book_outlined,
@@ -276,7 +406,7 @@ class _SyllabusView extends StatelessWidget {
       );
     }
     return RefreshIndicator(
-      onRefresh: viewModel.refresh,
+      onRefresh: widget.viewModel.refresh,
       child: ListView(
         padding: const EdgeInsets.all(TmsSpace.md),
         children: [
@@ -290,43 +420,48 @@ class _SyllabusView extends StatelessWidget {
           ),
           const SizedBox(height: TmsSpace.lg),
           for (final syllabus in state.syllabi) ...[
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(TmsSpace.md),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.menu_book_outlined,
-                            color: StudentColors.primary),
-                        const SizedBox(width: TmsSpace.sm),
-                        Expanded(
-                          child: Text(syllabus.subject,
-                              style: Theme.of(context).textTheme.titleMedium),
-                        ),
-                        Text('${syllabus.topicCount} topics'),
-                      ],
-                    ),
-                    const SizedBox(height: TmsSpace.xs),
-                    Text(
-                      syllabus.className,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: StudentColors.mutedText,
+            GestureDetector(
+              onTap: () => setState(() =>
+                  selectedId = selectedId == syllabus.id ? null : syllabus.id),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(TmsSpace.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.menu_book_outlined,
+                              color: StudentColors.primary),
+                          const SizedBox(width: TmsSpace.sm),
+                          Expanded(
+                            child: Text(syllabus.subject,
+                                style: Theme.of(context).textTheme.titleMedium),
                           ),
-                    ),
-                    const SizedBox(height: TmsSpace.sm),
-                    for (final chapter in syllabus.chapters)
-                      Padding(
-                        padding: const EdgeInsets.only(top: TmsSpace.xs),
-                        child: Text(
-                          '• ${chapter.title} (${chapter.topics.length})',
-                        ),
+                          Text('${syllabus.topicCount} topics'),
+                        ],
                       ),
-                  ],
+                      const SizedBox(height: TmsSpace.xs),
+                      Text(
+                        syllabus.className,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: StudentColors.mutedText,
+                            ),
+                      ),
+                      const SizedBox(height: TmsSpace.sm),
+                      for (final chapter in syllabus.chapters)
+                        Padding(
+                          padding: const EdgeInsets.only(top: TmsSpace.xs),
+                          child: Text(
+                            '• ${chapter.title} (${chapter.topics.length})',
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
+            _SyllabusDetails(syllabus: syllabus),
             const SizedBox(height: TmsSpace.sm),
           ],
         ],
@@ -335,15 +470,196 @@ class _SyllabusView extends StatelessWidget {
   }
 }
 
-class _HomeworkView extends StatelessWidget {
+class _SyllabusDetails extends StatelessWidget {
+  const _SyllabusDetails({required this.syllabus});
+  final SyllabusSummary syllabus;
+
+  Color _color(String status) => status == 'COMPLETED'
+      ? StudentColors.success
+      : status == 'IN_PROGRESS'
+          ? StudentColors.warning
+          : StudentColors.mutedText;
+  String _label(String status) => status == 'COMPLETED'
+      ? 'Completed'
+      : status == 'IN_PROGRESS'
+          ? 'In progress'
+          : 'Left to start';
+
+  @override
+  Widget build(BuildContext context) => Card(
+        color: StudentColors.primary.withValues(alpha: .025),
+        child: Padding(
+          padding: const EdgeInsets.all(TmsSpace.md),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${syllabus.subject} course details',
+                style: Theme.of(context).textTheme.titleLarge),
+            Text(
+                '${syllabus.className}${syllabus.teacherName.isEmpty ? '' : ' · ${syllabus.teacherName}'}',
+                style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: TmsSpace.md),
+            for (final chapter in syllabus.chapters)
+              _ChapterDetails(
+                  chapter: chapter,
+                  syllabus: syllabus,
+                  color: _color,
+                  label: _label),
+          ]),
+        ),
+      );
+}
+
+class _ChapterDetails extends StatelessWidget {
+  const _ChapterDetails(
+      {required this.chapter,
+      required this.syllabus,
+      required this.color,
+      required this.label});
+  final SyllabusChapter chapter;
+  final SyllabusSummary syllabus;
+  final Color Function(String) color;
+  final String Function(String) label;
+
+  @override
+  Widget build(BuildContext context) {
+    final logs =
+        syllabus.dailyLogs.where((log) => log.chapterId == chapter.id).toList();
+    final latest = logs.isEmpty ? null : logs.first;
+    return Container(
+      margin: const EdgeInsets.only(bottom: TmsSpace.sm),
+      padding: const EdgeInsets.all(TmsSpace.md),
+      decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(TmsRadius.control),
+          border:
+              Border(left: BorderSide(color: color(chapter.status), width: 4))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          CircleAvatar(
+              radius: 15,
+              backgroundColor: color(chapter.status).withValues(alpha: .12),
+              foregroundColor: color(chapter.status),
+              child: Text('${chapter.position}')),
+          const SizedBox(width: TmsSpace.sm),
+          Expanded(
+              child: Text(chapter.title,
+                  style: Theme.of(context).textTheme.titleMedium)),
+          StudentStatusPill(
+              label: label(chapter.status),
+              icon: chapter.status == 'COMPLETED'
+                  ? Icons.check_circle
+                  : chapter.status == 'IN_PROGRESS'
+                      ? Icons.pending
+                      : Icons.radio_button_unchecked,
+              color: color(chapter.status)),
+        ]),
+        const SizedBox(height: TmsSpace.xs),
+        Text(latest?.notes.isNotEmpty == true
+            ? latest!.notes
+            : chapter.status == 'COMPLETED'
+                ? 'All topics completed'
+                : chapter.status == 'IN_PROGRESS'
+                    ? 'Chapter in progress'
+                    : 'Not started'),
+        if (chapter.topics.isNotEmpty) ...[
+          const Divider(height: TmsSpace.lg),
+          for (final topic in chapter.topics)
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                  topic.status == 'COMPLETED'
+                      ? Icons.check_circle
+                      : topic.status == 'IN_PROGRESS'
+                          ? Icons.pending
+                          : Icons.radio_button_unchecked,
+                  size: 18,
+                  color: color(topic.status)),
+              title: Text(topic.title),
+              subtitle: topic.logs.isNotEmpty &&
+                      topic.logs.first.notes.isNotEmpty
+                  ? Text(
+                      '${topic.logs.first.notes} · ${topic.logs.first.logDate}')
+                  : null,
+              trailing: Text(label(topic.status),
+                  style: TextStyle(
+                      color: color(topic.status),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700)),
+            ),
+        ],
+        Text(
+            latest == null
+                ? 'Shared by ${syllabus.teacherName.isEmpty ? 'your teacher' : syllabus.teacherName}'
+                : 'Updated by ${syllabus.teacherName.isEmpty ? 'your teacher' : syllabus.teacherName} · ${latest.logDate}',
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: StudentColors.mutedText)),
+      ]),
+    );
+  }
+}
+
+enum _HomeworkFilter { pending, soon, overdue, completed }
+
+enum _HomeworkSort { dueDate, subject, status }
+
+class _HomeworkView extends StatefulWidget {
   const _HomeworkView({required this.state, required this.viewModel});
 
   final StudentAcademicsState state;
   final StudentAcademicsViewModel viewModel;
 
   @override
+  State<_HomeworkView> createState() => _HomeworkViewState();
+}
+
+class _HomeworkViewState extends State<_HomeworkView> {
+  _HomeworkFilter _filter = _HomeworkFilter.pending;
+  _HomeworkSort _sort = _HomeworkSort.dueDate;
+
+  String _label(_HomeworkFilter filter) => switch (filter) {
+        _HomeworkFilter.pending => 'Pending',
+        _HomeworkFilter.soon => 'Due soon',
+        _HomeworkFilter.overdue => 'Overdue',
+        _HomeworkFilter.completed => 'Completed',
+      };
+
+  bool _matches(HomeworkTask item, _HomeworkFilter filter) => switch (filter) {
+        _HomeworkFilter.pending => !item.completed,
+        _HomeworkFilter.soon => !item.completed && item.isDueSoon,
+        _HomeworkFilter.overdue => !item.completed && item.isOverdue,
+        _HomeworkFilter.completed => item.completed,
+      };
+
+  int _count(_HomeworkFilter filter) =>
+      widget.state.homework.where((item) => _matches(item, filter)).length;
+
+  int _rank(HomeworkTask item) => item.isOverdue
+      ? 0
+      : item.isDueSoon
+          ? 1
+          : item.completed
+              ? 3
+              : 2;
+
+  List<HomeworkTask> get _visible {
+    final items = widget.state.homework.indexed
+        .where((entry) => _matches(entry.$2, _filter))
+        .toList();
+    items.sort((a, b) => switch (_sort) {
+          _HomeworkSort.dueDate => a.$1.compareTo(b.$1),
+          _HomeworkSort.subject =>
+            a.$2.subject.toLowerCase().compareTo(b.$2.subject.toLowerCase()),
+          _HomeworkSort.status => _rank(a.$2).compareTo(_rank(b.$2)),
+        });
+    return items.map((entry) => entry.$2).toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (state.homework.isEmpty) {
+    if (widget.state.homework.isEmpty) {
       return const StudentEmptyView(
         icon: Icons.assignment_outlined,
         title: 'No homework assigned',
@@ -351,66 +667,190 @@ class _HomeworkView extends StatelessWidget {
       );
     }
     return RefreshIndicator(
-      onRefresh: viewModel.refresh,
+      onRefresh: widget.viewModel.refresh,
       child: ListView(
         padding: const EdgeInsets.all(TmsSpace.md),
         children: [
-          Text('Pending homework',
-              style: Theme.of(context).textTheme.titleLarge),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final filter in _HomeworkFilter.values) ...[
+                  FilterChip(
+                    selected: _filter == filter,
+                    label: Text('${_label(filter)} ${_count(filter)}'),
+                    onSelected: (_) => setState(() => _filter = filter),
+                  ),
+                  const SizedBox(width: TmsSpace.xs),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: TmsSpace.md),
+          Row(
+            children: [
+              Expanded(
+                child: Text('${_label(_filter)} homework',
+                    style: Theme.of(context).textTheme.titleLarge),
+              ),
+              DropdownButton<_HomeworkSort>(
+                value: _sort,
+                underline: const SizedBox.shrink(),
+                onChanged: (value) {
+                  if (value != null) setState(() => _sort = value);
+                },
+                items: const [
+                  DropdownMenuItem(
+                      value: _HomeworkSort.dueDate, child: Text('Due date')),
+                  DropdownMenuItem(
+                      value: _HomeworkSort.subject, child: Text('Subject')),
+                  DropdownMenuItem(
+                      value: _HomeworkSort.status, child: Text('Status')),
+                ],
+              ),
+            ],
+          ),
+          Text('Assignments are read-only in the student portal.',
+              style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: TmsSpace.sm),
-          for (final item in state.pagedHomework) ...[
-            Card(
-              child: ListTile(
-                minTileHeight: 84,
-                leading: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: (item.isOverdue
-                            ? StudentColors.error
-                            : StudentColors.primary)
-                        .withValues(alpha: .10),
-                    borderRadius: BorderRadius.circular(TmsRadius.control),
-                  ),
-                  child: Icon(
-                    item.isOverdue
-                        ? Icons.priority_high_rounded
-                        : Icons.assignment_outlined,
-                    color: item.isOverdue
-                        ? StudentColors.error
-                        : StudentColors.primary,
-                  ),
-                ),
-                title: Text(item.title),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    '${item.subject} · ${item.dueLabel}',
-                    style: TextStyle(
+          if (_visible.isEmpty)
+            StudentEmptyView(
+              icon: Icons.task_alt_rounded,
+              title: 'No ${_label(_filter).toLowerCase()} homework',
+              message: 'There are no assignments in this view right now.',
+            )
+          else
+            for (final item in _visible) ...[
+              Card(
+                child: ListTile(
+                  minTileHeight: 84,
+                  leading: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: (item.isOverdue
+                              ? StudentColors.error
+                              : StudentColors.primary)
+                          .withValues(alpha: .10),
+                      borderRadius: BorderRadius.circular(TmsRadius.control),
+                    ),
+                    child: Icon(
+                      item.isOverdue
+                          ? Icons.priority_high_rounded
+                          : Icons.assignment_outlined,
                       color: item.isOverdue
                           ? StudentColors.error
-                          : StudentColors.mutedText,
-                      fontWeight: FontWeight.w600,
+                          : StudentColors.primary,
                     ),
                   ),
+                  title: Text(item.title),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      '${item.subject} · ${item.dueLabel}',
+                      style: TextStyle(
+                        color: item.isOverdue
+                            ? StudentColors.error
+                            : StudentColors.mutedText,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  trailing: item.completed
+                      ? const Icon(Icons.check_circle_rounded,
+                          color: StudentColors.success)
+                      : item.isOverdue
+                          ? const Icon(Icons.error_rounded,
+                              color: StudentColors.error)
+                          : item.isDueSoon
+                              ? const Icon(Icons.schedule_rounded,
+                                  color: StudentColors.warning)
+                              : null,
+                  onTap: () => showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    showDragHandle: true,
+                    builder: (_) => _HomeworkDetails(item: item),
+                  ),
                 ),
-                trailing: item.completed
-                    ? const Icon(Icons.check_circle_rounded,
-                        color: StudentColors.success)
-                    : null,
               ),
-            ),
-            const SizedBox(height: TmsSpace.sm),
-          ],
-          StudentLoadMoreFooter(
-            hasMore: state.hasMoreHomework,
-            remaining: state.homework.length - state.pagedHomework.length,
-            onLoadMore: viewModel.loadMoreHomework,
-          ),
+              const SizedBox(height: TmsSpace.sm),
+            ],
         ],
       ),
     );
   }
+}
+
+class _HomeworkDetails extends StatelessWidget {
+  const _HomeworkDetails({required this.item});
+
+  final HomeworkTask item;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(
+            TmsSpace.lg,
+            0,
+            TmsSpace.lg,
+            TmsSpace.lg,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(item.subject,
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelLarge
+                      ?.copyWith(color: StudentColors.primary)),
+              Text(item.title,
+                  style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: TmsSpace.xs),
+              Text('Assigned by ${item.teacher}'),
+              Text(item.completed ? item.dueLabel : 'Due ${item.dueLabel}'),
+              if (item.description?.isNotEmpty == true) ...[
+                const Divider(height: TmsSpace.xl),
+                Text('Instructions',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: TmsSpace.xs),
+                Text(item.description!),
+              ],
+              if (item.contentUrl?.isNotEmpty == true ||
+                  item.submissionUrl?.isNotEmpty == true) ...[
+                const SizedBox(height: TmsSpace.lg),
+                Wrap(
+                  spacing: TmsSpace.sm,
+                  runSpacing: TmsSpace.sm,
+                  children: [
+                    if (item.contentUrl?.isNotEmpty == true)
+                      FilledButton.tonalIcon(
+                        onPressed: () =>
+                            _openStudentFile(context, item.contentUrl!),
+                        icon: const Icon(Icons.attachment_rounded),
+                        label: const Text('Open assignment file'),
+                      ),
+                    if (item.submissionUrl?.isNotEmpty == true)
+                      OutlinedButton.icon(
+                        onPressed: () =>
+                            _openStudentFile(context, item.submissionUrl!),
+                        icon: const Icon(Icons.upload_file_rounded),
+                        label: const Text('View your submission'),
+                      ),
+                  ],
+                ),
+              ],
+              if (item.teacherRemarks?.isNotEmpty == true) ...[
+                const Divider(height: TmsSpace.xl),
+                Text('Teacher feedback',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: TmsSpace.xs),
+                Text(item.teacherRemarks!),
+              ],
+            ],
+          ),
+        ),
+      );
 }
 
 class _InsightsView extends StatelessWidget {

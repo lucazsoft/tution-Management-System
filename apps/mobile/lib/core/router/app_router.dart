@@ -9,6 +9,11 @@ import 'package:tms_mobile/features/auth/screens/forgot_password_screen.dart';
 import 'package:tms_mobile/features/auth/screens/reset_password_screen.dart';
 import 'package:tms_mobile/features/auth/screens/two_factor_screen.dart';
 import 'package:tms_mobile/features/auth/screens/change_password_screen.dart';
+import 'package:tms_mobile/features/auth/screens/change_mobile_screen.dart';
+import 'package:tms_mobile/features/auth/screens/change_email_screen.dart';
+import 'package:tms_mobile/features/auth/screens/account_screen.dart';
+import 'package:tms_mobile/features/auth/screens/device_accounts_screen.dart';
+import 'package:tms_mobile/features/auth/screens/mpin_settings_screen.dart';
 import 'package:tms_mobile/features/auth/screens/unsupported_mobile_role_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_home_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_timetable_screen.dart';
@@ -19,6 +24,9 @@ import 'package:tms_mobile/features/parent/screens/parent_home_screen.dart';
 import 'package:tms_mobile/features/parent/screens/parent_attendance_screen.dart';
 import 'package:tms_mobile/features/parent/screens/parent_fees_screen.dart';
 import 'package:tms_mobile/features/parent/screens/parent_academics_screen.dart';
+import 'package:tms_mobile/features/parent/screens/parent_messages_screen.dart';
+import 'package:tms_mobile/features/parent/screens/parent_appointments_screen.dart';
+import 'package:tms_mobile/features/parent/screens/parent_calendar_screen.dart';
 import 'package:tms_mobile/features/student/screens/student_home_screen.dart';
 import 'package:tms_mobile/features/student/screens/student_timetable_screen.dart';
 import 'package:tms_mobile/features/student/screens/student_fees_screen.dart';
@@ -28,6 +36,9 @@ import 'package:tms_mobile/features/student/screens/student_attendance_screen.da
 import 'package:tms_mobile/features/student/screens/student_calendar_screen.dart';
 import 'package:tms_mobile/features/student/screens/student_certificates_screen.dart';
 import 'package:tms_mobile/features/student/screens/student_notifications_screen.dart';
+import 'package:tms_mobile/features/branch_manager/screens/branch_home_screen.dart';
+import 'package:tms_mobile/features/janitor/screens/janitor_home_screen.dart';
+import 'package:tms_mobile/features/tenant_admin/screens/tenant_admin_home_screen.dart';
 
 @visibleForTesting
 String? mobileRoleBoundaryRedirect({
@@ -42,6 +53,7 @@ String? mobileRoleBoundaryRedirect({
 
   const publicRoutes = [
     '/login',
+    '/saved-accounts',
     '/forgot-password',
     '/reset-password',
     '/2fa'
@@ -62,10 +74,10 @@ String? mobileRoleBoundaryRedirect({
 
   if (isLoggedIn) {
     final allowedPrefix = switch (authState.user?.role) {
-      RoleCodes.tenantAdmin => '/unsupported-role',
-      RoleCodes.branchAdmin => '/unsupported-role',
+      RoleCodes.tenantAdmin => '/tenant/',
+      RoleCodes.branchAdmin => '/branch/',
       RoleCodes.accountant => '/unsupported-role',
-      RoleCodes.janitor => '/unsupported-role',
+      RoleCodes.janitor => '/janitor/',
       RoleCodes.webPortalOnly => '/unsupported-role',
       RoleCodes.teacher => '/teacher/',
       RoleCodes.student => '/student/',
@@ -86,6 +98,19 @@ String? mobileRoleBoundaryRedirect({
   }
 
   return null;
+}
+
+@visibleForTesting
+String navigationSessionIdentity(AuthState authState) {
+  final user = authState.user;
+  if (!authState.isAuthenticated || user == null) return 'signed-out';
+
+  return [
+    user.id,
+    user.email.trim().toLowerCase(),
+    user.role,
+    user.tenantId ?? '',
+  ].join('|');
 }
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -120,6 +145,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             const LoginScreen(),
       ),
       GoRoute(
+        path: '/saved-accounts',
+        builder: (BuildContext context, GoRouterState state) =>
+            const DeviceAccountsScreen(loginMode: true),
+      ),
+      GoRoute(
         path: '/forgot-password',
         builder: (BuildContext context, GoRouterState state) =>
             const ForgotPasswordScreen(),
@@ -149,13 +179,113 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/teacher/home',
         builder: (BuildContext context, GoRouterState state) =>
-            const TeacherHomeScreen(),
+            TeacherHomeScreen(
+          key: ValueKey(navigationSessionIdentity(authRefresh.value)),
+        ),
       ),
       GoRoute(
         path: '/teacher/change-password',
         builder: (BuildContext context, GoRouterState state) =>
             const ChangePasswordScreen(),
       ),
+      GoRoute(
+          path: '/teacher/mpin',
+          builder: (_, state) => MpinSettingsScreen(
+              switchAccountRoute:
+                  state.uri.queryParameters['switchAccount'] == 'accounts'
+                      ? '/teacher/accounts'
+                      : state.uri.queryParameters['switchAccount'] == 'add'
+                          ? '/teacher/accounts/add'
+                          : null)),
+      GoRoute(
+          path: '/tenant/home',
+          builder: (_, __) => TenantAdminHomeScreen(
+              key: ValueKey(navigationSessionIdentity(authRefresh.value)))),
+      GoRoute(
+          path: '/tenant/account',
+          builder: (_, __) =>
+              const AccountScreen(passwordRoute: '/tenant/change-password')),
+      GoRoute(
+          path: '/tenant/accounts',
+          builder: (_, __) => const DeviceAccountsScreen()),
+      GoRoute(
+          path: '/tenant/accounts/add',
+          builder: (_, __) => const LoginScreen(addAccountMode: true)),
+      GoRoute(
+          path: '/tenant/change-password',
+          builder: (_, __) => const ChangePasswordScreen()),
+      GoRoute(
+          path: '/tenant/mpin',
+          builder: (_, state) => MpinSettingsScreen(
+              switchAccountRoute:
+                  state.uri.queryParameters['switchAccount'] == 'accounts'
+                      ? '/tenant/accounts'
+                      : state.uri.queryParameters['switchAccount'] == 'add'
+                          ? '/tenant/accounts/add'
+                          : null)),
+      GoRoute(
+          path: '/branch/home',
+          builder: (_, __) => BranchHomeScreen(
+              key: ValueKey(navigationSessionIdentity(authRefresh.value)))),
+      GoRoute(
+          path: '/branch/account',
+          builder: (_, __) =>
+              const AccountScreen(passwordRoute: '/branch/change-password')),
+      GoRoute(
+          path: '/branch/accounts',
+          builder: (_, __) => const DeviceAccountsScreen()),
+      GoRoute(
+          path: '/branch/accounts/add',
+          builder: (_, __) => const LoginScreen(addAccountMode: true)),
+      GoRoute(
+          path: '/branch/change-password',
+          builder: (_, __) => const ChangePasswordScreen()),
+      GoRoute(
+          path: '/branch/mpin',
+          builder: (_, state) => MpinSettingsScreen(
+              switchAccountRoute:
+                  state.uri.queryParameters['switchAccount'] == 'accounts'
+                      ? '/branch/accounts'
+                      : state.uri.queryParameters['switchAccount'] == 'add'
+                          ? '/branch/accounts/add'
+                          : null)),
+      GoRoute(
+          path: '/janitor/home',
+          builder: (_, __) => JanitorHomeScreen(
+              key: ValueKey(navigationSessionIdentity(authRefresh.value)))),
+      GoRoute(
+          path: '/janitor/account',
+          builder: (_, __) =>
+              const AccountScreen(passwordRoute: '/janitor/change-password')),
+      GoRoute(
+          path: '/janitor/accounts',
+          builder: (_, __) => const DeviceAccountsScreen()),
+      GoRoute(
+          path: '/janitor/accounts/add',
+          builder: (_, __) => const LoginScreen(addAccountMode: true)),
+      GoRoute(
+          path: '/janitor/change-password',
+          builder: (_, __) => const ChangePasswordScreen()),
+      GoRoute(
+          path: '/janitor/mpin',
+          builder: (_, state) => MpinSettingsScreen(
+              switchAccountRoute:
+                  state.uri.queryParameters['switchAccount'] == 'accounts'
+                      ? '/janitor/accounts'
+                      : state.uri.queryParameters['switchAccount'] == 'add'
+                          ? '/janitor/accounts/add'
+                          : null)),
+      GoRoute(
+        path: '/teacher/account',
+        builder: (_, __) =>
+            const AccountScreen(passwordRoute: '/teacher/change-password'),
+      ),
+      GoRoute(
+          path: '/teacher/accounts',
+          builder: (_, __) => const DeviceAccountsScreen()),
+      GoRoute(
+          path: '/teacher/accounts/add',
+          builder: (_, __) => const LoginScreen(addAccountMode: true)),
       GoRoute(
         path: '/teacher/timetable',
         builder: (BuildContext context, GoRouterState state) =>
@@ -185,13 +315,35 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/parent/home',
         builder: (BuildContext context, GoRouterState state) =>
-            const ParentHomeScreen(),
+            ParentHomeScreen(
+          key: ValueKey(navigationSessionIdentity(authRefresh.value)),
+        ),
       ),
       GoRoute(
         path: '/parent/change-password',
         builder: (BuildContext context, GoRouterState state) =>
             const ChangePasswordScreen(),
       ),
+      GoRoute(
+          path: '/parent/mpin',
+          builder: (_, state) => MpinSettingsScreen(
+              switchAccountRoute:
+                  state.uri.queryParameters['switchAccount'] == 'accounts'
+                      ? '/parent/accounts'
+                      : state.uri.queryParameters['switchAccount'] == 'add'
+                          ? '/parent/accounts/add'
+                          : null)),
+      GoRoute(
+        path: '/parent/account',
+        builder: (_, __) =>
+            const AccountScreen(passwordRoute: '/parent/change-password'),
+      ),
+      GoRoute(
+          path: '/parent/accounts',
+          builder: (_, __) => const DeviceAccountsScreen()),
+      GoRoute(
+          path: '/parent/accounts/add',
+          builder: (_, __) => const LoginScreen(addAccountMode: true)),
       GoRoute(
         path: '/parent/attendance',
         builder: (BuildContext context, GoRouterState state) =>
@@ -207,18 +359,63 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (BuildContext context, GoRouterState state) =>
             const ParentAcademicsScreen(),
       ),
+      GoRoute(
+        path: '/parent/calendar',
+        builder: (BuildContext context, GoRouterState state) =>
+            const ParentCalendarScreen(),
+      ),
+      GoRoute(
+        path: '/parent/messages',
+        builder: (_, __) => const ParentMessagesScreen(),
+      ),
+      GoRoute(
+        path: '/parent/appointments',
+        builder: (_, __) => const ParentAppointmentsScreen(),
+      ),
 
       // ── Student routes ──
       GoRoute(
         path: '/student/home',
         builder: (BuildContext context, GoRouterState state) =>
-            const StudentHomeScreen(),
+            StudentHomeScreen(
+          key: ValueKey(navigationSessionIdentity(authRefresh.value)),
+        ),
       ),
       GoRoute(
         path: '/student/change-password',
         builder: (BuildContext context, GoRouterState state) =>
             const ChangePasswordScreen(),
       ),
+      GoRoute(
+        path: '/student/change-mobile',
+        builder: (BuildContext context, GoRouterState state) =>
+            const ChangeMobileScreen(),
+      ),
+      GoRoute(
+        path: '/student/change-email',
+        builder: (BuildContext context, GoRouterState state) =>
+            const ChangeEmailScreen(),
+      ),
+      GoRoute(
+          path: '/student/mpin',
+          builder: (_, state) => MpinSettingsScreen(
+              switchAccountRoute:
+                  state.uri.queryParameters['switchAccount'] == 'accounts'
+                      ? '/student/accounts'
+                      : state.uri.queryParameters['switchAccount'] == 'add'
+                          ? '/student/accounts/add'
+                          : null)),
+      GoRoute(
+        path: '/student/account',
+        builder: (_, __) =>
+            const AccountScreen(passwordRoute: '/student/change-password'),
+      ),
+      GoRoute(
+          path: '/student/accounts',
+          builder: (_, __) => const DeviceAccountsScreen()),
+      GoRoute(
+          path: '/student/accounts/add',
+          builder: (_, __) => const LoginScreen(addAccountMode: true)),
       GoRoute(
         path: '/student/timetable',
         builder: (BuildContext context, GoRouterState state) =>

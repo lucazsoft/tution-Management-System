@@ -16,6 +16,7 @@ import 'package:tms_mobile/features/parent/screens/parent_academics_screen.dart'
 import 'package:tms_mobile/features/parent/screens/parent_attendance_screen.dart';
 import 'package:tms_mobile/features/parent/screens/parent_fees_screen.dart';
 import 'package:tms_mobile/features/parent/screens/parent_home_screen.dart';
+import 'package:tms_mobile/features/parent/screens/parent_messages_screen.dart';
 import 'package:tms_mobile/features/parent/viewmodels/parent_portal_viewmodel.dart';
 
 Map<String, dynamic> _portalJson({
@@ -114,6 +115,33 @@ Map<String, dynamic> _portalJson({
       'leaves': const [],
       'events': const [],
       'notifications': const [],
+      'teachers': [
+        {
+          'id': 'teacher-api',
+          // Deliberately omit childId to cover older live payloads. The whole
+          // parent portal response is already scoped to the selected child.
+          'name': 'Teacher API',
+          'subject': 'API Mathematics',
+          'initials': 'TA',
+          'role': 'TEACHER',
+        },
+        {
+          'id': 'admin-api',
+          'name': 'Branch Support',
+          'subject': 'Branch administration',
+          'initials': 'BS',
+          'role': 'BRANCH_ADMIN',
+        },
+      ],
+      'messages': [
+        {
+          'id': 'message-api',
+          'teacherId': 'teacher-api',
+          'sender': 'Teacher',
+          'text': 'API message about your child',
+          'time': '8 Sep 2026',
+        },
+      ],
     };
 
 class _FakeParentPortalRepository extends ParentPortalRepository {
@@ -841,5 +869,20 @@ void main() {
     expect(find.text('API progress remark'), findsOneWidget);
     expect(find.text('API Science'), findsWidgets);
     expect(find.text('Algebraic Expressions'), findsNothing);
+  });
+
+  testWidgets('messages renders authorized contacts and selected thread',
+      (tester) async {
+    await _pumpPortalScreen(
+      tester,
+      const ParentMessagesScreen(),
+      _FakeParentPortalRepository(),
+    );
+
+    expect(find.text('Authorized contacts'), findsOneWidget);
+    expect(find.text('Teacher API'), findsWidgets);
+    expect(find.text('Branch Support'), findsOneWidget);
+    expect(find.text('API message about your child'), findsOneWidget);
+    expect(find.text('Message about API Child One'), findsOneWidget);
   });
 }

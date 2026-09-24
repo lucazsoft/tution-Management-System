@@ -18,24 +18,24 @@ AuthState authenticatedAs(String role) {
 
 void main() {
   group('AuthState.roleRedirectPath', () {
-    test('redirects tenant admins to the web/PWA handoff screen', () {
+    test('redirects tenant admins to their mobile dashboard', () {
       expect(
         authenticatedAs('TENANT_ADMIN').roleRedirectPath,
-        '/unsupported-role',
+        '/tenant/home',
       );
     });
 
-    test('redirects branch admins to the web/PWA handoff screen', () {
+    test('redirects branch admins to their mobile dashboard', () {
       expect(
         authenticatedAs('BRANCH_ADMIN').roleRedirectPath,
-        '/unsupported-role',
+        '/branch/home',
       );
     });
 
-    test('redirects janitors to the web/PWA handoff screen', () {
+    test('redirects janitors to their mobile task list', () {
       expect(
         authenticatedAs('JANITOR').roleRedirectPath,
-        '/unsupported-role',
+        '/janitor/home',
       );
     });
 

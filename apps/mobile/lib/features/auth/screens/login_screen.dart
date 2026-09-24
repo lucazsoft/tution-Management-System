@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/features/auth/data/auth_service.dart';
+import 'package:tms_mobile/features/auth/data/remembered_credentials.dart';
+import 'package:tms_mobile/features/auth/data/device_account_vault.dart';
 import 'package:tms_mobile/features/auth/widgets/auth_card.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.addAccountMode = false});
+
+  final bool addAccountMode;
 
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
@@ -18,10 +23,47 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _credentialsStore = RememberedCredentialsStore();
+  late final Future<List<DeviceAccount>> _savedAccounts;
   bool _obscurePassword = true;
+  bool _rememberMe = false;
+  bool _loadingRememberedCredentials = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _savedAccounts = DeviceAccountVault().accounts();
+    _restoreRememberedCredentials();
+  }
+
+  Future<void> _restoreRememberedCredentials() async {
+    if (widget.addAccountMode) {
+      _emailController.clear();
+      _passwordController.clear();
+      TextInput.finishAutofillContext(shouldSave: false);
+      _loadingRememberedCredentials = false;
+      return;
+    }
+    try {
+      final saved = await _credentialsStore.read();
+      if (!mounted) return;
+      if (saved != null) {
+        _emailController.text = saved.email;
+        _passwordController.text = saved.password;
+      }
+      setState(() {
+        _rememberMe = saved != null;
+        _loadingRememberedCredentials = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingRememberedCredentials = false);
+    }
+  }
 
   @override
   void dispose() {
+    _emailController.clear();
+    _passwordController.clear();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -35,15 +77,101 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     ref.read(authProvider.notifier).clearError();
 
     final email = _emailController.text.trim();
-    final password = _passwordController.text;
+    final credential = _passwordController.text;
+    final vault = DeviceAccountVault();
 
     try {
-      await ref.read(authProvider.notifier).login(email, password);
+      if (!widget.addAccountMode && RegExp(r'^\d{4}$').hasMatch(credential)) {
+        final accounts = await vault.accounts();
+        final saved = accounts
+            .where((account) => account.email == email.toLowerCase())
+            .firstOrNull;
+        if (saved == null) {
+          throw const AuthFailure(
+            'No saved account matches this email. Sign in with your password first.',
+          );
+        }
+        final verified = await vault.verifyMpin(saved.userId, credential);
+        if (!verified.allowed) {
+          throw AuthFailure(verified.message ?? 'Incorrect MPIN.');
+        }
+        await ref
+            .read(authProvider.notifier)
+            .activateDeviceAccount(saved.email, saved.password);
+        if (!mounted) return;
+        final auth = ref.read(authProvider);
+        context.go(auth.isTwoFactorPending ? '/2fa' : auth.roleRedirectPath);
+        return;
+      }
+
+      if (widget.addAccountMode) {
+        final prepared = await ref
+            .read(authProvider.notifier)
+            .prepareDeviceAccount(email, credential);
+        final existing = await vault.accounts();
+        if (prepared.requiresTwoFactor) {
+          if (!existing.any((item) => item.email == email.toLowerCase())) {
+            final mpin = await _requestMpin();
+            if (mpin == null) return;
+            await vault.savePendingEnrollment(
+              email: email,
+              password: credential,
+              mpin: mpin,
+            );
+          }
+          ref.read(authProvider.notifier).beginDeviceAccountTwoFactor(email);
+        } else {
+          final user = prepared.user!;
+          if (!existing.any((item) => item.userId == user.id)) {
+            final mpin = await _requestMpin();
+            if (mpin == null) return;
+            await vault.saveAccount(
+              user: user,
+              password: credential,
+              mpin: mpin,
+            );
+          }
+          ref.read(authProvider.notifier).completeDeviceAccountSignIn(user);
+        }
+      } else {
+        final prepared = await ref
+            .read(authProvider.notifier)
+            .prepareDeviceAccount(email, credential);
+        final existing = await vault.accounts();
+        if (prepared.requiresTwoFactor) {
+          if (!existing.any((item) => item.email == email.toLowerCase())) {
+            final mpin = await _requestMpin();
+            if (mpin == null) return;
+            await vault.savePendingEnrollment(
+              email: email,
+              password: credential,
+              mpin: mpin,
+            );
+          }
+          ref.read(authProvider.notifier).beginDeviceAccountTwoFactor(email);
+        } else {
+          final user = prepared.user!;
+          if (!existing.any((item) => item.userId == user.id)) {
+            final mpin = await _requestMpin();
+            if (mpin == null) return;
+            await vault.saveAccount(
+              user: user,
+              password: credential,
+              mpin: mpin,
+            );
+          }
+          ref.read(authProvider.notifier).completeDeviceAccountSignIn(user);
+        }
+      }
       if (!mounted) return;
       final auth = ref.read(authProvider);
       if (auth.isTwoFactorPending) {
+        await _persistRememberedCredentials(email, credential);
+        if (!mounted) return;
         context.go('/2fa');
       } else if (auth.isAuthenticated) {
+        await _persistRememberedCredentials(email, credential);
+        if (!mounted) return;
         context.go(auth.roleRedirectPath);
       } else {
         throw const AuthFailure(
@@ -64,6 +192,91 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  Future<String?> _requestMpin() async {
+    final mpin = TextEditingController();
+    final confirm = TextEditingController();
+    String? error;
+    var obscurePin = true;
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('Set account MPIN'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                    'Create a private 4-digit MPIN for switching to this account.'),
+                const SizedBox(height: 16),
+                TextField(
+                    controller: mpin,
+                    autofocus: true,
+                    obscureText: obscurePin,
+                    keyboardType: TextInputType.number,
+                    maxLength: 4,
+                    decoration: InputDecoration(
+                        labelText: 'MPIN',
+                        suffixIcon: IconButton(
+                            onPressed: () =>
+                                setDialogState(() => obscurePin = !obscurePin),
+                            icon: Icon(obscurePin
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined)))),
+                TextField(
+                    controller: confirm,
+                    obscureText: obscurePin,
+                    keyboardType: TextInputType.number,
+                    maxLength: 4,
+                    decoration: InputDecoration(
+                        labelText: 'Confirm MPIN',
+                        suffixIcon: IconButton(
+                            onPressed: () =>
+                                setDialogState(() => obscurePin = !obscurePin),
+                            icon: Icon(obscurePin
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined)))),
+                if (error != null)
+                  Text(error!,
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.error)),
+              ],
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () {
+                  if (!RegExp(r'^\d{4}$').hasMatch(mpin.text) ||
+                      mpin.text != confirm.text) {
+                    setDialogState(
+                        () => error = 'Enter matching 4-digit MPINs.');
+                    return;
+                  }
+                  Navigator.pop(dialogContext, mpin.text);
+                },
+                child: const Text('Set MPIN'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    mpin.dispose();
+    confirm.dispose();
+    return result;
+  }
+
+  Future<void> _persistRememberedCredentials(
+      String email, String password) async {
+    if (widget.addAccountMode) return;
+    if (_rememberMe) {
+      await _credentialsStore.save(email, password);
+    } else {
+      await _credentialsStore.clear();
+    }
+  }
+
   void _clearErrorOnEdit(String _) {
     ref.read(authProvider.notifier).clearError();
   }
@@ -75,26 +288,54 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final errorMessage = auth.errorMessage;
 
     return AuthCard(
+      onBack: widget.addAccountMode ? () => context.pop() : null,
+      backLabel: widget.addAccountMode ? 'Cancel' : null,
+      backIcon: widget.addAccountMode ? Icons.close_rounded : Icons.arrow_back,
       child: Form(
         key: _formKey,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Logo / Header
-            Center(
-              child: Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: kColorPrimary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
+            // Header actions sit inside the card so they respect the safe
+            // area without being pinned against the physical screen edge.
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: kColorPrimary.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.school_rounded,
+                    size: 36,
+                    color: kColorPrimary,
+                  ),
                 ),
-                child: const Icon(
-                  Icons.school_rounded,
-                  size: 36,
-                  color: kColorPrimary,
-                ),
-              ),
+                if (!widget.addAccountMode)
+                  Positioned(
+                    right: 0,
+                    top: 6,
+                    child: FutureBuilder<List<DeviceAccount>>(
+                      future: _savedAccounts,
+                      builder: (context, snapshot) {
+                        if (snapshot.data?.isNotEmpty != true) {
+                          return const SizedBox.shrink();
+                        }
+                        return IconButton.filledTonal(
+                          key: const ValueKey('saved-accounts-button'),
+                          tooltip: 'Saved accounts',
+                          onPressed: isLoading
+                              ? null
+                              : () => context.push('/saved-accounts'),
+                          icon: const Icon(Icons.manage_accounts_outlined),
+                        );
+                      },
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 16),
             Text(
@@ -153,10 +394,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             TextFormField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
-              autofillHints: const [
-                AutofillHints.username,
-                AutofillHints.email
-              ],
+              autofillHints: widget.addAccountMode
+                  ? const <String>[]
+                  : const [AutofillHints.username, AutofillHints.email],
+              autocorrect: false,
+              enableSuggestions: !widget.addAccountMode,
+              enableIMEPersonalizedLearning: !widget.addAccountMode,
               textInputAction: TextInputAction.next,
               enabled: !isLoading,
               onChanged: _clearErrorOnEdit,
@@ -186,13 +429,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             TextFormField(
               controller: _passwordController,
               obscureText: _obscurePassword,
-              autofillHints: const [AutofillHints.password],
+              autofillHints: widget.addAccountMode
+                  ? const <String>[]
+                  : const [AutofillHints.password],
+              autocorrect: false,
+              enableSuggestions: false,
+              enableIMEPersonalizedLearning: !widget.addAccountMode,
               textInputAction: TextInputAction.done,
               enabled: !isLoading,
               onChanged: _clearErrorOnEdit,
               onFieldSubmitted: (_) => _submitLogin(),
               decoration: InputDecoration(
-                labelText: 'Password',
+                labelText: widget.addAccountMode
+                    ? 'Password'
+                    : 'Password or 4-digit MPIN',
                 prefixIcon: const Icon(Icons.lock_outline_rounded),
                 suffixIcon: IconButton(
                   icon: Icon(
@@ -217,25 +467,81 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) {
-                  return 'Please enter your password';
+                  return 'Please enter your password or MPIN';
                 }
                 return null;
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
 
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed:
-                    isLoading ? null : () => context.push('/forgot-password'),
-                child: const Text(
-                  'Forgot password?',
-                  style: TextStyle(fontSize: 13),
+            if (!widget.addAccountMode)
+              Row(
+                children: [
+                  Checkbox(
+                    value: _rememberMe,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                    onChanged: isLoading || _loadingRememberedCredentials
+                        ? null
+                        : (value) async {
+                            setState(() => _rememberMe = value ?? false);
+                            if (!_rememberMe) {
+                              await _credentialsStore.clear();
+                            }
+                          },
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: InkWell(
+                      onTap: isLoading || _loadingRememberedCredentials
+                          ? null
+                          : () async {
+                              setState(() => _rememberMe = !_rememberMe);
+                              if (!_rememberMe) {
+                                await _credentialsStore.clear();
+                              }
+                            },
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 10),
+                        child: Text(
+                          'Remember me',
+                          style: TextStyle(fontSize: 13),
+                        ),
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: isLoading
+                        ? null
+                        : () => context.push('/forgot-password'),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 10,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      'Forgot password?',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ],
+              )
+            else
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed:
+                      isLoading ? null : () => context.push('/forgot-password'),
+                  child: const Text(
+                    'Forgot password?',
+                    style: TextStyle(fontSize: 13),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
             // Sign In Button
             SizedBox(

@@ -571,8 +571,18 @@ void main() {
 
     testWidgets('renders workspace daily and weekly timetable records',
         (tester) async {
+      final body = workspaceJson();
+      final classes = body['classes']! as List<dynamic>;
+      final classBody = classes.single as Map<String, dynamic>;
+      final schedule = classBody['schedule']! as List<dynamic>;
+      schedule.add({
+        'day': 'Sun',
+        'startTime': '13:00',
+        'endTime': '14:00',
+        'subject': 'Geometry workshop',
+      });
       final repository = _FakeRepository(
-        workspaces: [TeacherWorkspace.fromJson(workspaceJson())],
+        workspaces: [TeacherWorkspace.fromJson(body)],
       );
       await _pumpWithRepository(
         tester,
@@ -587,11 +597,10 @@ void main() {
 
       await tester.tap(find.text('Sun'));
       await tester.pumpAndSettle();
-      expect(find.text('Grade 8 - A • Baneshwor'), findsOneWidget);
-      expect(
-        find.text('Sun 09:00-10:00, Wednesday 11:00-12:00'),
-        findsOneWidget,
-      );
+      expect(find.text('Grade 8 - A • Baneshwor'), findsNWidgets(2));
+      expect(find.text('09:00-10:00'), findsOneWidget);
+      expect(find.text('13:00-14:00'), findsOneWidget);
+      expect(find.text('Geometry workshop'), findsOneWidget);
 
       await tester.tap(find.text('Mon'));
       await tester.pumpAndSettle();

@@ -137,7 +137,8 @@ class _TodayList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (today.isEmpty) {
+    final rows = _todayRows(today);
+    if (rows.isEmpty) {
       return const TeacherEmptyView(
         icon: Icons.event_available_rounded,
         title: 'No classes today',
@@ -146,15 +147,18 @@ class _TodayList extends StatelessWidget {
     }
     return ListView.separated(
       padding: const EdgeInsets.all(20),
-      itemCount: today.length,
+      itemCount: rows.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
-        final item = today[index];
+        final row = rows[index];
+        final item = row.item;
         return _TimetableCard(
-          title: item.courseName,
+          title: row.slot?.subject?.trim().isNotEmpty == true
+              ? row.slot!.subject!
+              : item.courseName,
           subtitle:
               '${item.className}${item.branchName == null ? '' : ' • ${item.branchName}'}',
-          meta: item.scheduleLabel ?? item.status ?? '',
+          meta: row.slot?.timeLabel ?? item.scheduleLabel ?? item.status ?? '',
           trailing:
               item.dailyUpdateSubmitted ? 'Update sent' : 'Update pending',
         );
@@ -171,7 +175,7 @@ class _DayList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sessions = classes.where((item) => item.isScheduledOn(day)).toList();
+    final sessions = _dayRows(day, classes);
     if (sessions.isEmpty) {
       return TeacherEmptyView(
         icon: Icons.event_available_rounded,
@@ -184,18 +188,72 @@ class _DayList extends StatelessWidget {
       itemCount: sessions.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
-        final session = sessions[index];
+        final row = sessions[index];
+        final session = row.item;
         return _TimetableCard(
-          title: session.subject,
+          title: row.slot.subject?.trim().isNotEmpty == true
+              ? row.slot.subject!
+              : session.subject,
           subtitle:
               '${session.name}${session.branch == null ? '' : ' • ${session.branch!.name}'}',
-          meta: session.scheduleLabel ?? '',
+          meta: row.slot.timeLabel,
           trailing: '${session.studentCount} students',
         );
       },
     );
   }
 }
+
+class _TodayRow {
+  const _TodayRow(this.item, this.slot);
+
+  final TeacherTodayClass item;
+  final TeacherScheduleSlot? slot;
+}
+
+class _DayRow {
+  const _DayRow(this.item, this.slot);
+
+  final TeacherClassInfo item;
+  final TeacherScheduleSlot slot;
+}
+
+List<_TodayRow> _todayRows(List<TeacherTodayClass> items) {
+  final day = _teacherDayKey(DateTime.now().weekday);
+  final rows = <_TodayRow>[];
+  for (final item in items) {
+    final matching = item.slots.where((slot) => slot.matchesDay(day)).toList();
+    if (matching.isEmpty) {
+      rows.add(_TodayRow(item, null));
+    } else {
+      rows.addAll(matching.map((slot) => _TodayRow(item, slot)));
+    }
+  }
+  rows.sort((a, b) => _compareSlotTimes(a.slot, b.slot));
+  return rows;
+}
+
+List<_DayRow> _dayRows(String day, List<TeacherClassInfo> classes) {
+  final rows = <_DayRow>[
+    for (final item in classes)
+      for (final slot in item.slots)
+        if (slot.matchesDay(day)) _DayRow(item, slot),
+  ];
+  rows.sort((a, b) {
+    final byTime = _compareSlotTimes(a.slot, b.slot);
+    return byTime != 0 ? byTime : a.item.subject.compareTo(b.item.subject);
+  });
+  return rows;
+}
+
+int _compareSlotTimes(TeacherScheduleSlot? a, TeacherScheduleSlot? b) {
+  final byStart = (a?.start ?? '').compareTo(b?.start ?? '');
+  if (byStart != 0) return byStart;
+  return (a?.end ?? '').compareTo(b?.end ?? '');
+}
+
+String _teacherDayKey(int weekday) =>
+    const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][weekday - 1];
 
 class _TimetableCard extends StatelessWidget {
   const _TimetableCard({

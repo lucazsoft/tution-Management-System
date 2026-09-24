@@ -14,20 +14,21 @@ void main() {
   GoogleFonts.config.allowRuntimeFetching = false;
   group('core palette (single source of truth)', () {
     test('kColor values are pinned', () {
-      expect(kColorPrimary, const Color(0xFF0F4C8A));
-      expect(kColorPrimaryLight, const Color(0xFF1B5FA7));
-      expect(kColorAccent, const Color(0xFFF39C12));
-      expect(kColorAccentHover, const Color(0xFFF7B733));
+      expect(kColorPrimary, const Color(0xFF1560BD));
+      expect(kColorPrimaryLight, const Color(0xFF2F6FED));
+      expect(kColorPrimaryDark, const Color(0xFF002D72));
+      expect(kColorAccent, const Color(0xFFFFBC3B));
+      expect(kColorAccentHover, const Color(0xFFFFCB63));
       expect(kColorBg, const Color(0xFFFFFFFF));
       expect(kColorSurface, const Color(0xFFF5F7FA));
-      expect(kColorText, const Color(0xFF2C3E50));
-      expect(kColorMutedText, const Color(0x9E2C3E50));
-      expect(kColorSuccess, const Color(0xFF2E9E5B));
+      expect(kColorText, const Color(0xFF1B1F3B));
+      expect(kColorMutedText, const Color(0xFF475569));
+      expect(kColorSuccess, const Color(0xFF00AB66));
       expect(kColorWarning, const Color(0xFFE08E00));
-      expect(kColorError, const Color(0xFFD64545));
-      expect(kColorInfo, const Color(0xFF1AA4A1));
-      expect(kColorDivider, const Color(0xFFE5E9F0));
-      expect(kColorBorder, const Color(0xFFD7DFEA));
+      expect(kColorError, const Color(0xFFE63946));
+      expect(kColorInfo, const Color(0xFF1560BD));
+      expect(kColorDivider, const Color(0xFFE2E8F0));
+      expect(kColorBorder, const Color(0xFFDCE3ED));
     });
   });
 
@@ -70,14 +71,14 @@ void main() {
     });
   });
 
-  group('global theme regression (zero visual change)', () {
+  group('global web-aligned theme regression', () {
     testWidgets('card/input/checkbox radii source shared tokens', (_) async {
       final theme = buildTmsTheme();
       expect(_cardRadius(theme), TmsRadius.cardLg);
-      expect(_cardRadius(theme), 20.0);
+      expect(_cardRadius(theme), 16.0);
       final border = theme.inputDecorationTheme.border! as OutlineInputBorder;
       expect(border.borderRadius.topLeft.x, TmsRadius.input);
-      expect(border.borderRadius.topLeft.x, 16.0);
+      expect(border.borderRadius.topLeft.x, 7.0);
     });
 
     testWidgets('palette wires core colors', (_) async {
@@ -88,14 +89,14 @@ void main() {
     });
   });
 
-  group('student theme regression (zero visual change)', () {
+  group('student web-aligned theme regression', () {
     testWidgets('student card radius stays 12 via shared token', (_) async {
       final theme = buildStudentTheme(ThemeData.light());
       expect(_cardRadius(theme), TmsRadius.card);
       expect(_cardRadius(theme), 12.0);
     });
 
-    testWidgets('body/label/nav text uses Outfit, display keeps Fraunces',
+    testWidgets('body/label/nav text uses Roboto, display keeps Fraunces',
         (_) async {
       final theme = buildStudentTheme(ThemeData.light());
       final text = theme.textTheme;
@@ -106,7 +107,7 @@ void main() {
         text.bodySmall,
         text.labelLarge,
       ]) {
-        expect(style?.fontFamily, contains('Outfit'));
+        expect(style?.fontFamily, contains('Roboto'));
       }
       expect(text.displaySmall?.fontFamily, contains('Fraunces'));
       final families = <String?>[
@@ -119,7 +120,7 @@ void main() {
         text.bodySmall?.fontFamily,
         text.labelLarge?.fontFamily,
       ];
-      expect(families.any((f) => f?.contains('Roboto') ?? false), isFalse);
+      expect(families.any((f) => f?.contains('Roboto') ?? false), isTrue);
     });
 
     testWidgets('nav indicator tint and surface are unchanged', (_) async {
