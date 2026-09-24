@@ -47,6 +47,7 @@ class BranchPortalRepository {
   static const String pettyCashPath = '/api/finances/petty-cash';
   static String leaveApprovePath(String leaveId) =>
       '/api/leaves/approve/$leaveId';
+
   /// Consolidated branch dashboard. When [branchId] is empty the server
   /// falls back to the caller's first managed branch.
   Future<BranchDashboard> fetchDashboard({

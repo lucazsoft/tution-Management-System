@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/core/utils/formatters.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_models.dart';
+import 'package:tms_mobile/core/theme/app_tokens.dart';
 
 class GeoStatusIndicator extends StatelessWidget {
   const GeoStatusIndicator({
@@ -23,7 +24,7 @@ class GeoStatusIndicator extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: data.background,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(TmsRadius.r20),
         ),
         child: Row(
           children: [

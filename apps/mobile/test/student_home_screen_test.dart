@@ -119,8 +119,7 @@ void main() {
     testWidgets('shows loading indicator while the portal loads',
         (tester) async {
       final fake = _FakePortalRepository()
-        ..portalToReturn =
-            StudentPortal.fromJson(_portalJson());
+        ..portalToReturn = StudentPortal.fromJson(_portalJson());
       await tester.pumpWidget(
         ProviderScope(
           overrides: [

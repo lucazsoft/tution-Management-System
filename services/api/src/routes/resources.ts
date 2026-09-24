@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import prisma from '../utils/db';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware } from '../middleware/auth';
-import { MockPushNotificationService } from '../utils/notifications';
+import { PushNotificationService } from '../services/push-notification';
 import { canAccessBranch, hasBranchPermission, hasRole, isTenantAdmin } from '../utils/access-control';
 
 const router = Router();
@@ -81,8 +81,17 @@ router.patch('/inventory/:itemId', authMiddleware, async (req: TenantRequest, re
   });
   let notificationDelivered = true;
   if (assignedStaffId && result.task) {
-    try { await MockPushNotificationService.sendPush(assignedStaffId, 'New maintenance task assigned', `${current.itemName ?? 'An item'} at ${item.classroomId} needs attention. ${notes || ''}`); }
-    catch { notificationDelivered = false; }
+    try {
+      const delivery = await PushNotificationService.sendPush(
+        req.tenantId!,
+        assignedStaffId,
+        'New maintenance task assigned',
+        `${current.itemName ?? 'An item'} at ${item.classroomId} needs attention. ${notes || ''}`,
+      );
+      notificationDelivered = delivery.success;
+    } catch {
+      notificationDelivered = false;
+    }
   }
   return res.json({ message: assignedStaffId && result.task ? 'Item updated and janitor notified.' : 'Item status updated.', item: result.updated, task: result.task, notificationDelivered });
 });
@@ -145,11 +154,13 @@ router.post(
       let notificationDelivered = true;
       if (maintenanceTask && assignedStaffId) {
         try {
-          await MockPushNotificationService.sendPush(
+          const delivery = await PushNotificationService.sendPush(
+            req.tenantId!,
             assignedStaffId,
             'New Maintenance Task Auto-Assigned',
             `Room ${classroomId} requires check. Reason: ${remarks}`
           );
+          notificationDelivered = delivery.success;
         } catch {
           // The records have committed. Do not invite a duplicate POST by
           // reporting a database failure when only notification failed.

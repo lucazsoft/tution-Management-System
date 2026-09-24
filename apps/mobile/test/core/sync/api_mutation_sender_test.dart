@@ -81,6 +81,18 @@ void main() {
       expect(captured?.data, {'title': 'Fix tap'});
     });
 
+    test('replay sends the queue idempotency key as Idempotency-Key header',
+        () async {
+      RequestOptions? captured;
+      final send = buildApiMutationSender(
+        dio: stubDio(onRequest: (options) => captured = options),
+      );
+
+      await send(testOp());
+
+      expect(captured?.headers['Idempotency-Key'], 'k1');
+    });
+
     test('bodyless op sends null data', () async {
       RequestOptions? captured;
       final send = buildApiMutationSender(

@@ -70,8 +70,7 @@ class StudentCalendarState extends ViewModelState {
 class StudentCalendarViewModel extends BaseViewModel<StudentCalendarState> {
   StudentCalendarViewModel({
     StudentIdCalendarNotificationsRepository? repository,
-  })  : _repository =
-            repository ?? StudentIdCalendarNotificationsRepository(),
+  })  : _repository = repository ?? StudentIdCalendarNotificationsRepository(),
         super(const StudentCalendarState(isLoading: true)) {
     load();
   }

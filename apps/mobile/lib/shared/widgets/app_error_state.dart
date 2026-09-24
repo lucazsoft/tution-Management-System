@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../app/theme/app_colors.dart';
+import 'package:tms_mobile/core/theme/app_colors.dart';
 
 class AppErrorState extends StatelessWidget {
   const AppErrorState({
@@ -15,7 +15,7 @@ class AppErrorState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: TmsAppColors.tint(TmsAppColors.error, 0.08),
+      color: kColorError.withValues(alpha: 0.08),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -24,14 +24,13 @@ class AppErrorState extends StatelessWidget {
           children: <Widget>[
             Row(
               children: <Widget>[
-                const Icon(Icons.error_outline_rounded,
-                    color: TmsAppColors.error),
+                const Icon(Icons.error_outline_rounded, color: kColorError),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     message,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: TmsAppColors.error,
+                          color: kColorError,
                           fontWeight: FontWeight.w600,
                         ),
                   ),
@@ -42,8 +41,8 @@ class AppErrorState extends StatelessWidget {
             OutlinedButton(
               onPressed: onRetry,
               style: OutlinedButton.styleFrom(
-                foregroundColor: TmsAppColors.error,
-                side: const BorderSide(color: TmsAppColors.error),
+                foregroundColor: kColorError,
+                side: const BorderSide(color: kColorError),
               ),
               child: const Text('Retry'),
             ),

@@ -23,7 +23,8 @@ import '../models/student_portal_models.dart';
 /// case-insensitive and tolerant of `-`, `_` and spaces. Unknown values fall
 /// back to [StudentCourseType.regular] rather than throwing.
 StudentCourseType parseCourseType(String? raw) {
-  final normalized = (raw ?? '').trim().toLowerCase().replaceAll(RegExp(r'[-_\s]+'), '_');
+  final normalized =
+      (raw ?? '').trim().toLowerCase().replaceAll(RegExp(r'[-_\s]+'), '_');
   return switch (normalized) {
     'music' => StudentCourseType.music,
     'short_term' => StudentCourseType.shortTerm,
@@ -169,8 +170,7 @@ class PortalHomework {
     required this.completed,
   });
 
-  factory PortalHomework.fromJson(Map<String, dynamic> json) =>
-      PortalHomework(
+  factory PortalHomework.fromJson(Map<String, dynamic> json) => PortalHomework(
         id: _str(json['id'], ''),
         subject: _str(json['subject'], ''),
         title: _str(json['title'], ''),
@@ -463,8 +463,7 @@ class StudentPortal {
       .where((invoice) => invoice.isOverdue)
       .fold<double>(0, (sum, invoice) => sum + invoice.netPayable);
 
-  int get unreadCount =>
-      notifications.where((notice) => notice.unread).length;
+  int get unreadCount => notifications.where((notice) => notice.unread).length;
 
   List<PortalHomework> get pendingHomework =>
       homework.where((item) => !item.completed).toList();
@@ -504,8 +503,7 @@ class StudentClassSchedule {
       slots: [
         if (rawSlots is List)
           for (final slot in rawSlots)
-            if (slot is Map<String, dynamic>)
-              RawScheduleSlot.fromJson(slot),
+            if (slot is Map<String, dynamic>) RawScheduleSlot.fromJson(slot),
       ],
     );
   }

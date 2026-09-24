@@ -32,3 +32,6 @@ Runner/GeneratedPluginRegistrant.*
 !default.mode2v3
 !default.pbxuser
 !default.perspectivev3
+
+# Release export options with the real Team ID — NEVER commit.
+ExportOptions.release.plist

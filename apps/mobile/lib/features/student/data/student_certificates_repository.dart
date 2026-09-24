@@ -46,6 +46,36 @@ class ApiStudentCertificate {
       );
 }
 
+/// Max accepted certificate download size (10 MiB).
+const kCertificateMaxBytes = 10 * 1024 * 1024;
+
+/// Accepted MIME type for certificate downloads.
+const kCertificateAllowedMime = 'application/pdf';
+
+/// Sanitizes a server-provided certificate filename for local storage.
+///
+/// Strips path separators (traversal), keeps a safe charset, and enforces
+/// a `.pdf` extension. Never returns a value containing `/` or `\`.
+String sanitizeCertificateFileName(String raw, {String fallbackId = ''}) {
+  var base = raw.split('/').last.split('\\').last.trim();
+  base = base.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+  base = base.replaceAll(RegExp(r'_+'), '_');
+  base = base.replaceAll(RegExp(r'^\.+'), '');
+  if (base.isEmpty || base == '.pdf') {
+    final safeId = fallbackId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_').trim();
+    base = '${safeId.isEmpty ? 'certificate' : safeId}.pdf';
+  }
+  if (!base.toLowerCase().endsWith('.pdf')) {
+    final dot = base.lastIndexOf('.');
+    final stem = dot > 0 ? base.substring(0, dot) : base;
+    base = '$stem.pdf';
+  }
+  if (base.length > 100) {
+    base = '${base.substring(0, 96)}.pdf';
+  }
+  return base;
+}
+
 /// Repository for the student certificate list + authenticated PDF download.
 class StudentCertificatesRepository {
   StudentCertificatesRepository({Dio? dio, Directory? saveDir})
@@ -104,12 +134,36 @@ class StudentCertificatesRepository {
           message: 'The certificate file came back empty. Try again.',
         );
       }
+      final contentType =
+          res.headers.value('content-type')?.toLowerCase() ?? '';
+      if (contentType.isNotEmpty &&
+          !contentType.contains(kCertificateAllowedMime)) {
+        throw ApiException(
+          kind: ApiErrorKind.server,
+          message:
+              'The certificate file came back as $contentType instead of a PDF.',
+        );
+      }
+      if (bytes.length > kCertificateMaxBytes) {
+        throw const ApiException(
+          kind: ApiErrorKind.validation,
+          message: 'The certificate file is too large to save.',
+        );
+      }
       final dir = _saveDir ?? await getTemporaryDirectory();
-      final safeName = certificate.fileName.isNotEmpty
-          ? certificate.fileName
-          : '${certificate.id}.pdf';
+      final safeName = sanitizeCertificateFileName(
+        certificate.fileName,
+        fallbackId: certificate.id,
+      );
       final file = File('${dir.path}/$safeName');
-      await file.writeAsBytes(bytes, flush: true);
+      try {
+        await file.writeAsBytes(bytes, flush: true);
+      } catch (_) {
+        try {
+          if (await file.exists()) await file.delete();
+        } catch (_) {}
+        rethrow;
+      }
       return file;
     } on DioException catch (e) {
       throw ApiException.from(e);

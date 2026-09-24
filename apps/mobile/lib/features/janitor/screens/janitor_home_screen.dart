@@ -18,6 +18,7 @@ import 'package:tms_mobile/core/theme/app_colors.dart';
 import '../models/janitor_task.dart';
 import '../viewmodels/janitor_portal_viewmodel.dart';
 import '../widgets/janitor_task_card.dart';
+import 'package:tms_mobile/core/theme/app_tokens.dart';
 
 enum JanitorTaskFilter { today, upcoming, completed }
 
@@ -263,7 +264,7 @@ class _WelcomeCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: kColorPrimary,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(TmsRadius.r20),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

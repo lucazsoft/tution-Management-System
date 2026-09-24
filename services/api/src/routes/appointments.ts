@@ -4,7 +4,8 @@ import prisma from '../utils/db';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware } from '../middleware/auth';
 import { getSmsSender } from '../utils/sms';
-import { getPushSender } from '../utils/push';
+import { PushNotificationService } from '../services/push-notification';
+import { recordNotification } from '../services/notification-records';
 import { canAccessBranch, isTenantAdmin, managedBranchIds } from '../utils/access-control';
 
 const router = Router();
@@ -20,7 +21,7 @@ async function linkedStudent(parentUserId: string, tenantId: string, studentId: 
   });
 }
 
-async function notifyAppointmentUsers(userIds: string[], title: string, message: string) {
+async function notifyAppointmentUsers(tenantId: string, userIds: string[], title: string, message: string) {
   const uniqueIds = [...new Set(userIds)];
   const users = await prisma.user.findMany({
     where: { id: { in: uniqueIds } },
@@ -28,7 +29,15 @@ async function notifyAppointmentUsers(userIds: string[], title: string, message:
   });
   const smsSender = getSmsSender();
   const results = await Promise.all(users.flatMap((user) => [
-    getPushSender().sendPush(user.id, title, message),
+    PushNotificationService.sendPush(tenantId, user.id, title, message),
+    recordNotification(prisma, {
+      tenantId,
+      userId: user.id,
+      category: 'GENERAL',
+      title,
+      body: message,
+      destination: 'appointments',
+    }).then(() => ({ success: true })),
     ...(user.phone ? [smsSender.sendSms(user.phone, `${title}: ${message}`)] : []),
   ]));
   return results.every((result) => result.success);
@@ -101,7 +110,7 @@ router.post('/request', authMiddleware, async (req: TenantRequest, res: Response
       where: { tenantId: req.tenantId!, status: 'ACTIVE', userRoles: { some: { branchId: { in: branchIds }, role: { name: 'Branch Admin' } } } },
       select: { id: true },
     });
-    const notificationDelivered = await notifyAppointmentUsers([...uniqueParticipants, ...branchAdmins.map((admin) => admin.id)], 'Appointment requested', `A parent requested an appointment about ${student.user.firstName}.`);
+    const notificationDelivered = await notifyAppointmentUsers(req.tenantId!, [...uniqueParticipants, ...branchAdmins.map((admin) => admin.id)], 'Appointment requested', `A parent requested an appointment about ${student.user.firstName}.`);
     return res.status(201).json({ message: 'Appointment requested.', appointment, bookingWindowHours: tenant.appointmentWindowHours, notificationDelivered });
   } catch (error: any) {
     return res.status(500).json({ error: 'Failed to request appointment.', details: error.message });
@@ -114,7 +123,7 @@ router.post('/respond/:appointmentId', authMiddleware, async (req: TenantRequest
     let notificationDelivered = true;
     if (result.notify) {
       try {
-        notificationDelivered = await notifyAppointmentUsers([result.requestedById], 'Appointment updated', `Appointment status: ${result.appointment.status}.`);
+        notificationDelivered = await notifyAppointmentUsers(req.tenantId!, [result.requestedById], 'Appointment updated', `Appointment status: ${result.appointment.status}.`);
       } catch {
         notificationDelivered = false;
       }
@@ -156,13 +165,13 @@ router.post('/parent-respond/:appointmentId', authMiddleware, async (req: Tenant
         where: { id: linkedAlternative.id },
         data: { responseRemarks: remarks || 'Parent accepted the proposed time.' },
       });
-      await notifyAppointmentUsers((Array.isArray(updated.participantIds) ? updated.participantIds : [updated.teacherId]).filter((id): id is string => typeof id === 'string'), 'Alternative time accepted', 'The parent accepted the proposed appointment time.');
+      await notifyAppointmentUsers(req.tenantId!, (Array.isArray(updated.participantIds) ? updated.participantIds : [updated.teacherId]).filter((id): id is string => typeof id === 'string'), 'Alternative time accepted', 'The parent accepted the proposed appointment time.');
       return res.json({ message: 'Alternative time accepted. Waiting for final participant approval.', appointment: updated });
     }
     if (action === 'REJECT_ALTERNATIVE') {
       if (!linkedAlternative || appointment.status !== 'ALTERNATIVE_PROPOSED') return res.status(409).json({ error: 'There is no alternative time to reject.' });
       const updated = await prisma.appointment.update({ where: { id: linkedAlternative.id }, data: { status: 'REJECTED', responseRemarks: remarks || 'Parent rejected the proposed time.' } });
-      await notifyAppointmentUsers((Array.isArray(updated.participantIds) ? updated.participantIds : [updated.teacherId]).filter((id): id is string => typeof id === 'string'), 'Alternative time rejected', 'The parent rejected the proposed appointment time.');
+      await notifyAppointmentUsers(req.tenantId!, (Array.isArray(updated.participantIds) ? updated.participantIds : [updated.teacherId]).filter((id): id is string => typeof id === 'string'), 'Alternative time rejected', 'The parent rejected the proposed appointment time.');
       return res.json({ message: 'Alternative time rejected.', appointment: updated });
     }
     const alternativeDate = new Date(req.body?.alternativeSlot);
@@ -181,7 +190,7 @@ router.post('/parent-respond/:appointmentId', authMiddleware, async (req: Tenant
         remarks: appointment.remarks, responseRemarks: remarks || 'Parent proposed another time.', originalAppointmentId: rootId,
       } });
     });
-    await notifyAppointmentUsers(participants, 'New appointment time proposed', 'The parent proposed another appointment time.');
+    await notifyAppointmentUsers(req.tenantId!, participants, 'New appointment time proposed', 'The parent proposed another appointment time.');
     return res.status(201).json({ message: 'Another time proposed.', appointment: created });
   } catch (error: any) {
     return res.status(500).json({ error: 'Failed to update appointment negotiation.', details: error.message });

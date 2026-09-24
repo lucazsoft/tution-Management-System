@@ -21,6 +21,7 @@ export function BranchClassesWorkspace() {
   const [people, setPeople] = useState<Person[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [showArchived, setShowArchived] = useState(false);
+  const [filter, setFilter] = useState('');
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [eligibleLoading, setEligibleLoading] = useState(false);
@@ -39,7 +40,10 @@ export function BranchClassesWorkspace() {
   const dependencyController = useRef<AbortController | null>(null);
 
   const selected = classes.find((item) => item.id === selectedId);
-  const visibleClasses = classes.filter((item) => showArchived || !item.archivedAt);
+  const normalizedFilter = filter.trim().toLowerCase();
+  const visibleClasses = classes.filter((item) => (showArchived || !item.archivedAt)
+    && (!normalizedFilter || [item.name, item.courseName, item.branchName, item.gradeName]
+      .some((field) => (field || '').toLowerCase().includes(normalizedFilter))));
   const editDirty = Boolean(selected && (edit.name.trim() !== selected.name || edit.teacherId !== (selected.teacherId || '')));
   const teachers = people.filter((person) => person.roles.some((role) => role.role === 'Teacher' && role.branchId === create.branchId));
   const selectedTeachers = people.filter((person) => person.roles.some((role) => role.role === 'Teacher' && role.branchId === selected?.branchId));
@@ -104,7 +108,7 @@ export function BranchClassesWorkspace() {
 
   return <main className="branch-classes">
     <header><h1>Branch classes</h1><p>Create classes, manage rosters, and preserve their academic history.</p></header>
-    <div className="branch-classes__toolbar"><Button onClick={() => { setCreating(true); setSelectedId(''); }}>Create class</Button><a href="/branch/timetable">Open timetable</a><label><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />Show archived</label></div>
+    <div className="branch-classes__toolbar"><Button onClick={() => { setCreating(true); setSelectedId(''); }}>Create class</Button><a href="/branch/timetable">Open timetable</a><label className="branch-classes__filter">Filter by branch or class<input type="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="e.g. branch-123" aria-label="Filter classes by branch or class name" /></label><label><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />Show archived</label></div>
     <Feedback error={error} message={message} onRetry={() => void load(selectedId)} />
     {creating ? <CreateClassForm value={create} setValue={setCreate} branches={branches} grades={grades} teachers={teachers} sourceClasses={sourceClasses} sourceStudents={sourceStudents} busy={operation === 'create'} onSubmit={submitCreate} onCancel={() => setCreating(false)} toggleStudent={(id) => setCreate((current) => ({ ...current, studentIds: toggle(current.studentIds, id) }))} /> : null}
     {loading ? <ClassSkeleton /> : !creating ? <div className="branch-classes__grid">

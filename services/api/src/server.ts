@@ -34,6 +34,8 @@ import portalNotificationsRouter from './routes/portal-notifications';
 import receptionRouter from './routes/reception';
 import branchAdminRouter from './routes/branch-admin';
 import tenantAdminRouter from './routes/tenant-admin';
+import notificationsRouter from './routes/notifications';
+import socialRouter from './routes/social';
 
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from './utils/auth';
@@ -155,6 +157,8 @@ app.use('/api/portal-notifications', portalNotificationsRouter);
 app.use('/api/reception', receptionRouter);
 app.use('/api/branch-admin', branchAdminRouter);
 app.use('/api/tenant-admin', tenantAdminRouter);
+app.use('/api/notifications', notificationsRouter);
+app.use('/api/social', socialRouter);
 
 // Integration-only probe for the central error boundary. It is never mounted
 // in local development or production.

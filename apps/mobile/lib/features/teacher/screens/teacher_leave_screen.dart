@@ -15,6 +15,7 @@ import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_portal_dto.dart';
 import 'package:tms_mobile/features/teacher/viewmodels/teacher_leave_viewmodel.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_record_states.dart';
+import 'package:tms_mobile/core/theme/app_tokens.dart';
 
 const _leaveTypes = [
   'CASUAL',
@@ -117,7 +118,8 @@ class TeacherLeaveScreen extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(TmsRadius.r20)),
       ),
       builder: (ctx) {
         return StatefulBuilder(

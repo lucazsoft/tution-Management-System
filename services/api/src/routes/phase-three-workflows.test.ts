@@ -7,7 +7,7 @@ import { encryptDeliveryPayload, decryptDeliveryPayload } from '../utils/deliver
 process.env.ADMISSION_DELIVERY_SECRET = 'phase-three-test-key-at-least-thirty-two-characters';
 const db = prisma as any;
 let state: any = { appointment: null, alternatives: [], logs: [], tasks: [], jobs: [], users: {}, admissionStatus: 'READY_FOR_LOGIN' };
-let failTask = false, failAlternative = false, failCompletion = false, janitor = true, failPush = false;
+let failTask = false, failAlternative = false, failCompletion = false, janitor = true, failPush = false, pushDeliverySuccess = true;
 const sent: string[] = [];
 let accountCount = 1;
 let tail = Promise.resolve();
@@ -56,8 +56,8 @@ const authPath = require.resolve('../utils/auth');
 require.cache[authPath] = { id: authPath, filename: authPath, loaded: true, exports: { auth: { api: { getSession: async () => ({ user: {
   id: 'admin', tenantId: 'tenant', roles: [{ roleName: 'Tenant Admin', branchId: null, permissions: [] }],
 } }) } } } } as NodeModule;
-const notifications = require('../utils/notifications');
-notifications.MockPushNotificationService.sendPush = async () => { if (failPush) throw new Error('injected push failure'); return { success: true }; };
+const notifications = require('../services/push-notification');
+notifications.PushNotificationService.sendPush = async () => { if (failPush) throw new Error('injected push failure'); return { success: pushDeliverySuccess }; };
 const resources = require('./resources').default;
 const smsPath = require.resolve('../utils/sms');
 require.cache[smsPath] = { id: smsPath, filename: smsPath, loaded: true, exports: { default: {
@@ -139,6 +139,12 @@ async function main() {
   const logged = await log(true);
   assert.equal(logged.status, 201); assert.equal(logged.payload.notificationDelivered, false);
   assert.equal(state.logs.length, 2); assert.equal(state.tasks.length, 1);
+  failPush = false; pushDeliverySuccess = false;
+  const providerRejected = await log(true);
+  assert.equal(providerRejected.status, 201);
+  assert.equal(providerRejected.payload.notificationDelivered, false);
+  assert.equal(state.logs.length, 3); assert.equal(state.tasks.length, 2);
+  pushDeliverySuccess = true;
   console.log('PASS maintenance atomicity, informational logs, and post-commit notification failure');
 
   const encrypted = encryptDeliveryPayload('job', { phone: 'phone', message: 'secret-password' });

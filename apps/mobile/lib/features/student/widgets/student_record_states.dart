@@ -15,12 +15,12 @@ class StudentLoadingView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(StudentSpace.lg),
+        padding: const EdgeInsets.all(TmsSpace.lg),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const CircularProgressIndicator(),
-            const SizedBox(height: StudentSpace.md),
+            const SizedBox(height: TmsSpace.md),
             Text(message, style: Theme.of(context).textTheme.bodyMedium),
           ],
         ),
@@ -45,15 +45,15 @@ class StudentEmptyView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(StudentSpace.lg),
+        padding: const EdgeInsets.all(TmsSpace.lg),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon,
                 size: 48, color: StudentColors.mutedText.withValues(alpha: .6)),
-            const SizedBox(height: StudentSpace.md),
+            const SizedBox(height: TmsSpace.md),
             Text(title, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: StudentSpace.xs),
+            const SizedBox(height: TmsSpace.xs),
             Text(
               message,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -88,14 +88,14 @@ class StudentErrorView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(StudentSpace.lg),
+        padding: const EdgeInsets.all(TmsSpace.lg),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 48, color: StudentColors.error),
-            const SizedBox(height: StudentSpace.md),
+            const SizedBox(height: TmsSpace.md),
             Text(title, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: StudentSpace.xs),
+            const SizedBox(height: TmsSpace.xs),
             Text(
               message,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -103,7 +103,7 @@ class StudentErrorView extends StatelessWidget {
                   ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: StudentSpace.md),
+            const SizedBox(height: TmsSpace.md),
             FilledButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded),
@@ -133,7 +133,7 @@ class StudentLoadMoreFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!hasMore) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: StudentSpace.md),
+        padding: const EdgeInsets.symmetric(vertical: TmsSpace.md),
         child: Center(
           child: Text(
             'You are all caught up.',
@@ -145,7 +145,7 @@ class StudentLoadMoreFooter extends StatelessWidget {
       );
     }
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: StudentSpace.sm),
+      padding: const EdgeInsets.symmetric(vertical: TmsSpace.sm),
       child: Center(
         child: OutlinedButton.icon(
           onPressed: onLoadMore,

@@ -16,7 +16,7 @@ class PasswordStrengthBar extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: BorderRadius.circular(TmsRadius.rFull),
           child: LinearProgressIndicator(
             value: strength,
             minHeight: 8,

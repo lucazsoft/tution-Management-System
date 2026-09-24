@@ -43,13 +43,20 @@ class MockAuthService {
     String role = 'TEACHER';
     if (normalizedEmail.contains('student')) {
       role = 'STUDENT';
-    } else if (normalizedEmail.contains('parent')) role = 'PARENT';
-    else if (normalizedEmail.contains('branch')) role = 'BRANCH_ADMIN';
-    else if (normalizedEmail.contains('tenant')) role = 'TENANT_ADMIN';
-    else if (normalizedEmail.contains('super')) role = 'SUPER_ADMIN';
-    else if (normalizedEmail.contains('staff')) role = 'STAFF';
+    } else if (normalizedEmail.contains('parent')) {
+      role = 'PARENT';
+    } else if (normalizedEmail.contains('branch')) {
+      role = 'BRANCH_ADMIN';
+    } else if (normalizedEmail.contains('tenant')) {
+      role = 'TENANT_ADMIN';
+    } else if (normalizedEmail.contains('super')) {
+      role = 'SUPER_ADMIN';
+    } else if (normalizedEmail.contains('staff')) {
+      role = 'STAFF';
+    }
 
-    return AuthResult(email: normalizedEmail, role: role, requiresTwoFactor: true);
+    return AuthResult(
+        email: normalizedEmail, role: role, requiresTwoFactor: true);
   }
 
   static Future<void> sendPasswordOtp(String email) async {
@@ -61,7 +68,7 @@ class MockAuthService {
 
   static Future<void> verifyPasswordOtp(String code) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
-    if (code != forgotPasswordOtp && code != '123456') {
+    if (code != forgotPasswordOtp) {
       throw const AuthFailure('That OTP is incorrect. Please try again.');
     }
   }
@@ -79,7 +86,7 @@ class MockAuthService {
 
   static Future<void> verifyTwoFactorCode(String code) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
-    if (code != twoFactorOtp && code != '123456') {
+    if (code != twoFactorOtp) {
       throw const AuthFailure('That verification code is invalid.');
     }
   }

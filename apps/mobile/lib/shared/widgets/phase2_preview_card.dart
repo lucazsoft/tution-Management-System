@@ -2,7 +2,8 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
-import '../../app/theme/app_colors.dart';
+import 'package:tms_mobile/core/theme/app_colors.dart';
+import 'package:tms_mobile/core/theme/app_tokens.dart';
 
 class Phase2PreviewCard extends StatelessWidget {
   const Phase2PreviewCard({
@@ -25,7 +26,7 @@ class Phase2PreviewCard extends StatelessWidget {
             Text(title, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 14),
             ClipRRect(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(TmsRadius.r14),
               child: Stack(
                 alignment: Alignment.center,
                 children: <Widget>[
@@ -42,11 +43,11 @@ class Phase2PreviewCard extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
-                      color: TmsAppColors.accent,
-                      borderRadius: BorderRadius.circular(999),
+                      color: kColorAccent,
+                      borderRadius: BorderRadius.circular(TmsRadius.rFull),
                       boxShadow: <BoxShadow>[
                         BoxShadow(
-                          color: TmsAppColors.accent.withValues(alpha: 0.22),
+                          color: kColorAccent.withValues(alpha: 0.22),
                           blurRadius: 16,
                           offset: const Offset(0, 6),
                         ),

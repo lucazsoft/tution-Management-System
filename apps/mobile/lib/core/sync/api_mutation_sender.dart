@@ -40,7 +40,10 @@ MutationSender buildApiMutationSender({Dio? dio}) {
       final response = await client.request<dynamic>(
         op.path,
         data: data,
-        options: Options(method: op.method),
+        options: Options(
+          method: op.method,
+          headers: <String, dynamic>{'Idempotency-Key': op.idempotencyKey},
+        ),
       );
       return _mapStatus(op.method, response.statusCode);
     } on DioException catch (e) {

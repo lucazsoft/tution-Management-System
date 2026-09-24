@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../app/theme/app_colors.dart';
+import 'package:tms_mobile/core/theme/app_colors.dart';
 import '../models/app_models.dart';
+import 'package:tms_mobile/core/theme/app_tokens.dart';
 
 class StatusChip extends StatelessWidget {
   const StatusChip({
@@ -20,7 +21,7 @@ class StatusChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: colors.background,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(TmsRadius.r20),
       ),
       child: Text(
         label,
@@ -36,23 +37,23 @@ class StatusChip extends StatelessWidget {
   _ChipColors _resolveColors(StatusChipVariant variant) {
     return switch (variant) {
       StatusChipVariant.success => _ChipColors(
-          background: TmsAppColors.tint(TmsAppColors.success, 0.12),
-          foreground: TmsAppColors.success,
+          background: kColorSuccess.withValues(alpha: 0.12),
+          foreground: kColorSuccess,
         ),
       StatusChipVariant.warning => _ChipColors(
-          background: TmsAppColors.tint(TmsAppColors.warning, 0.12),
-          foreground: TmsAppColors.warning,
+          background: kColorWarning.withValues(alpha: 0.12),
+          foreground: kColorWarning,
         ),
       StatusChipVariant.error => _ChipColors(
-          background: TmsAppColors.tint(TmsAppColors.error, 0.12),
-          foreground: TmsAppColors.error,
+          background: kColorError.withValues(alpha: 0.12),
+          foreground: kColorError,
         ),
       StatusChipVariant.info => _ChipColors(
-          background: TmsAppColors.tint(TmsAppColors.info, 0.12),
-          foreground: TmsAppColors.info,
+          background: kColorPrimaryLight.withValues(alpha: 0.12),
+          foreground: kColorPrimaryLight,
         ),
       StatusChipVariant.gold => const _ChipColors(
-          background: TmsAppColors.accent,
+          background: kColorAccent,
           foreground: Colors.white,
         ),
     };

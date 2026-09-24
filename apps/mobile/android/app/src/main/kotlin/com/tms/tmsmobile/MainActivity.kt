@@ -1,4 +1,4 @@
-package com.example.tms_mobile
+package com.tms.tmsmobile
 
 import io.flutter.embedding.android.FlutterActivity
 

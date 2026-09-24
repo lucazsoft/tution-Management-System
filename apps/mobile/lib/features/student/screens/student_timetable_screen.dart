@@ -54,8 +54,7 @@ class StudentTimetableScreen extends ConsumerWidget {
               onRefresh: viewModel.refresh,
               child: _TimetableBody(
                 state: state,
-                showOfflineBar:
-                    connectivity == ConnectivityState.offline,
+                showOfflineBar: connectivity == ConnectivityState.offline,
                 onSelectDay: viewModel.selectDay,
               ),
             );
@@ -143,9 +142,8 @@ class _TimetableBody extends StatelessWidget {
               ),
               Expanded(
                 child: TabBarView(
-                  children: days
-                      .map((day) => _DayScheduleList(day: day))
-                      .toList(),
+                  children:
+                      days.map((day) => _DayScheduleList(day: day)).toList(),
                 ),
               ),
             ],
@@ -204,7 +202,7 @@ class _TimetableSessionTile extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(TmsRadius.r14),
         border: Border.all(color: StudentColors.border),
       ),
       child: Column(
@@ -218,7 +216,7 @@ class _TimetableSessionTile extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
                   color: kColorPrimary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(TmsRadius.r12),
                 ),
                 child: Text(
                   session.time,
@@ -263,11 +261,10 @@ class _TimetableSessionTile extends StatelessWidget {
           Align(
             alignment: Alignment.centerRight,
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: StudentColors.info.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(StudentRadius.pill),
+                borderRadius: BorderRadius.circular(TmsRadius.pill),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,

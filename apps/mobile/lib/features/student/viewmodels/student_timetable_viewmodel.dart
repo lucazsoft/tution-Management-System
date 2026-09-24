@@ -69,8 +69,7 @@ class StudentTimetableState extends ViewModelState {
 }
 
 /// Student Timetable ViewModel.
-class StudentTimetableViewModel
-    extends BaseViewModel<StudentTimetableState> {
+class StudentTimetableViewModel extends BaseViewModel<StudentTimetableState> {
   StudentTimetableViewModel({
     StudentPortalRepository? repository,
     RequestCanceller? canceller,

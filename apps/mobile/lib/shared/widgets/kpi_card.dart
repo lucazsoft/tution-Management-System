@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../app/theme/app_colors.dart';
+import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'skeleton_loader.dart';
+import 'package:tms_mobile/core/theme/app_tokens.dart';
 
 class KpiCard extends StatelessWidget {
   const KpiCard({
@@ -29,11 +30,14 @@ class KpiCard extends StatelessWidget {
             ? const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  SkeletonLoader(height: 16, width: 120, borderRadius: 8),
+                  SkeletonLoader(
+                      height: 16, width: 120, borderRadius: TmsRadius.r8),
                   SizedBox(height: 12),
-                  SkeletonLoader(height: 28, width: 180, borderRadius: 10),
+                  SkeletonLoader(
+                      height: 28, width: 180, borderRadius: TmsRadius.r10),
                   SizedBox(height: 10),
-                  SkeletonLoader(height: 12, width: 96, borderRadius: 8),
+                  SkeletonLoader(
+                      height: 12, width: 96, borderRadius: TmsRadius.r8),
                 ],
               )
             : Column(
@@ -44,7 +48,7 @@ class KpiCard extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.w700,
-                      color: TmsAppColors.mutedText,
+                      color: kColorMutedText,
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -53,7 +57,7 @@ class KpiCard extends StatelessWidget {
                     style: GoogleFonts.fraunces(
                       fontSize: 24,
                       fontWeight: FontWeight.w600,
-                      color: TmsAppColors.text,
+                      color: kColorText,
                     ),
                   ),
                   if (deltaText != null) ...<Widget>[
@@ -63,9 +67,7 @@ class KpiCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: deltaPositive
-                            ? TmsAppColors.success
-                            : TmsAppColors.error,
+                        color: deltaPositive ? kColorSuccess : kColorError,
                       ),
                     ),
                   ],

@@ -51,8 +51,7 @@ class StudentIdState extends ViewModelState {
 class StudentIdViewModel extends BaseViewModel<StudentIdState> {
   StudentIdViewModel({
     StudentIdCalendarNotificationsRepository? repository,
-  })  : _repository =
-            repository ?? StudentIdCalendarNotificationsRepository(),
+  })  : _repository = repository ?? StudentIdCalendarNotificationsRepository(),
         super(const StudentIdState(isLoading: true)) {
     load();
   }

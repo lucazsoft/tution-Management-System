@@ -44,8 +44,7 @@ Dio stubCertDio({int? statusCode}) {
             ));
             return;
           }
-          if (options.path ==
-              '/api/certificates/CERT-2026-0192/download') {
+          if (options.path == '/api/certificates/CERT-2026-0192/download') {
             handler.resolve(Response<dynamic>(
               requestOptions: options,
               statusCode: 200,
@@ -61,6 +60,27 @@ Dio stubCertDio({int? statusCode}) {
               statusCode: 404,
               data: {'error': 'not stubbed: ${options.path}'},
             ),
+          ));
+        },
+      ),
+    ],
+  );
+}
+
+Dio stubDownloadDio({
+  List<int>? bytes,
+  Map<String, List<String>>? responseHeaders,
+}) {
+  return ApiClient.buildDio(
+    baseUrl: 'https://test.invalid',
+    extraInterceptors: [
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(Response<dynamic>(
+            requestOptions: options,
+            statusCode: 200,
+            data: bytes ?? <int>[0x25, 0x50, 0x44, 0x46],
+            headers: Headers.fromMap(responseHeaders ?? const {}),
           ));
         },
       ),
@@ -132,6 +152,113 @@ void main() {
       } on ApiException catch (e) {
         expect(e.kind, ApiErrorKind.notFound);
       }
+    });
+
+    test('traversal filename is sanitized inside the save dir', () async {
+      final dir = await Directory.systemTemp.createTemp('cert-test');
+      addTearDown(() => dir.delete(recursive: true));
+      final repo =
+          StudentCertificatesRepository(dio: stubDownloadDio(), saveDir: dir);
+
+      final file = await repo.downloadCertificate(
+        const ApiStudentCertificate(
+          id: 'CERT-2026-0192',
+          title: 't',
+          course: 'c',
+          issuedLabel: '',
+          fileName: '../../etc/passwd',
+        ),
+      );
+
+      expect(file.path.startsWith(dir.path), isTrue);
+      final name = file.path.split(Platform.pathSeparator).last;
+      expect(name.contains('/'), isFalse);
+      expect(name.contains('\\'), isFalse);
+      expect(name.endsWith('.pdf'), isTrue);
+      expect(await file.exists(), isTrue);
+    });
+
+    test('non-pdf extension is coerced to pdf', () async {
+      final dir = await Directory.systemTemp.createTemp('cert-test');
+      addTearDown(() => dir.delete(recursive: true));
+      final repo =
+          StudentCertificatesRepository(dio: stubDownloadDio(), saveDir: dir);
+
+      final file = await repo.downloadCertificate(
+        const ApiStudentCertificate(
+          id: 'CERT-2026-0192',
+          title: 't',
+          course: 'c',
+          issuedLabel: '',
+          fileName: 'evil.exe',
+        ),
+      );
+
+      expect(file.path.endsWith('.pdf'), isTrue);
+      expect(file.path.contains('evil.exe'), isFalse);
+    });
+
+    test('oversize download throws and writes nothing', () async {
+      final dir = await Directory.systemTemp.createTemp('cert-test');
+      addTearDown(() => dir.delete(recursive: true));
+      final repo = StudentCertificatesRepository(
+        dio: stubDownloadDio(
+          bytes: List<int>.filled(kCertificateMaxBytes + 1, 0),
+        ),
+        saveDir: dir,
+      );
+
+      await expectLater(
+        repo.downloadCertificate(
+          const ApiStudentCertificate(
+            id: 'CERT-2026-0192',
+            title: 't',
+            course: 'c',
+            issuedLabel: '',
+            fileName: 'big.pdf',
+          ),
+        ),
+        throwsA(isA<ApiException>()),
+      );
+      expect(dir.listSync(), isEmpty);
+    });
+
+    test('wrong MIME type throws', () async {
+      final dir = await Directory.systemTemp.createTemp('cert-test');
+      addTearDown(() => dir.delete(recursive: true));
+      final repo = StudentCertificatesRepository(
+        dio: stubDownloadDio(
+          responseHeaders: const {
+            'content-type': ['text/html'],
+          },
+        ),
+        saveDir: dir,
+      );
+
+      await expectLater(
+        repo.downloadCertificate(
+          const ApiStudentCertificate(
+            id: 'CERT-2026-0192',
+            title: 't',
+            course: 'c',
+            issuedLabel: '',
+            fileName: 'cert.pdf',
+          ),
+        ),
+        throwsA(isA<ApiException>()),
+      );
+      expect(dir.listSync(), isEmpty);
+    });
+
+    test('sanitize strips separators and keeps a safe charset', () {
+      final name = sanitizeCertificateFileName(
+        '../a/b\\evil file?.exe',
+        fallbackId: 'CERT-1',
+      );
+      expect(name.contains('/'), isFalse);
+      expect(name.contains('\\'), isFalse);
+      expect(name.endsWith('.pdf'), isTrue);
+      expect(RegExp(r'^[A-Za-z0-9._-]+\.pdf$').hasMatch(name), isTrue);
     });
   });
 

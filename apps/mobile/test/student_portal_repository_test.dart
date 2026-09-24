@@ -285,8 +285,7 @@ void main() {
       );
       final repository = StudentPortalRepository(dio: dio);
 
-      final classes =
-          await repository.fetchStudentTimetable('student-1');
+      final classes = await repository.fetchStudentTimetable('student-1');
       expect(classes, hasLength(1));
       final sessions = classes.single.toPortalSessions();
       expect(sessions, hasLength(2));
@@ -344,8 +343,7 @@ void main() {
         ],
       );
 
-      final portal =
-          await StudentPortalRepository(dio: dio).fetchPortal();
+      final portal = await StudentPortalRepository(dio: dio).fetchPortal();
       final types =
           portal.todaySessions.map((session) => session.type).toList();
       expect(types, contains(StudentCourseType.longTerm));

@@ -201,9 +201,8 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context, dynamic user, bool isSubScreen) {
-    final actions = <Widget>[];
-
+  PreferredSizeWidget _buildAppBar(
+      BuildContext context, dynamic user, bool isSubScreen) {
     if (isSubScreen && widget.config.showBackButton) {
       return AppBar(
         leading: IconButton(
@@ -267,109 +266,109 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   Future<void> _showLogoutDialog(BuildContext context, WidgetRef ref) async {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Logout'),
-          content: const Text('Are you sure you want to logout?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Logout'),
-            ),
-          ],
-        ),
-      );
-
-      if (confirmed == true && context.mounted) {
-        ref.read(authProvider.notifier).logout();
-      }
-    }
-  }
-
-  /// Sub-screen wrapper that provides back button in AppBar
-  class AppSubScreen extends ConsumerWidget {
-    const AppSubScreen({
-      super.key,
-      required this.title,
-      required this.child,
-      this.actions = const [],
-      this.floatingActionButton,
-      this.showProfile = true,
-    });
-
-    final String title;
-    final Widget child;
-    final List<Widget> actions;
-    final Widget? floatingActionButton;
-    final bool showProfile;
-
-    @override
-    Widget build(BuildContext context, WidgetRef ref) {
-      return Scaffold(
-        appBar: AppBar(
-          title: Text(title),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_rounded),
-            onPressed: () => context.pop(),
-            tooltip: 'Back',
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
           ),
-          actions: [
-            ...actions,
-            if (showProfile)
-              IconButton(
-                icon: const Icon(Icons.person_outline_rounded),
-                onPressed: () {
-                  // Navigate to profile based on current route context
-                  final location = GoRouterState.of(context).uri.toString();
-                  if (location.startsWith('/teacher/')) {
-                    context.push('/teacher/profile');
-                  } else if (location.startsWith('/student/')) {
-                    context.push('/student/profile');
-                  } else if (location.startsWith('/parent/')) {
-                    context.push('/parent/profile');
-                  }
-                },
-                tooltip: 'Profile',
-              ),
-            IconButton(
-              icon: const Icon(Icons.logout_rounded),
-              onPressed: () => _showLogoutDialog(context, ref),
-              tooltip: 'Logout',
-            ),
-            const SizedBox(width: 8),
-          ],
-        ),
-        body: SafeArea(child: child),
-        floatingActionButton: floatingActionButton,
-      );
-    }
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
 
-    Future<void> _showLogoutDialog(BuildContext context, WidgetRef ref) async {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Logout'),
-          content: const Text('Are you sure you want to logout?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Logout'),
-            ),
-          ],
-        ),
-      );
-
-      if (confirmed == true && context.mounted) {
-        ref.read(authProvider.notifier).logout();
-      }
+    if (confirmed == true && context.mounted) {
+      ref.read(authProvider.notifier).logout();
     }
   }
+}
+
+/// Sub-screen wrapper that provides back button in AppBar
+class AppSubScreen extends ConsumerWidget {
+  const AppSubScreen({
+    super.key,
+    required this.title,
+    required this.child,
+    this.actions = const [],
+    this.floatingActionButton,
+    this.showProfile = true,
+  });
+
+  final String title;
+  final Widget child;
+  final List<Widget> actions;
+  final Widget? floatingActionButton;
+  final bool showProfile;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => context.pop(),
+          tooltip: 'Back',
+        ),
+        actions: [
+          ...actions,
+          if (showProfile)
+            IconButton(
+              icon: const Icon(Icons.person_outline_rounded),
+              onPressed: () {
+                // Navigate to profile based on current route context
+                final location = GoRouterState.of(context).uri.toString();
+                if (location.startsWith('/teacher/')) {
+                  context.push('/teacher/profile');
+                } else if (location.startsWith('/student/')) {
+                  context.push('/student/profile');
+                } else if (location.startsWith('/parent/')) {
+                  context.push('/parent/profile');
+                }
+              },
+              tooltip: 'Profile',
+            ),
+          IconButton(
+            icon: const Icon(Icons.logout_rounded),
+            onPressed: () => _showLogoutDialog(context, ref),
+            tooltip: 'Logout',
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: SafeArea(child: child),
+      floatingActionButton: floatingActionButton,
+    );
+  }
+
+  Future<void> _showLogoutDialog(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      ref.read(authProvider.notifier).logout();
+    }
+  }
+}

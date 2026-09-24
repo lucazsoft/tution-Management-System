@@ -43,8 +43,7 @@ class StudentAttendanceState extends ViewModelState {
   final bool accessDenied;
   final bool sessionExpired;
 
-  List<AttendanceEntry> get pagedRecords =>
-      records.take(visibleCount).toList();
+  List<AttendanceEntry> get pagedRecords => records.take(visibleCount).toList();
 
   bool get hasMore => visibleCount < records.length;
   bool get hasData => records.isNotEmpty;
@@ -108,8 +107,7 @@ class AttendanceExplanation {
   final LeaveExplanation? leave;
 }
 
-class StudentAttendanceViewModel
-    extends BaseViewModel<StudentAttendanceState> {
+class StudentAttendanceViewModel extends BaseViewModel<StudentAttendanceState> {
   StudentAttendanceViewModel({StudentAcademicsRepository? repository})
       : _repository = repository ?? StudentAcademicsRepository(),
         super(const StudentAttendanceState());
@@ -127,8 +125,7 @@ class StudentAttendanceViewModel
       sessionExpired: false,
     );
     try {
-      final snapshot =
-          await _repository.fetchPortal(cancelToken: cancelToken);
+      final snapshot = await _repository.fetchPortal(cancelToken: cancelToken);
       state = state.copyWith(
         isLoading: false,
         records: snapshot.attendance,
@@ -166,7 +163,8 @@ class StudentAttendanceViewModel
       _repository.slicePage(state.records, query);
 }
 
-final studentAttendanceViewModelProvider = StateNotifierProvider<
-    StudentAttendanceViewModel, StudentAttendanceState>((ref) {
+final studentAttendanceViewModelProvider =
+    StateNotifierProvider<StudentAttendanceViewModel, StudentAttendanceState>(
+        (ref) {
   return StudentAttendanceViewModel();
 });

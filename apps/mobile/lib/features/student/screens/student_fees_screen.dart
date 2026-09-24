@@ -161,19 +161,6 @@ class StudentFeesScreen extends ConsumerWidget {
       onDismissNotice: viewModel.dismissNotice,
     );
   }
-
-  static void _showQr(
-    BuildContext context,
-    NepalPayQr qr,
-    ApiStudentInvoice invoice,
-  ) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => NepalPayQrSheet(qr: qr, invoice: invoice),
-    );
-  }
 }
 
 /// Bottom-sheet content rendering the NepalPay payload as a scannable QR
@@ -193,17 +180,17 @@ class NepalPayQrSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text('Nepal Pay', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: StudentSpace.xs),
+          const SizedBox(height: TmsSpace.xs),
           Text('Scan to pay NPR ${qr.amount.toStringAsFixed(0)}'),
-          const SizedBox(height: StudentSpace.lg),
+          const SizedBox(height: TmsSpace.lg),
           Container(
             width: 220,
             alignment: Alignment.center,
-            padding: const EdgeInsets.all(StudentSpace.md),
+            padding: const EdgeInsets.all(TmsSpace.md),
             decoration: BoxDecoration(
               color: Colors.white,
               border: Border.all(color: StudentColors.border),
-              borderRadius: BorderRadius.circular(StudentRadius.card),
+              borderRadius: BorderRadius.circular(TmsRadius.card),
             ),
             child: qr.qrString.isEmpty
                 ? SelectableText(
@@ -219,18 +206,18 @@ class NepalPayQrSheet extends StatelessWidget {
                         'NepalPay QR for NPR ${qr.amount.toStringAsFixed(0)}',
                   ),
           ),
-          const SizedBox(height: StudentSpace.md),
+          const SizedBox(height: TmsSpace.md),
           Text(
             '${qr.merchantName} · Ref ${invoice.paymentReference ?? invoice.id}',
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          const SizedBox(height: StudentSpace.xs),
+          const SizedBox(height: TmsSpace.xs),
           Text(
             'Verify the merchant and amount in your payment app before confirming.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          const SizedBox(height: StudentSpace.md),
+          const SizedBox(height: TmsSpace.md),
           OutlinedButton.icon(
             onPressed: () {
               Clipboard.setData(ClipboardData(text: qr.qrString));
@@ -319,20 +306,20 @@ class _StudentFeesContent extends StatelessWidget {
       body: RefreshIndicator(
         onRefresh: () async => onRefresh(),
         child: ListView(
-          padding: const EdgeInsets.all(StudentSpace.md),
+          padding: const EdgeInsets.all(TmsSpace.md),
           children: [
             if (state.blocked)
               Container(
-                padding: const EdgeInsets.all(StudentSpace.md),
+                padding: const EdgeInsets.all(TmsSpace.md),
                 decoration: BoxDecoration(
                   color: StudentColors.error.withValues(alpha: .08),
                   border: Border.all(color: StudentColors.error),
-                  borderRadius: BorderRadius.circular(StudentRadius.card),
+                  borderRadius: BorderRadius.circular(TmsRadius.card),
                 ),
                 child: Row(
                   children: [
                     const Icon(Icons.lock_rounded, color: StudentColors.error),
-                    const SizedBox(width: StudentSpace.sm),
+                    const SizedBox(width: TmsSpace.sm),
                     Expanded(
                       child: Text(
                         'Account blocked — NPR ${state.outstanding.toStringAsFixed(0)} outstanding. Clear overdue dues to restore access.',
@@ -342,14 +329,14 @@ class _StudentFeesContent extends StatelessWidget {
                   ],
                 ),
               ),
-            if (state.blocked) const SizedBox(height: StudentSpace.md),
+            if (state.blocked) const SizedBox(height: TmsSpace.md),
             Container(
-              padding: const EdgeInsets.all(StudentSpace.lg),
+              padding: const EdgeInsets.all(TmsSpace.lg),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [StudentColors.primaryDark, StudentColors.primary],
                 ),
-                borderRadius: BorderRadius.circular(StudentRadius.card),
+                borderRadius: BorderRadius.circular(TmsRadius.card),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -361,7 +348,7 @@ class _StudentFeesContent extends StatelessWidget {
                         : Icons.check_circle_rounded,
                     color: StudentColors.accent,
                   ),
-                  const SizedBox(height: StudentSpace.lg),
+                  const SizedBox(height: TmsSpace.lg),
                   Text(
                     'NPR ${current.netPayable.toStringAsFixed(0)}',
                     style: Theme.of(context)
@@ -369,7 +356,7 @@ class _StudentFeesContent extends StatelessWidget {
                         .displaySmall
                         ?.copyWith(color: Colors.white),
                   ),
-                  const SizedBox(height: StudentSpace.xs),
+                  const SizedBox(height: TmsSpace.xs),
                   Text(
                     'Outstanding for ${current.cycle} · Due ${current.dueDateLabel}',
                     style: Theme.of(context)
@@ -381,12 +368,12 @@ class _StudentFeesContent extends StatelessWidget {
               ),
             ),
             if (state.error != null) ...[
-              const SizedBox(height: StudentSpace.sm),
+              const SizedBox(height: TmsSpace.sm),
               Container(
-                padding: const EdgeInsets.all(StudentSpace.sm),
+                padding: const EdgeInsets.all(TmsSpace.sm),
                 decoration: BoxDecoration(
                   color: StudentColors.error.withValues(alpha: .08),
-                  borderRadius: BorderRadius.circular(StudentRadius.control),
+                  borderRadius: BorderRadius.circular(TmsRadius.control),
                 ),
                 child: Row(
                   children: [
@@ -400,12 +387,12 @@ class _StudentFeesContent extends StatelessWidget {
               ),
             ],
             if (state.notice != null) ...[
-              const SizedBox(height: StudentSpace.sm),
+              const SizedBox(height: TmsSpace.sm),
               Container(
-                padding: const EdgeInsets.all(StudentSpace.sm),
+                padding: const EdgeInsets.all(TmsSpace.sm),
                 decoration: BoxDecoration(
                   color: StudentColors.info.withValues(alpha: .1),
-                  borderRadius: BorderRadius.circular(StudentRadius.control),
+                  borderRadius: BorderRadius.circular(TmsRadius.control),
                 ),
                 child: Row(
                   children: [
@@ -418,17 +405,16 @@ class _StudentFeesContent extends StatelessWidget {
                 ),
               ),
             ],
-            const SizedBox(height: StudentSpace.lg),
+            const SizedBox(height: TmsSpace.lg),
             Text('Payment calendar',
                 style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: StudentSpace.sm),
+            const SizedBox(height: TmsSpace.sm),
             SizedBox(
               height: 94,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: state.invoices.length,
-                separatorBuilder: (_, __) =>
-                    const SizedBox(width: StudentSpace.sm),
+                separatorBuilder: (_, __) => const SizedBox(width: TmsSpace.sm),
                 itemBuilder: (context, index) {
                   final invoice = state.invoices[index];
                   final selected = invoice.id == current.id;
@@ -436,7 +422,7 @@ class _StudentFeesContent extends StatelessWidget {
                     onTap: () => onSelect(invoice.id),
                     child: Container(
                       width: 142,
-                      padding: const EdgeInsets.all(StudentSpace.sm),
+                      padding: const EdgeInsets.all(TmsSpace.sm),
                       decoration: BoxDecoration(
                         color: selected
                             ? StudentColors.primary.withValues(alpha: .08)
@@ -445,7 +431,7 @@ class _StudentFeesContent extends StatelessWidget {
                           color: _stateColor(invoice.state),
                           width: selected ? 2 : 1,
                         ),
-                        borderRadius: BorderRadius.circular(StudentRadius.card),
+                        borderRadius: BorderRadius.circular(TmsRadius.card),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -465,13 +451,13 @@ class _StudentFeesContent extends StatelessWidget {
                 },
               ),
             ),
-            const SizedBox(height: StudentSpace.lg),
+            const SizedBox(height: TmsSpace.lg),
             Text('Current invoice',
                 style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: StudentSpace.sm),
+            const SizedBox(height: TmsSpace.sm),
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(StudentSpace.md),
+                padding: const EdgeInsets.all(TmsSpace.md),
                 child: Column(
                   children: [
                     for (final line in current.lines) ...[
@@ -488,7 +474,7 @@ class _StudentFeesContent extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: StudentSpace.sm),
+                      const SizedBox(height: TmsSpace.sm),
                     ],
                     const Divider(),
                     Row(
@@ -506,7 +492,7 @@ class _StudentFeesContent extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: StudentSpace.md),
+                    const SizedBox(height: TmsSpace.md),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
@@ -516,7 +502,7 @@ class _StudentFeesContent extends StatelessWidget {
                           foregroundColor: StudentColors.primaryDark,
                           shape: RoundedRectangleBorder(
                             borderRadius:
-                                BorderRadius.circular(StudentRadius.control),
+                                BorderRadius.circular(TmsRadius.control),
                           ),
                         ),
                         onPressed: state.isQrLoading || !current.qrAvailable
@@ -535,7 +521,7 @@ class _StudentFeesContent extends StatelessWidget {
                             : 'Already paid'),
                       ),
                     ),
-                    const SizedBox(height: StudentSpace.sm),
+                    const SizedBox(height: TmsSpace.sm),
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
@@ -559,7 +545,7 @@ class _StudentFeesContent extends StatelessWidget {
               ),
             ),
             if (state.handoff != null) ...[
-              const SizedBox(height: StudentSpace.sm),
+              const SizedBox(height: TmsSpace.sm),
               ConnectIpsHandoffCard(
                 handoff: state.handoff!,
                 isVerifying: state.isVerifying,
@@ -567,10 +553,10 @@ class _StudentFeesContent extends StatelessWidget {
                 onConfirmReturn: onConfirmReturn,
               ),
             ],
-            const SizedBox(height: StudentSpace.lg),
+            const SizedBox(height: TmsSpace.lg),
             Text('Invoice history',
                 style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: StudentSpace.sm),
+            const SizedBox(height: TmsSpace.sm),
             for (final invoice in state.invoices.skip(1)) ...[
               Card(
                 child: ListTile(
@@ -586,7 +572,7 @@ class _StudentFeesContent extends StatelessWidget {
                   onTap: () => onSelect(invoice.id),
                 ),
               ),
-              const SizedBox(height: StudentSpace.sm),
+              const SizedBox(height: TmsSpace.sm),
             ],
           ],
         ),
@@ -668,21 +654,21 @@ class ConnectIpsHandoffCardState extends State<ConnectIpsHandoffCard> {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(StudentSpace.md),
+        padding: const EdgeInsets.all(TmsSpace.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('connectIPS handoff',
                 style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: StudentSpace.xs),
+            const SizedBox(height: TmsSpace.xs),
             Text(
               'Complete the payment in your browser, then verify below. The app marks success only after the server confirms it.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
-            const SizedBox(height: StudentSpace.sm),
+            const SizedBox(height: TmsSpace.sm),
             SelectableText('Gateway: ${widget.handoff.gatewayUrl}'),
             SelectableText('TXNID: ${widget.handoff.txnId}'),
-            const SizedBox(height: StudentSpace.sm),
+            const SizedBox(height: TmsSpace.sm),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
@@ -691,7 +677,7 @@ class ConnectIpsHandoffCardState extends State<ConnectIpsHandoffCard> {
                 label: const Text('Open in browser'),
               ),
             ),
-            const SizedBox(height: StudentSpace.sm),
+            const SizedBox(height: TmsSpace.sm),
             TextField(
               controller: _txnController,
               decoration: const InputDecoration(
@@ -699,7 +685,7 @@ class ConnectIpsHandoffCardState extends State<ConnectIpsHandoffCard> {
                 border: OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: StudentSpace.sm),
+            const SizedBox(height: TmsSpace.sm),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
@@ -725,7 +711,7 @@ class ConnectIpsHandoffCardState extends State<ConnectIpsHandoffCard> {
             ),
             if (widget.paymentOutcome == PaymentOutcome.failed)
               Padding(
-                padding: const EdgeInsets.only(top: StudentSpace.xs),
+                padding: const EdgeInsets.only(top: TmsSpace.xs),
                 child: Text(
                   'Server has not confirmed this payment. No amount was marked paid.',
                   style: Theme.of(context)

@@ -30,8 +30,7 @@ class StudentNotificationsScreen extends ConsumerWidget {
           : 'Notifications',
       actions: [
         TextButton(
-          onPressed:
-              state.isEmpty ? null : () => viewModel.markAllRead(),
+          onPressed: state.isEmpty ? null : () => viewModel.markAllRead(),
           child: const Text('Mark all read'),
         ),
       ],
@@ -55,8 +54,8 @@ class StudentNotificationsScreen extends ConsumerWidget {
               return StudentErrorView(
                 icon: Icons.lock_outline_rounded,
                 title: 'Access denied',
-                message: state.error ??
-                    'Your account cannot view notifications.',
+                message:
+                    state.error ?? 'Your account cannot view notifications.',
                 retryLabel: 'Retry',
                 onRetry: viewModel.load,
               );
@@ -95,7 +94,7 @@ class StudentNotificationsScreen extends ConsumerWidget {
       onRefresh: viewModel.refresh,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(StudentSpace.md),
+        padding: const EdgeInsets.all(TmsSpace.md),
         children: [
           Row(
             children: [
@@ -104,7 +103,7 @@ class StudentNotificationsScreen extends ConsumerWidget {
                 selected: !state.unreadOnly,
                 onSelected: () => viewModel.setUnreadOnly(false),
               ),
-              const SizedBox(width: StudentSpace.xs),
+              const SizedBox(width: TmsSpace.xs),
               _FilterChip(
                 label: 'Unread (${state.unreadCount})',
                 selected: state.unreadOnly,
@@ -112,7 +111,7 @@ class StudentNotificationsScreen extends ConsumerWidget {
               ),
             ],
           ),
-          const SizedBox(height: StudentSpace.sm),
+          const SizedBox(height: TmsSpace.sm),
           if (visible.isEmpty)
             const StudentEmptyView(
               icon: Icons.mark_email_read_outlined,
@@ -126,8 +125,7 @@ class StudentNotificationsScreen extends ConsumerWidget {
                     ? StudentColors.background
                     : StudentColors.primary.withValues(alpha: .04),
                 child: InkWell(
-                  borderRadius:
-                      BorderRadius.circular(StudentRadius.card),
+                  borderRadius: BorderRadius.circular(TmsRadius.card),
                   onTap: () {
                     viewModel.markRead(notice.raw.id);
                     final destination = notice.raw.destination;
@@ -136,7 +134,7 @@ class StudentNotificationsScreen extends ConsumerWidget {
                     }
                   },
                   child: Padding(
-                    padding: const EdgeInsets.all(StudentSpace.md),
+                    padding: const EdgeInsets.all(TmsSpace.md),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -151,11 +149,10 @@ class StudentNotificationsScreen extends ConsumerWidget {
                             shape: BoxShape.circle,
                           ),
                         ),
-                        const SizedBox(width: StudentSpace.sm),
+                        const SizedBox(width: TmsSpace.sm),
                         Expanded(
                           child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 notice.raw.title,
@@ -169,15 +166,13 @@ class StudentNotificationsScreen extends ConsumerWidget {
                                     ),
                               ),
                               const SizedBox(
-                                height: StudentSpace.xxs,
+                                height: TmsSpace.xxs,
                               ),
                               Text(notice.raw.message),
-                              const SizedBox(height: StudentSpace.xs),
+                              const SizedBox(height: TmsSpace.xs),
                               Text(
                                 notice.raw.time,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall,
+                                style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ],
                           ),
@@ -191,7 +186,7 @@ class StudentNotificationsScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: StudentSpace.sm),
+              const SizedBox(height: TmsSpace.sm),
             ],
         ],
       ),

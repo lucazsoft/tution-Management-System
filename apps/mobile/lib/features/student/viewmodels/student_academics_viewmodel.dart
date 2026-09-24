@@ -82,8 +82,7 @@ class StudentAcademicsState extends ViewModelState {
   }
 }
 
-class StudentAcademicsViewModel
-    extends BaseViewModel<StudentAcademicsState> {
+class StudentAcademicsViewModel extends BaseViewModel<StudentAcademicsState> {
   StudentAcademicsViewModel({StudentAcademicsRepository? repository})
       : _repository = repository ?? StudentAcademicsRepository(),
         super(const StudentAcademicsState());
@@ -101,8 +100,7 @@ class StudentAcademicsViewModel
       sessionExpired: false,
     );
     try {
-      final snapshot =
-          await _repository.fetchPortal(cancelToken: cancelToken);
+      final snapshot = await _repository.fetchPortal(cancelToken: cancelToken);
       state = state.copyWith(
         isLoading: false,
         snapshot: snapshot,
@@ -110,8 +108,8 @@ class StudentAcademicsViewModel
         visibleHomework: pageSize,
       );
     } on ApiException catch (e) {
-      state = state.copyWith(isLoading: false, error: e.message)
-          ._applyFailure(e);
+      state =
+          state.copyWith(isLoading: false, error: e.message)._applyFailure(e);
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -150,7 +148,8 @@ class StudentAcademicsViewModel
       );
       state = state.copyWith(detailLoading: false, detail: detail);
     } on ApiException catch (e) {
-      state = state.copyWith(detailLoading: false, error: e.message)
+      state = state
+          .copyWith(detailLoading: false, error: e.message)
           ._applyFailure(e);
     } catch (_) {
       state = state.copyWith(
@@ -172,15 +171,16 @@ class StudentAcademicsViewModel
 extension on StudentAcademicsState {
   StudentAcademicsState _applyFailure(ApiException e) {
     return copyWith(
-      offline: e.kind == ApiErrorKind.noConnection ||
-          e.kind == ApiErrorKind.timeout,
+      offline:
+          e.kind == ApiErrorKind.noConnection || e.kind == ApiErrorKind.timeout,
       accessDenied: e.kind == ApiErrorKind.forbidden,
       sessionExpired: e.kind == ApiErrorKind.unauthorized,
     );
   }
 }
 
-final studentAcademicsViewModelProvider = StateNotifierProvider<
-    StudentAcademicsViewModel, StudentAcademicsState>((ref) {
+final studentAcademicsViewModelProvider =
+    StateNotifierProvider<StudentAcademicsViewModel, StudentAcademicsState>(
+        (ref) {
   return StudentAcademicsViewModel();
 });

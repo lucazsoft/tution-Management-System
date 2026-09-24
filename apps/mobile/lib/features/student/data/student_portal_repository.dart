@@ -74,8 +74,7 @@ class StudentPortalRepository {
       }
       return [
         for (final item in raw)
-          if (item is Map<String, dynamic>)
-            StudentClassSchedule.fromJson(item),
+          if (item is Map<String, dynamic>) StudentClassSchedule.fromJson(item),
       ];
     } on DioException catch (error) {
       throw _typed(error);
