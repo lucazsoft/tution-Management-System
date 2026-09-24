@@ -216,14 +216,55 @@ router.get('/me/account', authMiddleware, async (req: TenantRequest, res: Respon
     securityMobile: true, securityMobileVerifiedAt: true, twoFactorEnabled: true, tenant: { select: { name: true } },
   } });
   if (!account) return res.status(404).json({ error: 'Account not found.' });
-  const { securityMobile, securityMobileVerifiedAt, userRoles, ...profile } = account;
+  const { securityMobile, securityMobileVerifiedAt, userRoles, image, ...profile } = account;
   const mobileVerified = Boolean(trustedSecurityMobile(account));
   const roles = userRoles.filter(assignment => !assignment.branch || assignment.branch.tenantId === req.tenantId)
     .map(assignment => ({ id: assignment.id, name: assignment.role.name, branchId: assignment.branchId, branchName: assignment.branch?.name ?? null }));
   const tenantAdmin = isTenantAdmin(req.user!);
-  return res.json({ ...profile, roles, mobileVerified, mobileVerifiedAt: mobileVerified ? securityMobileVerifiedAt : null,
+  return res.json({ ...profile, photoUrl: await privateImageUrl(image), roles, mobileVerified, mobileVerifiedAt: mobileVerified ? securityMobileVerifiedAt : null,
     capabilities: { manageInstitution: tenantAdmin, manageSecurityMobile: true } });
   } catch { return res.status(500).json({ error: 'Unable to load or save your account. Please try again.' }); }
+});
+
+// Authenticated users may update only their own portrait. Student portraits
+// remain attached to the official enrollment branch and use the same image
+// validation/private storage pipeline as administrator-uploaded portraits.
+router.put('/me/account/photo', authMiddleware, async (req: TenantRequest, res: Response) => {
+  const shape = parseStrictKeys(req.body, ['image']);
+  if (!shape.success) return res.status(400).json({ error: shape.error });
+  try {
+    const student = await prisma.student.findFirst({
+      where: { userId: req.user!.id, user: { tenantId: req.tenantId! } },
+      select: {
+        id: true,
+        userId: true,
+        enrollments: {
+          where: { status: { in: ['ACTIVE', 'BLOCKED'] } },
+          select: { class: { select: { branchId: true } } },
+          take: 1,
+        },
+      },
+    });
+    const branchId = student?.enrollments[0]?.class.branchId;
+    if (!student || !branchId) return res.status(404).json({ error: 'Active student enrollment not found.' });
+    const normalized = await normalizeStudentPhoto(shape.data.image);
+    const mediaId = crypto.randomUUID();
+    const reference = await storePrivateBytes(
+      { bytes: normalized.bytes, contentType: normalized.contentType },
+      { tenantId: req.tenantId!, branchId, category: 'student-photos', id: student.id },
+    );
+    const objectKey = reference.slice(3);
+    await prisma.$transaction([
+      prisma.mediaObject.updateMany({ where: { tenantId: req.tenantId!, category: 'STUDENT_PHOTO', ownerType: 'STUDENT', ownerId: student.id, status: 'ACTIVE' }, data: { status: 'REPLACED', replacedAt: new Date() } }),
+      prisma.mediaObject.create({ data: { id: mediaId, tenantId: req.tenantId!, branchId, category: 'STUDENT_PHOTO', ownerType: 'STUDENT', ownerId: student.id, objectKey, mimeType: normalized.contentType, byteSize: normalized.bytes.length, sha256: crypto.createHash('sha256').update(normalized.bytes).digest('hex'), width: normalized.width, height: normalized.height, createdBy: req.user!.id } }),
+      prisma.user.update({ where: { id: student.userId }, data: { image: reference } }),
+    ]);
+    return res.json({ message: 'Profile photo updated.', photoUrl: await privateImageUrl(reference) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Profile photo storage is unavailable.';
+    const invalidImage = /photo|image|buffer/i.test(message);
+    return res.status(invalidImage ? 400 : 503).json({ error: message });
+  }
 });
 router.patch('/me/account', authMiddleware, async (req: TenantRequest, res: Response) => {
   try {
