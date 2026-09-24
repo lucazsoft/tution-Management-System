@@ -13,8 +13,11 @@ common fixes, see:
 
 ## Environment builds
 
-The API base URL is compile-time config (`--dart-define=API_BASE_URL`).
-Release builds refuse to run without an HTTPS URL.
+The API base URL and native Better Auth origin are compile-time config
+(`--dart-define=API_BASE_URL` and `--dart-define=AUTH_ORIGIN`). Native Android/iOS
+requests must send the same origin configured by the API's `WEB_ORIGIN`; browsers
+supply the Origin header automatically. Release builds refuse to run without an
+HTTPS API URL.
 
 Native push notifications also use explicit compile-time Firebase configuration;
 no Firebase project file or value is committed. Android/iOS release builds fail
@@ -33,9 +36,9 @@ part of the web release contract.
 
 | Target | Command |
 |---|---|
-| Local (Android emulator) | `flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3001` |
-| Staging | `flutter build apk --dart-define=API_BASE_URL=https://api.staging.sanskardipshikshalaya.com.np` |
-| Production | `flutter build apk --dart-define=API_BASE_URL=https://api.tms.sanskardipshikshalaya.com.np` |
+| Local (Android emulator) | `flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3001 --dart-define=AUTH_ORIGIN=http://localhost:5173` |
+| Staging | `flutter build apk --dart-define=API_BASE_URL=https://api.staging.sanskardipshikshalaya.com.np --dart-define=AUTH_ORIGIN=https://staging.sanskardipshikshalaya.com.np` |
+| Production | `flutter build apk --dart-define=API_BASE_URL=https://api.tms.sanskardipshikshalaya.com.np --dart-define=AUTH_ORIGIN=https://tms.sanskardipshikshalaya.com.np` |
 
 iOS simulator uses `http://localhost:3001`; physical devices need the machine LAN IP.
 
