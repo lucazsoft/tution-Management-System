@@ -144,6 +144,28 @@ class ParentPortalRepository {
   static const String connectIpsStatusPath = '/api/finances/connectips/status';
   static const String messagesPath = '/api/communication/messages';
   static const String appointmentsPath = '/api/appointments';
+  static const String leaveRequestPath = '/api/leaves/request';
+
+  Future<void> requestLeave({
+    required ParentChild child,
+    required String leaveType,
+    required DateTime startDate,
+    required DateTime endDate,
+    required String reason,
+  }) async {
+    try {
+      await _dio.post<dynamic>(leaveRequestPath, data: {
+        'studentId': child.id,
+        'branchId': child.branchId,
+        'leaveType': leaveType,
+        'startDate': startDate.toIso8601String(),
+        'endDate': endDate.toIso8601String(),
+        'reason': reason,
+      });
+    } on DioException catch (error) {
+      throw ApiException.from(error);
+    }
+  }
 
   final List<ParentInvoice> _invoiceCache = [];
 

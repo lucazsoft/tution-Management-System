@@ -159,15 +159,26 @@ void main() {
           ['English', 'Mathematics']);
     });
 
-    testWidgets('renders weekly day tabs with course-type pills',
+    testWidgets('renders one dated day and navigates with bounded arrows',
         (tester) async {
       final fake = _FakePortalRepository()
         ..portalToReturn = StudentPortal.fromJson(_portalJson());
       await _pumpTimetable(tester, fake);
 
-      expect(find.text('Monday'), findsOneWidget);
-      expect(find.text('Wednesday'), findsOneWidget);
-      expect(find.text('1 session scheduled for today.'), findsOneWidget);
+      final today = DateTime.now();
+      const dayNames = [
+        'Monday',
+        'Tuesday',
+        'Wednesday',
+        'Thursday',
+        'Friday',
+        'Saturday',
+        'Sunday'
+      ];
+      expect(
+          find.text('Today · ${dayNames[today.weekday - 1]}'), findsOneWidget);
+      expect(find.textContaining('${today.day} '), findsWidgets);
+      expect(find.text('Mathematics'), findsOneWidget);
       expect(find.widgetWithText(NavigationDestination, 'Timetable'),
           findsOneWidget);
       expect(
@@ -176,11 +187,56 @@ void main() {
       );
       expect(find.widgetWithText(NavigationDestination, 'Fees'), findsNothing);
 
-      // Switch to the Wednesday tab to see the short-term session.
-      await tester.tap(find.text('Wednesday'));
-      await tester.pumpAndSettle(const Duration(milliseconds: 100));
+      // Move to the closest Wednesday to see the real weekly session.
+      var delta = DateTime.wednesday - today.weekday;
+      if (delta > 7) delta -= 7;
+      if (delta < -7) delta += 7;
+      final arrow = delta < 0 ? 'Previous day' : 'Next day';
+      final arrowButton = find.widgetWithIcon(
+        IconButton,
+        delta < 0 ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+      );
+      for (var index = 0; index < delta.abs(); index++) {
+        await tester.tap(find.byTooltip(arrow));
+        await tester.pump();
+      }
+      expect(find.text('Wednesday'), findsOneWidget);
       expect(find.text('Science Revision'), findsOneWidget);
       expect(find.text('Short-Term'), findsOneWidget);
+
+      // Navigation stops one week from today.
+      for (var index = delta.abs(); index < 7 + delta.abs(); index++) {
+        final button = tester.widget<IconButton>(arrowButton);
+        if (button.onPressed == null) break;
+        await tester.tap(find.byTooltip(arrow));
+        await tester.pump();
+      }
+      expect(tester.widget<IconButton>(arrowButton).onPressed, isNull);
+    });
+
+    testWidgets('shows an admin holiday instead of classes for that date',
+        (tester) async {
+      final today = DateTime.now();
+      final body = _portalJson()
+        ..['events'] = [
+          {
+            'id': 'holiday-1',
+            'date': today.toIso8601String(),
+            'day': '${today.day}',
+            'month': '${today.month}',
+            'title': 'Institution holiday',
+            'kind': 'Holiday',
+            'details': 'Campus closed by administration.',
+          }
+        ];
+      final fake = _FakePortalRepository()
+        ..portalToReturn = StudentPortal.fromJson(body);
+      await _pumpTimetable(tester, fake);
+
+      expect(find.text('Holiday'), findsOneWidget);
+      expect(find.text('Institution holiday'), findsOneWidget);
+      expect(find.text('Campus closed by administration.'), findsOneWidget);
+      expect(find.text('Mathematics'), findsNothing);
     });
 
     testWidgets('shows empty state when no classes are scheduled',

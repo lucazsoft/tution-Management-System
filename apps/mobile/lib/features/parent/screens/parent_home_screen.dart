@@ -14,6 +14,7 @@ class ParentHomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
+      drawer: ParentNavigation.drawer(context),
       backgroundColor: kColorSurface,
       appBar: AppBar(
         title: const Text('Family Overview'),
@@ -29,20 +30,10 @@ class ParentHomeScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const NepalDateTimeHeader(),
-                  const SizedBox(height: TmsSpace.lg),
-                  _PageHeading(child: child),
                   const SizedBox(height: TmsSpace.md),
                   const ChildSwitcherBar(),
                   const SizedBox(height: TmsSpace.md),
-                  _ChildContext(child: child),
-                  if (child.blocked) ...[
-                    const SizedBox(height: TmsSpace.md),
-                    _FeeAlert(child: child),
-                  ],
-                  const SizedBox(height: TmsSpace.md),
                   _DayHero(child: child),
-                  const SizedBox(height: TmsSpace.md),
-                  _DashboardContent(portal: portal, child: child),
                   const SizedBox(height: TmsSpace.md),
                   _SummaryGrid(portal: portal, child: child),
                   if (portal.events.isNotEmpty) ...[
@@ -59,6 +50,8 @@ class ParentHomeScreen extends ConsumerWidget {
   }
 }
 
+// Retained as a reusable detailed header for wider parent layouts.
+// ignore: unused_element
 class _PageHeading extends StatelessWidget {
   const _PageHeading({required this.child});
 
@@ -82,6 +75,7 @@ class _PageHeading extends StatelessWidget {
       );
 }
 
+// ignore: unused_element
 class _ChildContext extends StatelessWidget {
   const _ChildContext({required this.child});
 
@@ -153,6 +147,7 @@ class _StatusPill extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _FeeAlert extends StatelessWidget {
   const _FeeAlert({required this.child});
 
@@ -271,6 +266,7 @@ class _DayHero extends StatelessWidget {
       );
 }
 
+// ignore: unused_element
 class _DashboardContent extends StatelessWidget {
   const _DashboardContent({required this.portal, required this.child});
 
@@ -493,14 +489,17 @@ class _SummaryGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = [
-      _SummaryItem(Icons.fact_check_outlined, 'Attendance', 'View record',
+      _SummaryItem(Icons.fact_check_outlined, 'Attendance',
+          '${child.attendanceRate}%',
           () => context.push('/parent/attendance')),
-      _SummaryItem(Icons.payments_outlined, 'Outstanding',
-          _money(portal.outstandingTotal), () => context.push('/parent/fees')),
-      _SummaryItem(Icons.insights_outlined, 'Remarks',
-          '${portal.remarks.length}', () => context.push('/parent/academics')),
-      _SummaryItem(Icons.event_available_outlined, 'Upcoming events',
-          '${portal.events.length}', () => context.push('/parent/calendar')),
+      _SummaryItem(Icons.calendar_view_week_outlined, 'Timetable',
+          '${portal.timetableSessions.length} weekly classes',
+          () => context.push('/parent/timetable')),
+      _SummaryItem(Icons.event_available_outlined, 'Meetings',
+          '${portal.appointments.length}',
+          () => context.push('/parent/appointments')),
+      _SummaryItem(Icons.forum_outlined, 'Messages',
+          '${portal.messages.length}', () => context.push('/parent/messages')),
     ];
     return LayoutBuilder(
       builder: (context, constraints) {

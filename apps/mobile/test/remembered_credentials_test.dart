@@ -3,17 +3,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tms_mobile/features/auth/data/remembered_credentials.dart';
 
 void main() {
-  test('securely saves, restores and clears remembered login credentials',
+  test('securely remembers only the login identity and clears old passwords',
       () async {
     FlutterSecureStorage.setMockInitialValues({});
     final store = RememberedCredentialsStore();
 
     expect(await store.read(), isNull);
-    await store.save('student@example.com', 'safe-password');
+    await store.save('student@example.com');
 
     final restored = await store.read();
     expect(restored?.email, 'student@example.com');
-    expect(restored?.password, 'safe-password');
+    expect(
+      (await const FlutterSecureStorage().readAll())
+          .containsKey('remembered_login_password'),
+      isFalse,
+    );
 
     await store.clear();
     expect(await store.read(), isNull);

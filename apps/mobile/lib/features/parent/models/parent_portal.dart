@@ -12,6 +12,33 @@ double _num(dynamic value) =>
 String _str(dynamic value, [String fallback = '']) =>
     value == null ? fallback : '$value';
 
+DateTime? _date(dynamic iso, dynamic label) {
+  final parsed = DateTime.tryParse(_str(iso));
+  if (parsed != null) return parsed;
+  final parts = _str(label).replaceAll(',', '').split(RegExp(r'\s+'));
+  if (parts.length < 3 || parts[1].length < 3) return null;
+  const months = {
+    'jan': 1,
+    'feb': 2,
+    'mar': 3,
+    'apr': 4,
+    'may': 5,
+    'jun': 6,
+    'jul': 7,
+    'aug': 8,
+    'sep': 9,
+    'oct': 10,
+    'nov': 11,
+    'dec': 12,
+  };
+  final day = int.tryParse(parts[0]);
+  final month = months[parts[1].toLowerCase().substring(0, 3)];
+  final year = int.tryParse(parts[2]);
+  return day == null || month == null || year == null
+      ? null
+      : DateTime(year, month, day);
+}
+
 /// One linked child summary (`children[]` in the portal payload).
 class ParentChild {
   const ParentChild({
@@ -108,7 +135,9 @@ class ParentAppointmentItem {
       required this.requestedTime,
       required this.state,
       this.alternativeTime,
-      this.responseMessage});
+      this.responseMessage,
+      this.participants = const [],
+      this.isGroup = false});
   factory ParentAppointmentItem.fromJson(Map<String, dynamic> json) =>
       ParentAppointmentItem(
           id: _str(json['id']),
@@ -118,7 +147,13 @@ class ParentAppointmentItem {
           requestedTime: _str(json['requestedTime']),
           state: _str(json['state']),
           alternativeTime: json['alternativeTime']?.toString(),
-          responseMessage: json['responseMessage']?.toString());
+          responseMessage: json['responseMessage']?.toString(),
+          isGroup: json['group'] == true,
+          participants: [
+            for (final item in (json['participants'] as List? ?? const []))
+              if (item is Map<String, dynamic>)
+                ParentAppointmentParticipant.fromJson(item),
+          ]);
   final String id;
   final String childId;
   final String teacher;
@@ -127,6 +162,22 @@ class ParentAppointmentItem {
   final String state;
   final String? alternativeTime;
   final String? responseMessage;
+  final List<ParentAppointmentParticipant> participants;
+  final bool isGroup;
+}
+
+class ParentAppointmentParticipant {
+  const ParentAppointmentParticipant({
+    required this.name,
+    required this.approval,
+  });
+  factory ParentAppointmentParticipant.fromJson(Map<String, dynamic> json) =>
+      ParentAppointmentParticipant(
+        name: _str(json['name'], 'Staff member'),
+        approval: _str(json['approval'], 'PENDING'),
+      );
+  final String name;
+  final String approval;
 }
 
 /// One of today's class sessions for the selected child.
@@ -139,6 +190,7 @@ class ParentSession {
     required this.teacher,
     required this.room,
     required this.type,
+    this.day = '',
   });
 
   final String id;
@@ -148,6 +200,7 @@ class ParentSession {
   final String teacher;
   final String room;
   final String type;
+  final String day;
 
   factory ParentSession.fromJson(Map<String, dynamic> json) => ParentSession(
         id: _str(json['id']),
@@ -157,6 +210,7 @@ class ParentSession {
         teacher: _str(json['teacher'], 'Teacher not assigned'),
         room: _str(json['room']),
         type: _str(json['type'], 'Regular'),
+        day: _str(json['day']),
       );
 }
 
@@ -168,6 +222,7 @@ class ParentAttendanceRecord {
     required this.subject,
     required this.session,
     required this.state,
+    this.occurredAt,
   });
 
   final String id;
@@ -175,6 +230,7 @@ class ParentAttendanceRecord {
   final String subject;
   final String session;
   final String state;
+  final DateTime? occurredAt;
 
   bool get isPresent => state.toLowerCase() == 'present';
   bool get isAbsent => state.toLowerCase().startsWith('absent');
@@ -186,6 +242,7 @@ class ParentAttendanceRecord {
         subject: _str(json['subject']),
         session: _str(json['session']),
         state: _str(json['state'], 'Present'),
+        occurredAt: _date(json['occurredAt'], json['date']),
       );
 }
 
@@ -367,6 +424,7 @@ class ParentPortal {
     required this.children,
     required this.selected,
     required this.sessions,
+    required this.timetableSessions,
     required this.attendance,
     required this.remarks,
     required this.leaves,
@@ -382,6 +440,7 @@ class ParentPortal {
   final List<ParentChild> children;
   final ParentChild? selected;
   final List<ParentSession> sessions;
+  final List<ParentSession> timetableSessions;
   final List<ParentAttendanceRecord> attendance;
   final List<ParentRemark> remarks;
   final List<ParentLeaveRecord> leaves;
@@ -410,6 +469,8 @@ class ParentPortal {
               )
             : null,
         sessions: _list(json['sessions'], ParentSession.fromJson),
+        timetableSessions:
+            _list(json['timetableSessions'], ParentSession.fromJson),
         attendance: _list(json['attendance'], ParentAttendanceRecord.fromJson),
         remarks: _list(json['remarks'], ParentRemark.fromJson),
         leaves: _list(json['leaves'], ParentLeaveRecord.fromJson),

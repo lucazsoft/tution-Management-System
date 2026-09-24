@@ -6,6 +6,7 @@ import 'package:tms_mobile/core/providers/auth_provider.dart';
 
 import '../data/auth_service.dart';
 import '../data/device_account_vault.dart';
+import '../widgets/forgot_password_prompt.dart';
 
 class MpinSettingsScreen extends ConsumerStatefulWidget {
   const MpinSettingsScreen({super.key, this.switchAccountRoute});
@@ -174,6 +175,7 @@ class _MpinSettingsScreenState extends ConsumerState<MpinSettingsScreen> {
                             : Icons.visibility_off_outlined),
                       ),
                     )),
+              if (!configured) const ForgotPasswordPrompt(),
               const SizedBox(height: 12),
               _pinField(_newMpin, 'New 4-digit MPIN'),
               const SizedBox(height: 12),

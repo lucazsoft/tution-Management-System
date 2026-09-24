@@ -15,12 +15,8 @@ class ParentFeesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
+      drawer: ParentNavigation.drawer(context),
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => ParentNavigation.back(context),
-          tooltip: 'Back',
-        ),
         title: Text(
           'Child Fee Portal',
           style:

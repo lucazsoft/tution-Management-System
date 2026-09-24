@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/parent_portal.dart';
 import '../viewmodels/parent_portal_viewmodel.dart';
+import '../widgets/child_switcher_bar.dart';
 import '../widgets/parent_navigation.dart';
 import '../widgets/parent_portal_state_view.dart';
 
@@ -18,6 +20,7 @@ class _ParentAppointmentsScreenState
   String? _contactId;
   DateTime? _scheduled;
   bool _sending = false;
+  String? _formError;
 
   @override
   void dispose() {
@@ -35,9 +38,26 @@ class _ParentAppointmentsScreenState
     if (date == null || !mounted) return;
     final time = await showTimePicker(
         context: context, initialTime: TimeOfDay.fromDateTime(minimum));
-    if (time != null)
-      setState(() => _scheduled =
-          DateTime(date.year, date.month, date.day, time.hour, time.minute));
+    if (time != null) {
+      final selected =
+          DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      if (selected.isBefore(minimum)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Choose a time at least $minimumHours hours from now.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      setState(() {
+        _scheduled = selected;
+        _formError = null;
+      });
+    }
   }
 
   Future<void> _respond(String appointmentId, String action) async {
@@ -60,7 +80,8 @@ class _ParentAppointmentsScreenState
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Appointments')),
+        drawer: ParentNavigation.drawer(context),
+        appBar: AppBar(title: const Text('Meetings')),
         bottomNavigationBar: const ParentNavigationBar(selectedIndex: 3),
         body: ParentPortalStateView(builder: (context, portal, child) {
           final contacts = portal.contacts
@@ -70,7 +91,20 @@ class _ParentAppointmentsScreenState
               ? _contactId
               : (contacts.isEmpty ? null : contacts.first.id);
           return ListView(padding: const EdgeInsets.all(16), children: [
-            Text('${child.name} appointments',
+            const ChildSwitcherBar(),
+            const SizedBox(height: 16),
+            Card(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              child: const ListTile(
+                leading: Icon(Icons.handshake_outlined),
+                title: Text('Plan a school visit'),
+                subtitle: Text(
+                  'Choose the relevant teacher, accounts staff, or branch administrator and request a suitable time.',
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text('${child.name} · Current appointments',
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
             if (portal.appointments
@@ -91,7 +125,13 @@ class _ParentAppointmentsScreenState
                       subtitle: Text(
                           '${item.subject}\n${item.requestedTime}${item.responseMessage == null ? '' : '\n${item.responseMessage}'}'),
                       isThreeLine: true,
-                      trailing: Chip(label: Text(item.state))),
+                      trailing: Chip(label: Text(item.state)),
+                      onTap: () => showModalBottomSheet<void>(
+                            context: context,
+                            isScrollControlled: true,
+                            showDragHandle: true,
+                            builder: (_) => _AppointmentDetails(item: item),
+                          )),
                   if (item.state.toLowerCase() == 'alternative proposed')
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -115,37 +155,118 @@ class _ParentAppointmentsScreenState
                     ),
                 ])),
             const SizedBox(height: 20),
-            Text('Request an appointment',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text('Request a new meeting',
+                style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Requests must be made at least ${portal.bookingWindowHours} hours in advance.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-                initialValue: selectedId,
-                decoration: const InputDecoration(labelText: 'Meet with'),
-                items: contacts
-                    .map((item) => DropdownMenuItem(
-                        value: item.id, child: Text(item.name)))
-                    .toList(),
-                onChanged: (value) => setState(() => _contactId = value)),
+            if (contacts.isEmpty)
+              const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Text(
+                    'No teaching or accounts staff are currently assigned to this child’s branch.',
+                  ),
+                ),
+              ),
+            if (contacts.isNotEmpty) ...[
+              Text('Who would you like to meet?',
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 112,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: contacts.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (context, index) {
+                    final contact = contacts[index];
+                    final selected = contact.id == selectedId;
+                    return SizedBox(
+                      width: 220,
+                      child: Card(
+                        color: selected
+                            ? Theme.of(context).colorScheme.primaryContainer
+                            : null,
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: () => setState(() => _contactId = contact.id),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              children: [
+                                CircleAvatar(child: Text(contact.initials)),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(contact.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w700)),
+                                      Text(contact.subject,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis),
+                                    ],
+                                  ),
+                                ),
+                                if (selected)
+                                  Icon(
+                                    Icons.check_circle,
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
-            OutlinedButton.icon(
+            FilledButton.tonalIcon(
                 onPressed: () => _chooseDateTime(portal.bookingWindowHours),
                 icon: const Icon(Icons.schedule_rounded),
                 label: Text(_scheduled == null
-                    ? 'Choose preferred time'
+                    ? 'Choose preferred date and time'
                     : _scheduled.toString().substring(0, 16))),
             const SizedBox(height: 12),
             TextField(
                 controller: _remarks,
+                onChanged: (_) {
+                  if (_formError != null) setState(() => _formError = null);
+                },
                 maxLength: 2000,
                 minLines: 3,
                 maxLines: 5,
                 decoration:
                     const InputDecoration(labelText: 'Reason for meeting')),
+            if (_formError != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  _formError!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
             FilledButton.icon(
                 onPressed: selectedId == null || _scheduled == null || _sending
                     ? null
                     : () async {
-                        if (_remarks.text.trim().isEmpty) return;
+                        if (_remarks.text.trim().isEmpty) {
+                          setState(() => _formError =
+                              'Enter the reason for this meeting.');
+                          return;
+                        }
                         final contact = contacts
                             .firstWhere((item) => item.id == selectedId);
                         setState(() => _sending = true);
@@ -164,7 +285,7 @@ class _ParentAppointmentsScreenState
                               .refresh();
                         } catch (error) {
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            ScaffoldMessenger.of(this.context).showSnackBar(
                               SnackBar(
                                   content: Text(
                                       'Could not request appointment: $error')),
@@ -179,5 +300,73 @@ class _ParentAppointmentsScreenState
                     _sending ? 'Requesting…' : 'Send appointment request')),
           ]);
         }),
+      );
+}
+
+class _AppointmentDetails extends StatelessWidget {
+  const _AppointmentDetails({required this.item});
+  final ParentAppointmentItem item;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(item.teacher,
+                  style: Theme.of(context).textTheme.headlineSmall),
+              Text(item.subject),
+              const SizedBox(height: 16),
+              _detail(context, Icons.schedule_outlined, 'Requested time',
+                  item.requestedTime),
+              if (item.alternativeTime?.isNotEmpty == true)
+                _detail(context, Icons.update_rounded, 'Alternative time',
+                    item.alternativeTime!),
+              _detail(context, Icons.info_outline_rounded, 'Current status',
+                  item.state),
+              if (item.responseMessage?.isNotEmpty == true)
+                _detail(context, Icons.chat_outlined, 'Institution response',
+                    item.responseMessage!),
+              if (item.participants.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Text(item.isGroup ? 'Meeting participants' : 'Recipient',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                for (final participant in item.participants)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const CircleAvatar(
+                        child: Icon(Icons.person_outline_rounded)),
+                    title: Text(participant.name),
+                    trailing: Chip(
+                        label: Text(participant.approval.replaceAll('_', ' '))),
+                  ),
+              ],
+            ],
+          ),
+        ),
+      );
+
+  Widget _detail(
+          BuildContext context, IconData icon, String label, String value) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: Theme.of(context).textTheme.labelMedium),
+                  Text(value),
+                ],
+              ),
+            ),
+          ],
+        ),
       );
 }

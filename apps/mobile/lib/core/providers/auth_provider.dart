@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/core/auth/role_codes.dart';
+import 'package:tms_mobile/core/network/api_client.dart';
 import 'package:tms_mobile/core/sync/sync.dart';
 import 'package:tms_mobile/features/auth/data/auth_service.dart';
 import 'package:tms_mobile/features/auth/data/device_account_vault.dart';
@@ -73,7 +76,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// Restore only a session the server verifies from its cookie.
   Future<void> _restoreSession() async {
     final version = _operationVersion;
+    AuthUser? cachedUser;
     try {
+      final cachedJson = await ApiClient.getUser();
+      if (cachedJson != null) {
+        final decoded = jsonDecode(cachedJson);
+        if (decoded is Map<String, dynamic>) {
+          cachedUser = AuthUser.fromJson(decoded);
+          if (version == _operationVersion) {
+            state = AuthState(
+              user: cachedUser,
+              isAuthenticated: true,
+              isLoading: false,
+            );
+          }
+        }
+      }
       final user = await AuthService.restoreSession();
       if (version != _operationVersion) return;
       if (user != null) {
@@ -82,12 +100,27 @@ class AuthNotifier extends StateNotifier<AuthState> {
           isAuthenticated: true,
           isLoading: false,
         );
+      } else if (cachedUser != null && await ApiClient.getUser() != null) {
+        // A temporary network failure must not make the app appear logged out.
+        // Protected API calls still verify the persisted httpOnly session and
+        // a real 401 clears both the cookie and this cached identity.
+        state = AuthState(
+          user: cachedUser,
+          isAuthenticated: true,
+          isLoading: false,
+        );
       } else {
         state = const AuthState(isLoading: false);
       }
     } catch (_) {
       if (version != _operationVersion) return;
-      state = const AuthState(isLoading: false);
+      state = cachedUser == null
+          ? const AuthState(isLoading: false)
+          : AuthState(
+              user: cachedUser,
+              isAuthenticated: true,
+              isLoading: false,
+            );
     }
   }
 

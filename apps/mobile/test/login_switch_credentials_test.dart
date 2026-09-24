@@ -23,12 +23,11 @@ void main() {
     );
     await tester.pump();
 
-    final fields = tester
-        .widgetList<TextFormField>(find.byType(TextFormField))
-        .toList();
+    final fields =
+        tester.widgetList<TextFormField>(find.byType(TextFormField)).toList();
     expect(fields[0].controller?.text, isEmpty);
     expect(fields[1].controller?.text, isEmpty);
-    expect(find.text('Remember me'), findsNothing);
+    expect(find.text('Remember me'), findsOneWidget);
     expect(find.text('remembered@example.com'), findsNothing);
     expect(find.text('visible-secret'), findsNothing);
   });

@@ -36,7 +36,9 @@ Future<void> _openStudentFile(BuildContext context, String path) async {
 }
 
 class StudentAcademicsScreen extends ConsumerStatefulWidget {
-  const StudentAcademicsScreen({super.key});
+  const StudentAcademicsScreen({super.key, this.initialSegment = 0});
+
+  final int initialSegment;
 
   @override
   ConsumerState<StudentAcademicsScreen> createState() =>
@@ -45,11 +47,12 @@ class StudentAcademicsScreen extends ConsumerStatefulWidget {
 
 class _StudentAcademicsScreenState
     extends ConsumerState<StudentAcademicsScreen> {
-  int _segment = 0;
+  late int _segment;
 
   @override
   void initState() {
     super.initState();
+    _segment = widget.initialSegment.clamp(0, 3);
     Future.microtask(
         () => ref.read(studentAcademicsViewModelProvider.notifier).load());
   }
@@ -121,7 +124,11 @@ class _StudentAcademicsScreenState
     return IndexedStack(
       index: _segment,
       children: [
-        _ResultsView(state: state, viewModel: viewModel),
+        _ResultsView(
+          state: state,
+          viewModel: viewModel,
+          onSeeInsights: () => setState(() => _segment = 3),
+        ),
         _SyllabusView(state: state, viewModel: viewModel),
         _HomeworkView(state: state, viewModel: viewModel),
         _InsightsView(state: state, viewModel: viewModel),
@@ -224,15 +231,28 @@ class _AcademicsTab extends StatelessWidget {
   }
 }
 
-class _ResultsView extends StatelessWidget {
-  const _ResultsView({required this.state, required this.viewModel});
+class _ResultsView extends StatefulWidget {
+  const _ResultsView({
+    required this.state,
+    required this.viewModel,
+    required this.onSeeInsights,
+  });
 
   final StudentAcademicsState state;
   final StudentAcademicsViewModel viewModel;
+  final VoidCallback onSeeInsights;
+
+  @override
+  State<_ResultsView> createState() => _ResultsViewState();
+}
+
+class _ResultsViewState extends State<_ResultsView> {
+  String? _selection;
 
   @override
   Widget build(BuildContext context) {
-    final results = state.pagedResults;
+    final state = widget.state;
+    final viewModel = widget.viewModel;
     if (state.results.isEmpty) {
       return const StudentEmptyView(
         icon: Icons.grade_outlined,
@@ -240,6 +260,27 @@ class _ResultsView extends StatelessWidget {
         message: 'Scores appear here as soon as your teacher publishes them.',
       );
     }
+    final assessments = state.results.map((item) => item.assessment).toSet();
+    final years = state.results
+        .map((item) => item.academicYear)
+        .whereType<int>()
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
+    final options = <String, String>{
+      for (final assessment in assessments)
+        'assessment:$assessment': assessment,
+      for (final year in years) 'year:$year': '$year yearly improvement',
+    };
+    _selection ??= options.keys.first;
+    if (!options.containsKey(_selection)) _selection = options.keys.first;
+    final results = state.results.where((item) {
+      final selection = _selection!;
+      if (selection.startsWith('year:')) {
+        return item.academicYear.toString() == selection.substring(5);
+      }
+      return item.assessment == selection.substring('assessment:'.length);
+    }).toList();
     return RefreshIndicator(
       onRefresh: viewModel.refresh,
       child: ListView(
@@ -264,17 +305,68 @@ class _ResultsView extends StatelessWidget {
             ),
           ),
           const SizedBox(height: TmsSpace.lg),
-          Text('Latest results', style: Theme.of(context).textTheme.titleLarge),
+          Text('Published results',
+              style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: TmsSpace.sm),
-          for (final result in results) ...[
-            _ResultCard(result: result),
-            const SizedBox(height: TmsSpace.sm),
-          ],
-          StudentLoadMoreFooter(
-            hasMore: state.hasMoreResults,
-            remaining: state.results.length - results.length,
-            onLoadMore: viewModel.loadMoreResults,
+          DropdownButtonFormField<String>(
+            initialValue: _selection,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Assessment or academic year',
+              prefixIcon: Icon(Icons.fact_check_outlined),
+            ),
+            items: options.entries
+                .map((entry) => DropdownMenuItem(
+                      value: entry.key,
+                      child: Text(entry.value, overflow: TextOverflow.ellipsis),
+                    ))
+                .toList(),
+            onChanged: (value) => setState(() => _selection = value),
           ),
+          const SizedBox(height: TmsSpace.md),
+          Text(
+            'Only results published by your teacher or administrator are available.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: TmsSpace.sm),
+          SizedBox(
+            height: 310,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: results.length,
+              separatorBuilder: (_, __) => const SizedBox(width: TmsSpace.sm),
+              itemBuilder: (context, index) => SizedBox(
+                width: 310,
+                child: _ResultCard(result: results[index]),
+              ),
+            ),
+          ),
+          const SizedBox(height: TmsSpace.sm),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.tonalIcon(
+              onPressed: widget.onSeeInsights,
+              icon: const Icon(Icons.insights_outlined),
+              label: const Text('See insights'),
+            ),
+          ),
+          if (results
+              .any((result) => result.teacherRemarks?.isNotEmpty == true)) ...[
+            const SizedBox(height: TmsSpace.lg),
+            Text('Teacher comments',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: TmsSpace.sm),
+            for (final result in results
+                .where((result) => result.teacherRemarks?.isNotEmpty == true))
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.comment_outlined,
+                      color: StudentColors.primary),
+                  title: Text(result.subject),
+                  subtitle: Text(result.teacherRemarks!),
+                ),
+              ),
+          ],
         ],
       ),
     );
@@ -290,96 +382,167 @@ class _ResultCard extends StatelessWidget {
     final classAverage = result.classAverage;
     final aboveAverage = classAverage == null || result.score >= classAverage;
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(TmsSpace.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(result.subject,
-                          style: Theme.of(context).textTheme.titleMedium),
-                      const SizedBox(height: TmsSpace.xxs),
-                      Text(result.assessment,
-                          style: Theme.of(context).textTheme.bodySmall),
-                    ],
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          showDragHandle: true,
+          builder: (_) => _ResultDetails(result: result),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(TmsSpace.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(result.subject,
+                            style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: TmsSpace.xxs),
+                        Text(result.assessment,
+                            style: Theme.of(context).textTheme.bodySmall),
+                      ],
+                    ),
                   ),
-                ),
-                Text(
-                  '${result.score.toStringAsFixed(0)}/${result.maximum.toStringAsFixed(0)}',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: StudentColors.primaryDark,
-                      ),
-                ),
-              ],
-            ),
-            const SizedBox(height: TmsSpace.md),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(TmsRadius.pill),
-              child: LinearProgressIndicator(
-                minHeight: 8,
-                value: (result.percentage / 100).clamp(0.0, 1.0).toDouble(),
-                backgroundColor: StudentColors.border,
-              ),
-            ),
-            const SizedBox(height: TmsSpace.sm),
-            Row(
-              children: [
-                StudentStatusPill(
-                  label: aboveAverage
-                      ? 'Above class average'
-                      : 'Below class average',
-                  icon: aboveAverage
-                      ? Icons.trending_up_rounded
-                      : Icons.trending_down_rounded,
-                  color: aboveAverage
-                      ? StudentColors.success
-                      : StudentColors.warning,
-                ),
-                const Spacer(),
-                if (result.publishedLabel != null)
                   Text(
-                    result.publishedLabel!,
-                    style: Theme.of(context).textTheme.bodySmall,
+                    '${result.score.toStringAsFixed(0)}/${result.maximum.toStringAsFixed(0)}',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: StudentColors.primaryDark,
+                        ),
                   ),
-              ],
-            ),
-            if (result.teacherRemarks?.isNotEmpty == true) ...[
+                ],
+              ),
+              const SizedBox(height: TmsSpace.md),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(TmsRadius.pill),
+                child: LinearProgressIndicator(
+                  minHeight: 8,
+                  value: (result.percentage / 100).clamp(0.0, 1.0).toDouble(),
+                  backgroundColor: StudentColors.border,
+                ),
+              ),
               const SizedBox(height: TmsSpace.sm),
-              Text(
-                'Teacher feedback: ${result.teacherRemarks}',
-                style: Theme.of(context).textTheme.bodySmall,
+              Row(
+                children: [
+                  StudentStatusPill(
+                    label: aboveAverage
+                        ? 'Above class average'
+                        : 'Below class average',
+                    icon: aboveAverage
+                        ? Icons.trending_up_rounded
+                        : Icons.trending_down_rounded,
+                    color: aboveAverage
+                        ? StudentColors.success
+                        : StudentColors.warning,
+                  ),
+                  const Spacer(),
+                  if (result.publishedLabel != null)
+                    Text(
+                      result.publishedLabel!,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                ],
+              ),
+              if (result.teacherRemarks?.isNotEmpty == true) ...[
+                const SizedBox(height: TmsSpace.sm),
+                Text(
+                  'Teacher feedback: ${result.teacherRemarks}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+              const Divider(height: TmsSpace.lg),
+              Row(
+                children: [
+                  const Icon(Icons.description_outlined,
+                      color: StudentColors.primary),
+                  const SizedBox(width: TmsSpace.sm),
+                  const Expanded(child: Text('Teacher-shared exam sheet')),
+                  if (result.resultSheetUrl?.isNotEmpty == true)
+                    TextButton.icon(
+                      onPressed: () =>
+                          _openStudentFile(context, result.resultSheetUrl!),
+                      icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                      label: const Text('View'),
+                    )
+                  else
+                    Text('Not shared',
+                        style: Theme.of(context).textTheme.bodySmall),
+                ],
               ),
             ],
-            const Divider(height: TmsSpace.lg),
-            Row(
-              children: [
-                const Icon(Icons.description_outlined,
-                    color: StudentColors.primary),
-                const SizedBox(width: TmsSpace.sm),
-                const Expanded(child: Text('Teacher-shared exam sheet')),
-                if (result.resultSheetUrl?.isNotEmpty == true)
-                  TextButton.icon(
-                    onPressed: () =>
-                        _openStudentFile(context, result.resultSheetUrl!),
-                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                    label: const Text('View'),
-                  )
-                else
-                  Text('Not shared',
-                      style: Theme.of(context).textTheme.bodySmall),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
+}
+
+class _ResultDetails extends StatelessWidget {
+  const _ResultDetails({required this.result});
+  final AcademicResult result;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(
+            TmsSpace.lg,
+            0,
+            TmsSpace.lg,
+            TmsSpace.lg,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(result.subject,
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelLarge
+                      ?.copyWith(color: StudentColors.primary)),
+              Text(result.assessment,
+                  style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: TmsSpace.md),
+              Text(
+                '${result.score.toStringAsFixed(0)} / ${result.maximum.toStringAsFixed(0)}  ·  ${result.percentage.toStringAsFixed(1)}%',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              if (result.classAverage != null) ...[
+                const SizedBox(height: TmsSpace.xs),
+                Text(
+                  'Class average: ${result.classAverage!.toStringAsFixed(1)} / ${result.maximum.toStringAsFixed(0)}',
+                ),
+              ],
+              if (result.publishedLabel?.isNotEmpty == true) ...[
+                const SizedBox(height: TmsSpace.xs),
+                Text(result.publishedLabel!),
+              ],
+              const Divider(height: TmsSpace.xl),
+              Text('Result description',
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: TmsSpace.xs),
+              Text(result.teacherRemarks?.isNotEmpty == true
+                  ? result.teacherRemarks!
+                  : 'No description or teacher feedback was provided.'),
+              if (result.resultSheetUrl?.isNotEmpty == true) ...[
+                const SizedBox(height: TmsSpace.lg),
+                FilledButton.tonalIcon(
+                  onPressed: () =>
+                      _openStudentFile(context, result.resultSheetUrl!),
+                  icon: const Icon(Icons.description_outlined),
+                  label: const Text('Open result sheet'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
 }
 
 class _SyllabusView extends StatefulWidget {
@@ -603,8 +766,6 @@ class _ChapterDetails extends StatelessWidget {
 
 enum _HomeworkFilter { pending, soon, overdue, completed }
 
-enum _HomeworkSort { dueDate, subject, status }
-
 class _HomeworkView extends StatefulWidget {
   const _HomeworkView({required this.state, required this.viewModel});
 
@@ -617,7 +778,6 @@ class _HomeworkView extends StatefulWidget {
 
 class _HomeworkViewState extends State<_HomeworkView> {
   _HomeworkFilter _filter = _HomeworkFilter.pending;
-  _HomeworkSort _sort = _HomeworkSort.dueDate;
 
   String _label(_HomeworkFilter filter) => switch (filter) {
         _HomeworkFilter.pending => 'Pending',
@@ -636,25 +796,10 @@ class _HomeworkViewState extends State<_HomeworkView> {
   int _count(_HomeworkFilter filter) =>
       widget.state.homework.where((item) => _matches(item, filter)).length;
 
-  int _rank(HomeworkTask item) => item.isOverdue
-      ? 0
-      : item.isDueSoon
-          ? 1
-          : item.completed
-              ? 3
-              : 2;
-
   List<HomeworkTask> get _visible {
-    final items = widget.state.homework.indexed
-        .where((entry) => _matches(entry.$2, _filter))
+    return widget.state.homework
+        .where((item) => _matches(item, _filter))
         .toList();
-    items.sort((a, b) => switch (_sort) {
-          _HomeworkSort.dueDate => a.$1.compareTo(b.$1),
-          _HomeworkSort.subject =>
-            a.$2.subject.toLowerCase().compareTo(b.$2.subject.toLowerCase()),
-          _HomeworkSort.status => _rank(a.$2).compareTo(_rank(b.$2)),
-        });
-    return items.map((entry) => entry.$2).toList();
   }
 
   @override
@@ -687,30 +832,9 @@ class _HomeworkViewState extends State<_HomeworkView> {
             ),
           ),
           const SizedBox(height: TmsSpace.md),
-          Row(
-            children: [
-              Expanded(
-                child: Text('${_label(_filter)} homework',
-                    style: Theme.of(context).textTheme.titleLarge),
-              ),
-              DropdownButton<_HomeworkSort>(
-                value: _sort,
-                underline: const SizedBox.shrink(),
-                onChanged: (value) {
-                  if (value != null) setState(() => _sort = value);
-                },
-                items: const [
-                  DropdownMenuItem(
-                      value: _HomeworkSort.dueDate, child: Text('Due date')),
-                  DropdownMenuItem(
-                      value: _HomeworkSort.subject, child: Text('Subject')),
-                  DropdownMenuItem(
-                      value: _HomeworkSort.status, child: Text('Status')),
-                ],
-              ),
-            ],
-          ),
-          Text('Assignments are read-only in the student portal.',
+          Text('${_label(_filter)} homework',
+              style: Theme.of(context).textTheme.titleLarge),
+          Text('Open an assignment to review details or mark it done.',
               style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: TmsSpace.sm),
           if (_visible.isEmpty)
@@ -770,7 +894,12 @@ class _HomeworkViewState extends State<_HomeworkView> {
                     context: context,
                     isScrollControlled: true,
                     showDragHandle: true,
-                    builder: (_) => _HomeworkDetails(item: item),
+                    builder: (_) => _HomeworkDetails(
+                      item: item,
+                      viewModel: widget.viewModel,
+                      busy:
+                          widget.state.completingHomeworkIds.contains(item.id),
+                    ),
                   ),
                 ),
               ),
@@ -782,85 +911,144 @@ class _HomeworkViewState extends State<_HomeworkView> {
   }
 }
 
-class _HomeworkDetails extends StatelessWidget {
-  const _HomeworkDetails({required this.item});
+class _HomeworkDetails extends StatefulWidget {
+  const _HomeworkDetails({
+    required this.item,
+    required this.viewModel,
+    required this.busy,
+  });
 
   final HomeworkTask item;
+  final StudentAcademicsViewModel viewModel;
+  final bool busy;
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(
-            TmsSpace.lg,
-            0,
-            TmsSpace.lg,
-            TmsSpace.lg,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(item.subject,
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelLarge
-                      ?.copyWith(color: StudentColors.primary)),
-              Text(item.title,
-                  style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: TmsSpace.xs),
-              Text('Assigned by ${item.teacher}'),
-              Text(item.completed ? item.dueLabel : 'Due ${item.dueLabel}'),
-              if (item.description?.isNotEmpty == true) ...[
-                const Divider(height: TmsSpace.xl),
-                Text('Instructions',
-                    style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: TmsSpace.xs),
-                Text(item.description!),
-              ],
-              if (item.contentUrl?.isNotEmpty == true ||
-                  item.submissionUrl?.isNotEmpty == true) ...[
-                const SizedBox(height: TmsSpace.lg),
-                Wrap(
-                  spacing: TmsSpace.sm,
-                  runSpacing: TmsSpace.sm,
-                  children: [
-                    if (item.contentUrl?.isNotEmpty == true)
-                      FilledButton.tonalIcon(
-                        onPressed: () =>
-                            _openStudentFile(context, item.contentUrl!),
-                        icon: const Icon(Icons.attachment_rounded),
-                        label: const Text('Open assignment file'),
-                      ),
-                    if (item.submissionUrl?.isNotEmpty == true)
-                      OutlinedButton.icon(
-                        onPressed: () =>
-                            _openStudentFile(context, item.submissionUrl!),
-                        icon: const Icon(Icons.upload_file_rounded),
-                        label: const Text('View your submission'),
-                      ),
-                  ],
-                ),
-              ],
-              if (item.teacherRemarks?.isNotEmpty == true) ...[
-                const Divider(height: TmsSpace.xl),
-                Text('Teacher feedback',
-                    style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: TmsSpace.xs),
-                Text(item.teacherRemarks!),
-              ],
-            ],
-          ),
-        ),
-      );
+  State<_HomeworkDetails> createState() => _HomeworkDetailsState();
 }
 
-class _InsightsView extends StatelessWidget {
+class _HomeworkDetailsState extends State<_HomeworkDetails> {
+  late bool _saving = widget.busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(
+          TmsSpace.lg,
+          0,
+          TmsSpace.lg,
+          TmsSpace.lg,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(item.subject,
+                style: Theme.of(context)
+                    .textTheme
+                    .labelLarge
+                    ?.copyWith(color: StudentColors.primary)),
+            Text(item.title, style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: TmsSpace.xs),
+            Text('Assigned by ${item.teacher}'),
+            Text(item.completed ? item.dueLabel : 'Due ${item.dueLabel}'),
+            if (item.description?.isNotEmpty == true) ...[
+              const Divider(height: TmsSpace.xl),
+              Text('Instructions',
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: TmsSpace.xs),
+              Text(item.description!),
+            ],
+            if (item.contentUrl?.isNotEmpty == true ||
+                item.submissionUrl?.isNotEmpty == true) ...[
+              const SizedBox(height: TmsSpace.lg),
+              Wrap(
+                spacing: TmsSpace.sm,
+                runSpacing: TmsSpace.sm,
+                children: [
+                  if (item.contentUrl?.isNotEmpty == true)
+                    FilledButton.tonalIcon(
+                      onPressed: () =>
+                          _openStudentFile(context, item.contentUrl!),
+                      icon: const Icon(Icons.attachment_rounded),
+                      label: const Text('Open assignment file'),
+                    ),
+                  if (item.submissionUrl?.isNotEmpty == true)
+                    OutlinedButton.icon(
+                      onPressed: () =>
+                          _openStudentFile(context, item.submissionUrl!),
+                      icon: const Icon(Icons.upload_file_rounded),
+                      label: const Text('View your submission'),
+                    ),
+                ],
+              ),
+            ],
+            if (item.teacherRemarks?.isNotEmpty == true) ...[
+              const Divider(height: TmsSpace.xl),
+              Text('Teacher feedback',
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: TmsSpace.xs),
+              Text(item.teacherRemarks!),
+            ],
+            if (!item.completed) ...[
+              const SizedBox(height: TmsSpace.xl),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _saving
+                      ? null
+                      : () async {
+                          setState(() => _saving = true);
+                          final messenger = ScaffoldMessenger.of(context);
+                          final done =
+                              await widget.viewModel.markHomeworkDone(item.id);
+                          if (!context.mounted) return;
+                          if (done) {
+                            Navigator.pop(context);
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Homework marked as done.'),
+                              ),
+                            );
+                          } else {
+                            setState(() => _saving = false);
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Could not update homework.'),
+                              ),
+                            );
+                          }
+                        },
+                  icon: const Icon(Icons.task_alt_rounded),
+                  label: Text(_saving ? 'Saving…' : 'Mark as done'),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InsightsView extends StatefulWidget {
   const _InsightsView({required this.state, required this.viewModel});
 
   final StudentAcademicsState state;
   final StudentAcademicsViewModel viewModel;
 
   @override
+  State<_InsightsView> createState() => _InsightsViewState();
+}
+
+class _InsightsViewState extends State<_InsightsView> {
+  String _selectedSubject = 'Overall';
+  String _selectedPeriod = 'all';
+
+  @override
   Widget build(BuildContext context) {
+    final state = widget.state;
+    final viewModel = widget.viewModel;
     final insights = state.detail?.insights.isNotEmpty == true
         ? state.detail!.insights
         : state.insights;
@@ -875,11 +1063,148 @@ class _InsightsView extends StatelessWidget {
       ..sort((a, b) => b.average.compareTo(a.average));
     final weakest = [...insights]
       ..sort((a, b) => a.average.compareTo(b.average));
+    final years = state.results
+        .map((item) => item.academicYear)
+        .whereType<int>()
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
+    final assessments = state.results.map((item) => item.assessment).toSet();
+    final periodOptions = <String, String>{
+      'all': 'All published',
+      for (final assessment in assessments)
+        'assessment:$assessment': assessment,
+      for (final year in years) 'year:$year': '$year',
+    };
+    if (!periodOptions.containsKey(_selectedPeriod)) _selectedPeriod = 'all';
+    final visibleMarks = state.results.where((item) {
+      if (_selectedPeriod == 'all') return true;
+      if (_selectedPeriod.startsWith('year:')) {
+        return item.academicYear.toString() == _selectedPeriod.substring(5);
+      }
+      return item.assessment == _selectedPeriod.substring('assessment:'.length);
+    }).toList();
+    if (_selectedSubject != 'Overall' &&
+        !insights.any((item) => item.subject == _selectedSubject)) {
+      _selectedSubject = 'Overall';
+    }
+    final chartResults = visibleMarks
+        .where((item) =>
+            _selectedSubject == 'Overall' || item.subject == _selectedSubject)
+        .toList()
+        .reversed
+        .toList();
+    final chartValues = chartResults.map((item) => item.percentage).toList();
+    final chartTrend =
+        chartValues.length < 2 ? 0.0 : chartValues.last - chartValues.first;
+    final latestResult = chartResults.isEmpty ? null : chartResults.last;
+    final passPercentage = latestResult?.passMarks == null ||
+            latestResult == null ||
+            latestResult.maximum <= 0
+        ? 40.0
+        : (latestResult.passMarks! / latestResult.maximum) * 100;
+    final trendStatus = _trendStatus(
+      chartTrend,
+      failed: latestResult != null && latestResult.percentage < passPercentage,
+      hasHistory: chartValues.length >= 2,
+    );
     return RefreshIndicator(
       onRefresh: viewModel.refresh,
       child: ListView(
         padding: const EdgeInsets.all(TmsSpace.md),
         children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(TmsSpace.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text('Performance trend',
+                            style: Theme.of(context).textTheme.titleLarge),
+                      ),
+                      DropdownButton<String>(
+                        value: _selectedSubject,
+                        underline: const SizedBox.shrink(),
+                        items: [
+                          const DropdownMenuItem(
+                            value: 'Overall',
+                            child: Text('Overall'),
+                          ),
+                          for (final insight in insights)
+                            DropdownMenuItem(
+                              value: insight.subject,
+                              child: Text(insight.subject),
+                            ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() => _selectedSubject = value);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: TmsSpace.sm),
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedPeriod,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Assessment or academic year',
+                      prefixIcon: Icon(Icons.date_range_outlined),
+                      isDense: true,
+                    ),
+                    items: periodOptions.entries
+                        .map((entry) => DropdownMenuItem(
+                              value: entry.key,
+                              child: Text(entry.value,
+                                  overflow: TextOverflow.ellipsis),
+                            ))
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _selectedPeriod = value);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: TmsSpace.sm),
+                  Text(
+                    trendStatus.label,
+                    style: TextStyle(
+                      color: trendStatus.color,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: TmsSpace.md),
+                  SizedBox(
+                    height: 190,
+                    width: double.infinity,
+                    child: chartValues.length < 2
+                        ? const Center(
+                            child: Text(
+                              'At least two published evaluations are needed for a trend.',
+                              textAlign: TextAlign.center,
+                            ),
+                          )
+                        : CustomPaint(
+                            painter: _PerformanceLineChartPainter(
+                              values: chartValues,
+                              color: StudentColors.primary,
+                            ),
+                          ),
+                  ),
+                  const SizedBox(height: TmsSpace.xs),
+                  Text(
+                    'Based only on teacher-published evaluations and marksheets.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: TmsSpace.md),
           Row(
             children: [
               Expanded(
@@ -937,12 +1262,24 @@ class _InsightsView extends StatelessWidget {
                         Text('${insight.average.toStringAsFixed(0)}%',
                             style: Theme.of(context).textTheme.titleMedium),
                         Text(
-                          '${insight.trend} ${insight.change >= 0 ? '+' : ''}${insight.change.toStringAsFixed(0)}%',
+                          _trendStatus(
+                            insight.change,
+                            failed: _subjectFailed(
+                              insight.subject,
+                              state.results,
+                            ),
+                            hasHistory: true,
+                          ).label,
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: insight.change >= 0
-                                        ? StudentColors.success
-                                        : StudentColors.error,
+                                    color: _trendStatus(
+                                      insight.change,
+                                      failed: _subjectFailed(
+                                        insight.subject,
+                                        state.results,
+                                      ),
+                                      hasHistory: true,
+                                    ).color,
                                   ),
                         ),
                       ],
@@ -967,6 +1304,12 @@ class _InsightsView extends StatelessWidget {
                 label: const Text('Refresh detailed insights'),
               ),
             ),
+          if (state.detail?.remarks.isNotEmpty == true) ...[
+            const SizedBox(height: TmsSpace.md),
+            Text('Teacher comments',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: TmsSpace.sm),
+          ],
           for (final remark in state.detail?.remarks ?? const []) ...[
             Card(
               child: ListTile(
@@ -986,6 +1329,125 @@ class _InsightsView extends StatelessWidget {
       ),
     );
   }
+
+  ({String label, Color color}) _trendStatus(
+    double change, {
+    required bool failed,
+    required bool hasHistory,
+  }) {
+    if (failed) {
+      return (
+        label: 'Below pass level · needs immediate support',
+        color: StudentColors.error,
+      );
+    }
+    if (!hasHistory) {
+      return (
+        label: 'More evaluations are needed',
+        color: StudentColors.mutedText,
+      );
+    }
+    if (change <= -10) {
+      return (
+        label: 'Significant decline · ${change.toStringAsFixed(1)}%',
+        color: StudentColors.error,
+      );
+    }
+    if (change < -3) {
+      return (
+        label: 'Needs improvement · ${change.toStringAsFixed(1)}%',
+        color: StudentColors.warning,
+      );
+    }
+    if (change >= 10) {
+      return (
+        label: 'Strong improvement · +${change.toStringAsFixed(1)}%',
+        color: StudentColors.success,
+      );
+    }
+    if (change > 3) {
+      return (
+        label: 'Improving · +${change.toStringAsFixed(1)}%',
+        color: StudentColors.success,
+      );
+    }
+    return (
+      label: 'Stable performance',
+      color: StudentColors.primary,
+    );
+  }
+
+  bool _subjectFailed(String subject, List<AcademicResult> results) {
+    final matches = results.where((result) => result.subject == subject);
+    if (matches.isEmpty) return false;
+    final latest = matches.first;
+    final passPercentage = latest.passMarks == null || latest.maximum <= 0
+        ? 40.0
+        : (latest.passMarks! / latest.maximum) * 100;
+    return latest.percentage < passPercentage;
+  }
+}
+
+class _PerformanceLineChartPainter extends CustomPainter {
+  const _PerformanceLineChartPainter({
+    required this.values,
+    required this.color,
+  });
+
+  final List<double> values;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const left = 30.0;
+    const top = 10.0;
+    const bottom = 24.0;
+    final chartHeight = size.height - top - bottom;
+    final chartWidth = size.width - left - 8;
+    final gridPaint = Paint()
+      ..color = StudentColors.border
+      ..strokeWidth = 1;
+    final labelPainter = TextPainter(textDirection: TextDirection.ltr);
+    for (final score in [0, 25, 50, 75, 100]) {
+      final y = top + chartHeight * (1 - score / 100);
+      canvas.drawLine(Offset(left, y), Offset(size.width, y), gridPaint);
+      labelPainter
+        ..text = TextSpan(
+          text: '$score',
+          style: const TextStyle(fontSize: 9, color: StudentColors.mutedText),
+        )
+        ..layout();
+      labelPainter.paint(canvas, Offset(0, y - labelPainter.height / 2));
+    }
+
+    final path = Path();
+    final points = <Offset>[];
+    for (var index = 0; index < values.length; index++) {
+      final x = left + chartWidth * index / (values.length - 1);
+      final value = values[index].clamp(0, 100).toDouble();
+      final y = top + chartHeight * (1 - value / 100);
+      final point = Offset(x, y);
+      points.add(point);
+      index == 0 ? path.moveTo(x, y) : path.lineTo(x, y);
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..strokeWidth = 3
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+    for (final point in points) {
+      canvas.drawCircle(point, 4, Paint()..color = color);
+      canvas.drawCircle(point, 2, Paint()..color = Colors.white);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PerformanceLineChartPainter oldDelegate) =>
+      oldDelegate.values != values || oldDelegate.color != color;
 }
 
 class _InsightSummary extends StatelessWidget {

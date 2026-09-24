@@ -94,7 +94,7 @@ router.post(
       return res.status(400).json({ error: 'Provide a reason no longer than 2,000 characters.' });
     }
     try {
-      const [tenantPolicy, branch, targetStudent] = await Promise.all([
+      const [tenantPolicy, branch, targetStudent, selfStudent] = await Promise.all([
         prisma.tenant.findUnique({ where: { id: tenantId } }),
         prisma.branch.findFirst({ where: { id: branchId, tenantId } }),
         studentId
@@ -114,16 +114,33 @@ router.post(
               },
             })
           : Promise.resolve(null),
+        !studentId
+          ? prisma.student.findFirst({
+              where: {
+                userId: requesterUserId,
+                user: { tenantId },
+                enrollments: { some: { class: { branchId }, status: { in: ['ACTIVE', 'BLOCKED'] } } },
+              },
+              select: {
+                userId: true,
+                enrollments: {
+                  where: { status: { in: ['ACTIVE', 'BLOCKED'] }, class: { branchId } },
+                  select: { class: { select: { teacherId: true } } },
+                },
+              },
+            })
+          : Promise.resolve(null),
       ]);
       if (!tenantPolicy || !branch) return res.status(404).json({ error: 'Tenant or branch not found.' });
       const branchAssignment = req.user!.roles.some((role: any) => role.branchId === branchId);
       if (studentId && !targetStudent) {
         return res.status(404).json({ error: 'Linked student was not found in this branch.' });
       }
-      if (!studentId && !isTenantAdmin(req.user!) && !branchAssignment) {
+      if (!studentId && !selfStudent && !isTenantAdmin(req.user!) && !branchAssignment) {
         return res.status(403).json({ error: 'You cannot submit leave for this branch.' });
       }
-      const leaveSubjectUserId = targetStudent?.userId ?? requesterUserId;
+      const leaveStudent = targetStudent ?? selfStudent;
+      const leaveSubjectUserId = leaveStudent?.userId ?? requesterUserId;
       const overlapping = await prisma.leave.findFirst({
         where: {
           tenantId,
@@ -170,7 +187,7 @@ router.post(
         destination: 'leave',
         entityId: leave.id,
       });
-      if (targetStudent) {
+      if (leaveStudent) {
         const branchAdmins = await prisma.user.findMany({
           where: {
             tenantId,
@@ -178,14 +195,14 @@ router.post(
           },
           select: { id: true },
         });
-        const teacherIds = targetStudent.enrollments
+        const teacherIds = leaveStudent.enrollments
           .map((enrollment) => enrollment.class.teacherId)
           .filter((id): id is string => Boolean(id));
         const recipients = [...new Set([...branchAdmins.map((admin) => admin.id), ...teacherIds])];
         await Promise.all(recipients.map((userId) => getPushSender().sendPush(
           userId,
           'Student leave requested',
-          `A linked parent requested ${leaveType} leave from ${startDate} to ${endDate}.`,
+          `${targetStudent ? 'A linked parent' : 'A student'} requested ${leaveType} leave from ${startDate} to ${endDate}.`,
         )));
       }
 

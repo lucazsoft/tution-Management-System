@@ -125,10 +125,6 @@ class StudentHomeScreen extends ConsumerWidget {
         const NepalDateTimeHeader(),
         const SizedBox(height: TmsSpace.lg),
         _buildWelcomeCard(context, portal),
-        if (portal.overdueAmount > 0) ...[
-          const SizedBox(height: TmsSpace.md),
-          _buildOverdueCard(context, portal.overdueAmount),
-        ],
         const SizedBox(height: TmsSpace.lg),
         _buildTimetableSection(context, portal),
         const SizedBox(height: TmsSpace.sm),
@@ -155,10 +151,6 @@ class StudentHomeScreen extends ConsumerWidget {
               const NepalDateTimeHeader(),
               const SizedBox(height: TmsSpace.lg),
               _buildWelcomeCard(context, portal),
-              if (portal.overdueAmount > 0) ...[
-                const SizedBox(height: TmsSpace.md),
-                _buildOverdueCard(context, portal.overdueAmount),
-              ],
               const SizedBox(height: TmsSpace.lg),
               _buildTimetableSection(context, portal),
               const SizedBox(height: TmsSpace.sm),
@@ -210,10 +202,6 @@ class StudentHomeScreen extends ConsumerWidget {
               const NepalDateTimeHeader(),
               const SizedBox(height: TmsSpace.lg),
               _buildWelcomeCard(context, portal),
-              if (portal.overdueAmount > 0) ...[
-                const SizedBox(height: TmsSpace.md),
-                _buildOverdueCard(context, portal.overdueAmount),
-              ],
               const SizedBox(height: TmsSpace.lg),
               _buildTimetableSection(context, portal),
               const SizedBox(height: TmsSpace.sm),
@@ -240,87 +228,61 @@ class StudentHomeScreen extends ConsumerWidget {
 
   Widget _buildWelcomeCard(BuildContext context, StudentPortal portal) {
     final profile = portal.profile;
-    return Container(
-      padding: const EdgeInsets.all(TmsSpace.lg),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [StudentColors.primaryDark, StudentColors.primary],
+    return Material(
+      color: Colors.transparent,
+      child: Ink(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [StudentColors.primaryDark, StudentColors.primary],
+          ),
+          borderRadius: BorderRadius.circular(TmsRadius.card),
         ),
-        borderRadius: BorderRadius.circular(TmsRadius.card),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Namaste, ${profile.name.split(' ').first}',
-            style: Theme.of(context)
-                .textTheme
-                .displaySmall
-                ?.copyWith(color: Colors.white),
-          ),
-          const SizedBox(height: TmsSpace.xs),
-          Text(
-            '${profile.grade} · ${profile.branch}',
-            style: Theme.of(context)
-                .textTheme
-                .bodyMedium
-                ?.copyWith(color: Colors.white70),
-          ),
-          const SizedBox(height: TmsSpace.lg),
-          Row(
-            children: [
-              const Icon(Icons.schedule_rounded, color: StudentColors.accent),
-              const SizedBox(width: TmsSpace.xs),
-              Expanded(
-                child: Text(
-                  '${portal.todaySessions.length} sessions today',
+        child: InkWell(
+          borderRadius: BorderRadius.circular(TmsRadius.card),
+          onTap: () => context.push('/student/timetable'),
+          child: Padding(
+            padding: const EdgeInsets.all(TmsSpace.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Namaste, ${profile.name.split(' ').first}',
                   style: Theme.of(context)
                       .textTheme
-                      .titleMedium
+                      .displaySmall
                       ?.copyWith(color: Colors.white),
                 ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOverdueCard(BuildContext context, double overdue) {
-    return Card(
-      color: StudentColors.error.withValues(alpha: .06),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(TmsRadius.card),
-        onTap: () => context.push('/student/fees'),
-        child: Padding(
-          padding: const EdgeInsets.all(TmsSpace.md),
-          child: Row(
-            children: [
-              const Icon(Icons.lock_rounded, color: StudentColors.error),
-              const SizedBox(width: TmsSpace.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                const SizedBox(height: TmsSpace.xs),
+                Text(
+                  '${profile.grade} · ${profile.branch}',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(color: Colors.white70),
+                ),
+                const SizedBox(height: TmsSpace.lg),
+                Row(
                   children: [
-                    Text(
-                      'Blocked — fee dues',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(color: StudentColors.error),
+                    const Icon(Icons.schedule_rounded,
+                        color: StudentColors.accent),
+                    const SizedBox(width: TmsSpace.xs),
+                    Expanded(
+                      child: Text(
+                        '${portal.todaySessions.length} sessions today',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(color: Colors.white),
+                      ),
                     ),
-                    const SizedBox(height: TmsSpace.xxs),
-                    Text(
-                      'NPR ${overdue.toStringAsFixed(0)} is overdue. View what is owed and the payment QR.',
-                    ),
+                    const Icon(Icons.chevron_right_rounded,
+                        color: Colors.white70),
                   ],
                 ),
-              ),
-              const Icon(Icons.chevron_right_rounded),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -370,7 +332,7 @@ class StudentHomeScreen extends ConsumerWidget {
         _SectionHeader(
           title: 'Homework due soon',
           action: 'View all',
-          onTap: () => context.go('/student/academics'),
+          onTap: () => context.go('/student/academics?tab=homework'),
         ),
         const SizedBox(height: TmsSpace.sm),
         if (pending.isEmpty)
@@ -401,7 +363,7 @@ class StudentHomeScreen extends ConsumerWidget {
                 title: Text(item.title),
                 subtitle: Text('${item.subject} · Due ${item.dueLabel}'),
                 trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => context.go('/student/academics'),
+                onTap: () => context.go('/student/academics?tab=homework'),
               ),
             ),
             const SizedBox(height: TmsSpace.sm),
@@ -471,50 +433,24 @@ class StudentHomeScreen extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Your record', style: Theme.of(context).textTheme.titleLarge),
+        Text('Your record', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: TmsSpace.sm),
-        Row(
-          children: [
-            Expanded(
+        SizedBox(
+          height: 124,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: actions.length,
+            separatorBuilder: (_, __) => const SizedBox(width: TmsSpace.sm),
+            itemBuilder: (context, index) => SizedBox(
+              width: 152,
               child: _QuickAction(
-                icon: actions[0].icon,
-                label: actions[0].label,
-                value: actions[0].value,
-                onTap: actions[0].onTap,
+                icon: actions[index].icon,
+                label: actions[index].label,
+                value: actions[index].value,
+                onTap: actions[index].onTap,
               ),
             ),
-            const SizedBox(width: TmsSpace.sm),
-            Expanded(
-              child: _QuickAction(
-                icon: actions[1].icon,
-                label: actions[1].label,
-                value: actions[1].value,
-                onTap: actions[1].onTap,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: TmsSpace.sm),
-        Row(
-          children: [
-            Expanded(
-              child: _QuickAction(
-                icon: actions[2].icon,
-                label: actions[2].label,
-                value: actions[2].value,
-                onTap: actions[2].onTap,
-              ),
-            ),
-            const SizedBox(width: TmsSpace.sm),
-            Expanded(
-              child: _QuickAction(
-                icon: actions[3].icon,
-                label: actions[3].label,
-                value: actions[3].value,
-                onTap: actions[3].onTap,
-              ),
-            ),
-          ],
+          ),
         ),
       ],
     );
@@ -978,12 +914,12 @@ class _QuickAction extends StatelessWidget {
         borderRadius: BorderRadius.circular(TmsRadius.card),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(TmsSpace.md),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(icon, color: StudentColors.primary),
-              const SizedBox(height: TmsSpace.md),
+              const SizedBox(height: TmsSpace.sm),
               Text(value, style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: TmsSpace.xxs),
               Text(label, style: Theme.of(context).textTheme.bodySmall),

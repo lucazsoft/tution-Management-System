@@ -704,7 +704,7 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
             class: {
               include: {
                 assignedTeacher: { select: { firstName: true, lastName: true } },
-                branch: { select: { name: true, address: true } },
+                branch: { select: { id: true, name: true, address: true } },
                 syllabi: { include: { chapters: { orderBy: { position: 'asc' }, include: { topics: { orderBy: { position: 'asc' }, include: { logs: { orderBy: { logDate: 'desc' }, take: 20 } } } } }, dailyLogs: { orderBy: { logDate: 'desc' }, take: 20 } } },
               },
             },
@@ -864,6 +864,8 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
         maximum: ownGrade.maximum,
         classAverage: Math.round((classPercentage / 100) * ownGrade.maximum * 10) / 10,
         publishedLabel: `Graded ${formatDate(ownSubmission.updatedAt)}`,
+        testDate: ownSubmission.updatedAt.toISOString(),
+        academicYear: ownSubmission.updatedAt.getFullYear(),
         teacherRemarks: ownSubmission.remarks ?? undefined,
       }];
     });
@@ -875,6 +877,7 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
         id: row.id, subject: row.subject, assessment: row.assessment, score: normalized.score, maximum: normalized.maximum,
         passMarks: row.passMarks == null ? undefined : Number(row.passMarks), percentile: row.percentile == null ? undefined : Number(row.percentile),
         resultSheetUrl: row.resultSheetUrl ?? undefined, classAverage: classAverageOnScale(normalized, classAverages), publishedLabel: `Shared ${formatDate(row.publishedAt!)}`,
+        testDate: row.testDate.toISOString(), academicYear: row.testDate.getFullYear(),
       }}),
       ...homeworkResults,
     ];
@@ -1061,6 +1064,7 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
         institution: student.user.tenant.name,
         grade: student.grade?.name ?? 'Grade not assigned',
         branch: assignedBranch?.name ?? 'Branch not assigned',
+        branchId: assignedBranch?.id ?? '',
         branchAddress: assignedBranch?.address,
         rollNumber: student.admissionNumber ?? student.id.slice(0, 6).toUpperCase(),
         enrollmentId: student.id,
@@ -1085,6 +1089,13 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
       invoices,
       events,
       certificates,
+      leaves: leaveRows.map((leave) => ({
+        id: leave.id,
+        dates: `${formatDate(leave.startDate)}${leave.startDate.getTime() === leave.endDate.getTime() ? '' : ` – ${formatDate(leave.endDate)}`}`,
+        reason: leave.reason.includes(':') ? leave.reason.split(':')[0].trim() : leave.reason,
+        state: leave.status === 'APPROVED_LEVEL2' ? 'Approved' : leave.status === 'REJECTED' ? 'Rejected' : 'Pending',
+        detail: leave.remarks || leave.reason,
+      })),
       notifications,
     });
   } catch (error: any) {

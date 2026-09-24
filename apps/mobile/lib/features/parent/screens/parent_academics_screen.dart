@@ -46,12 +46,8 @@ class _ParentAcademicsScreenState extends ConsumerState<ParentAcademicsScreen>
     if (!enabled) return _featureDisabled(context, childName);
 
     return Scaffold(
+      drawer: ParentNavigation.drawer(context),
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => ParentNavigation.back(context),
-          tooltip: 'Back',
-        ),
         title: Text(
           '$childName\'s Academics',
           style:
@@ -88,11 +84,8 @@ class _ParentAcademicsScreenState extends ConsumerState<ParentAcademicsScreen>
   }
 
   Widget _featureDisabled(BuildContext context, String childName) => Scaffold(
+        drawer: ParentNavigation.drawer(context),
         appBar: AppBar(
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_rounded),
-            onPressed: () => ParentNavigation.back(context),
-          ),
           title: const Text('Academics'),
         ),
         bottomNavigationBar: const ParentNavigationBar(selectedIndex: 1),

@@ -79,7 +79,19 @@ DateTime shiftNepaliMonth(DateTime anchor, int offset) {
   final absoluteMonth = current.year * 12 + current.month - 1 + offset;
   final year = absoluteMonth ~/ 12;
   final month = absoluteMonth % 12 + 1;
-  return NepaliDateTime(year, month).toDateTime();
+  var shifted = NepaliDateTime(year, month, 1).toDateTime();
+  // Normalise a UTC conversion that can otherwise land on BS day two in the
+  // local timezone, causing month paging to skip the first day.
+  for (var attempt = 0; attempt < 2; attempt++) {
+    final converted = shifted.toNepaliDateTime();
+    if (converted.year == year &&
+        converted.month == month &&
+        converted.day == 1) {
+      break;
+    }
+    shifted = shifted.subtract(const Duration(days: 1));
+  }
+  return shifted;
 }
 
 class AcademicCalendar extends StatefulWidget {

@@ -27,6 +27,7 @@ class StudentAcademicsState extends ViewModelState {
     this.offline = false,
     this.accessDenied = false,
     this.sessionExpired = false,
+    this.completingHomeworkIds = const {},
     super.error,
     super.isLoading,
   });
@@ -39,6 +40,7 @@ class StudentAcademicsState extends ViewModelState {
   final bool offline;
   final bool accessDenied;
   final bool sessionExpired;
+  final Set<String> completingHomeworkIds;
 
   List<AcademicResult> get results => snapshot?.results ?? const [];
   List<HomeworkTask> get homework => snapshot?.homework ?? const [];
@@ -64,6 +66,7 @@ class StudentAcademicsState extends ViewModelState {
     bool? offline,
     bool? accessDenied,
     bool? sessionExpired,
+    Set<String>? completingHomeworkIds,
     bool? isLoading,
     String? error,
     bool clearError = false,
@@ -77,6 +80,8 @@ class StudentAcademicsState extends ViewModelState {
       offline: offline ?? this.offline,
       accessDenied: accessDenied ?? this.accessDenied,
       sessionExpired: sessionExpired ?? this.sessionExpired,
+      completingHomeworkIds:
+          completingHomeworkIds ?? this.completingHomeworkIds,
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
     );
@@ -135,6 +140,47 @@ class StudentAcademicsViewModel extends BaseViewModel<StudentAcademicsState> {
     state = state.copyWith(
       visibleHomework: state.visibleHomework + pageSize,
     );
+  }
+
+  Future<bool> markHomeworkDone(String homeworkId) async {
+    final studentId = state.snapshot?.enrollmentId ?? '';
+    if (studentId.isEmpty || state.completingHomeworkIds.contains(homeworkId)) {
+      return false;
+    }
+    state = state.copyWith(
+      completingHomeworkIds: {...state.completingHomeworkIds, homeworkId},
+      clearError: true,
+    );
+    try {
+      await _repository.markHomeworkDone(
+        homeworkId: homeworkId,
+        studentId: studentId,
+      );
+      final snapshot = await _repository.fetchPortal();
+      state = state.copyWith(
+        snapshot: snapshot,
+        completingHomeworkIds: {
+          ...state.completingHomeworkIds.where((id) => id != homeworkId),
+        },
+      );
+      return true;
+    } on ApiException catch (error) {
+      state = state.copyWith(
+        error: error.message,
+        completingHomeworkIds: {
+          ...state.completingHomeworkIds.where((id) => id != homeworkId),
+        },
+      )._applyFailure(error);
+      return false;
+    } catch (_) {
+      state = state.copyWith(
+        error: 'Could not mark this homework done. Please try again.',
+        completingHomeworkIds: {
+          ...state.completingHomeworkIds.where((id) => id != homeworkId),
+        },
+      );
+      return false;
+    }
   }
 
   /// Pulls score/insight/remark detail for the student's own record.

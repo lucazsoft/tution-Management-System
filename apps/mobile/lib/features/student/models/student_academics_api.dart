@@ -20,6 +20,9 @@ class AcademicResult {
     this.classAverage,
     this.resultSheetUrl,
     this.teacherRemarks,
+    this.testDate,
+    this.academicYear,
+    this.passMarks,
   });
 
   factory AcademicResult.fromJson(Map<String, dynamic> json) {
@@ -34,6 +37,10 @@ class AcademicResult {
           json['classAverage'] == null ? null : _asDouble(json['classAverage']),
       resultSheetUrl: json['resultSheetUrl'] as String?,
       teacherRemarks: json['teacherRemarks'] as String?,
+      testDate: DateTime.tryParse('${json['testDate'] ?? ''}'),
+      academicYear: (json['academicYear'] as num?)?.toInt(),
+      passMarks:
+          json['passMarks'] == null ? null : _asDouble(json['passMarks']),
     );
   }
 
@@ -46,6 +53,9 @@ class AcademicResult {
   final double? classAverage;
   final String? resultSheetUrl;
   final String? teacherRemarks;
+  final DateTime? testDate;
+  final int? academicYear;
+  final double? passMarks;
 
   double get percentage => maximum <= 0 ? 0 : (score / maximum) * 100;
 }

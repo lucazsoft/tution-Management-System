@@ -57,6 +57,7 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
+        drawer: ParentNavigation.drawer(context),
         appBar: AppBar(title: const Text('Messages')),
         bottomNavigationBar: const ParentNavigationBar(selectedIndex: 2),
         body: ParentPortalStateView(
@@ -145,7 +146,7 @@ class _PrivacyNotice extends StatelessWidget {
           const SizedBox(width: TmsSpace.sm),
           Expanded(
             child: Text(
-              'Privacy scoped to ${child.name}. Only assigned teachers and this child\'s Branch Admin are available; sibling conversations stay separate.',
+              'Privacy scoped to ${child.name}. Only authorized teaching, accounts, and branch staff are available; sibling conversations stay separate.',
             ),
           ),
         ]),
@@ -166,6 +167,7 @@ class _ContactList extends StatelessWidget {
   Widget build(BuildContext context) {
     final teachers = contacts.where((item) => item.role == 'TEACHER').length;
     final admins = contacts.where((item) => item.role == 'BRANCH_ADMIN').length;
+    final staff = contacts.where((item) => item.role == 'STAFF').length;
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -175,7 +177,7 @@ class _ContactList extends StatelessWidget {
               style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 3),
           Text(
-              '$teachers assigned teacher${teachers == 1 ? '' : 's'} · $admins branch support',
+              '$teachers assigned teacher${teachers == 1 ? '' : 's'} · $staff staff · $admins branch support',
               style: Theme.of(context)
                   .textTheme
                   .bodySmall
@@ -207,7 +209,9 @@ class _ContactList extends StatelessWidget {
                   title: Text(contact.name),
                   subtitle: Text(contact.role == 'BRANCH_ADMIN'
                       ? 'Branch support'
-                      : 'Assigned teacher · ${contact.subject}'),
+                      : contact.role == 'STAFF'
+                          ? contact.subject
+                          : 'Assigned teacher · ${contact.subject}'),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => onSelect(contact.id),
                 ),

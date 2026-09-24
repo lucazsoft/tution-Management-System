@@ -22,6 +22,7 @@ class StudentTimetableState extends ViewModelState {
   const StudentTimetableState({
     this.days = const [],
     this.todaySessions = const [],
+    this.events = const [],
     this.selectedIndex = 0,
     this.isRefreshing = false,
     this.usedFallback = false,
@@ -32,6 +33,7 @@ class StudentTimetableState extends ViewModelState {
 
   final List<PortalDaySchedule> days;
   final List<PortalSession> todaySessions;
+  final List<PortalEvent> events;
   final int selectedIndex;
   final bool isRefreshing;
   final bool usedFallback;
@@ -47,6 +49,7 @@ class StudentTimetableState extends ViewModelState {
   StudentTimetableState copyWith({
     List<PortalDaySchedule>? days,
     List<PortalSession>? todaySessions,
+    List<PortalEvent>? events,
     int? selectedIndex,
     bool? isRefreshing,
     bool? usedFallback,
@@ -59,6 +62,7 @@ class StudentTimetableState extends ViewModelState {
     return StudentTimetableState(
       days: days ?? this.days,
       todaySessions: todaySessions ?? this.todaySessions,
+      events: events ?? this.events,
       selectedIndex: selectedIndex ?? this.selectedIndex,
       isRefreshing: isRefreshing ?? this.isRefreshing,
       usedFallback: usedFallback ?? this.usedFallback,
@@ -103,6 +107,7 @@ class StudentTimetableViewModel extends BaseViewModel<StudentTimetableState> {
         isLoading: false,
         days: days,
         todaySessions: portal.todaySessions,
+        events: portal.events,
         selectedIndex: _todayIndex(days),
         usedFallback: usedFallback,
         clearError: true,
@@ -143,6 +148,7 @@ class StudentTimetableViewModel extends BaseViewModel<StudentTimetableState> {
         isRefreshing: false,
         days: days,
         todaySessions: portal.todaySessions,
+        events: portal.events,
         selectedIndex: _todayIndex(days),
         usedFallback: usedFallback,
         clearError: true,

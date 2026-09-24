@@ -1,0 +1,224 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
+class LeaveHistoryItem {
+  const LeaveHistoryItem(this.dates, this.reason, this.state, this.detail);
+  final String dates;
+  final String reason;
+  final String state;
+  final String detail;
+}
+
+class LeaveRequestContent extends StatefulWidget {
+  const LeaveRequestContent({
+    super.key,
+    required this.subjectName,
+    required this.history,
+    required this.onSubmit,
+  });
+
+  final String subjectName;
+  final List<LeaveHistoryItem> history;
+  final Future<void> Function(
+      String type, DateTime start, DateTime end, String reason) onSubmit;
+
+  @override
+  State<LeaveRequestContent> createState() => _LeaveRequestContentState();
+}
+
+class _LeaveRequestContentState extends State<LeaveRequestContent> {
+  DateTime? _start;
+  DateTime? _end;
+  String? _reason;
+  final _details = TextEditingController();
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _details.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pick(bool start) async {
+    final initial = (start ? _start : _end) ?? _start ?? DateTime.now();
+    final value = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 730)),
+    );
+    if (value != null) setState(() => start ? _start = value : _end = value);
+  }
+
+  Future<void> _submit() async {
+    if (_start == null ||
+        _end == null ||
+        _reason == null ||
+        _details.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Select both dates, a reason, and add details.')));
+      return;
+    }
+    if (_end!.isBefore(_start!)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('End date must be on or after the start date.')));
+      return;
+    }
+    setState(() => _submitting = true);
+    try {
+      await widget.onSubmit(_reason == 'Medical' ? 'SICK' : 'CASUAL', _start!,
+          _end!, '${_reason!}: ${_details.text.trim()}');
+      if (!mounted) return;
+      setState(() {
+        _start = null;
+        _end = null;
+        _reason = null;
+        _details.clear();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Leave request submitted for approval.')));
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$error')));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text('Leave history', style: Theme.of(context).textTheme.titleLarge),
+      const SizedBox(height: 8),
+      if (widget.history.isEmpty)
+        const Card(
+            child: Padding(
+                padding: EdgeInsets.all(18),
+                child: Text('No leave requests have been submitted yet.')))
+      else
+        ...widget.history.map((item) => Card(
+                child: ListTile(
+              leading: Icon(item.state == 'Approved'
+                  ? Icons.event_available
+                  : item.state == 'Rejected'
+                      ? Icons.event_busy
+                      : Icons.schedule),
+              title: Text(item.reason),
+              subtitle: Text('${item.dates}\n${item.detail}'),
+              isThreeLine: true,
+              trailing: Chip(label: Text(item.state)),
+            ))),
+      const SizedBox(height: 20),
+      Card(
+          child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Apply for planned leave',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(color: colors.primary)),
+                    const SizedBox(height: 4),
+                    const Text(
+                        'Branch Admin and assigned teachers are notified.'),
+                    const SizedBox(height: 18),
+                    LayoutBuilder(builder: (context, constraints) {
+                      final fields = [
+                        _DateField(
+                            label: 'Start date',
+                            value: _start,
+                            onTap: () => _pick(true)),
+                        _DateField(
+                            label: 'End date',
+                            value: _end,
+                            onTap: () => _pick(false)),
+                      ];
+                      return constraints.maxWidth >= 600
+                          ? Row(children: [
+                              Expanded(child: fields[0]),
+                              const SizedBox(width: 14),
+                              Expanded(child: fields[1])
+                            ])
+                          : Column(children: [
+                              fields[0],
+                              const SizedBox(height: 12),
+                              fields[1]
+                            ]);
+                    }),
+                    const SizedBox(height: 14),
+                    DropdownButtonFormField<String>(
+                      value: _reason,
+                      decoration: const InputDecoration(
+                          labelText: 'Reason', border: OutlineInputBorder()),
+                      hint: const Text('Choose a reason'),
+                      items: const [
+                        'Medical',
+                        'Family event',
+                        'Travel',
+                        'Other'
+                      ]
+                          .map((value) => DropdownMenuItem(
+                              value: value, child: Text(value)))
+                          .toList(),
+                      onChanged: (value) => setState(() => _reason = value),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                        controller: _details,
+                        maxLines: 4,
+                        maxLength: 1900,
+                        decoration: InputDecoration(
+                            labelText: 'Details',
+                            hintText:
+                                'For example: ${widget.subjectName} has a medical appointment',
+                            alignLabelWithHint: true,
+                            border: const OutlineInputBorder())),
+                    const SizedBox(height: 8),
+                    FilledButton.icon(
+                        onPressed: _submitting ? null : _submit,
+                        icon: _submitting
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.send_outlined),
+                        label: const Text('Submit leave request')),
+                  ]))),
+      const SizedBox(height: 14),
+      Card(
+          color: colors.primaryContainer,
+          child: const Padding(
+              padding: EdgeInsets.all(16),
+              child: Row(children: [
+                Icon(Icons.fact_check_outlined),
+                SizedBox(width: 12),
+                Expanded(
+                    child: Text(
+                        'Once approved, covered attendance is automatically recorded as Absent (Excused).'))
+              ]))),
+    ]);
+  }
+}
+
+class _DateField extends StatelessWidget {
+  const _DateField(
+      {required this.label, required this.value, required this.onTap});
+  final String label;
+  final DateTime? value;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => InkWell(
+      onTap: onTap,
+      child: InputDecorator(
+          decoration: InputDecoration(
+              labelText: label,
+              border: const OutlineInputBorder(),
+              suffixIcon: const Icon(Icons.calendar_today_outlined)),
+          child: Text(value == null
+              ? 'mm/dd/yyyy'
+              : DateFormat.yMMMd().format(value!))));
+}

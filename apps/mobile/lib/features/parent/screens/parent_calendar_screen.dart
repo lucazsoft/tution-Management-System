@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:tms_mobile/core/theme/app_theme.dart';
 import 'package:tms_mobile/shared/widgets/academic_calendar.dart';
 
 import '../viewmodels/parent_portal_viewmodel.dart';
 import '../widgets/child_switcher_bar.dart';
+import '../widgets/parent_navigation.dart';
 import '../widgets/parent_portal_state_view.dart';
 
 class ParentCalendarScreen extends ConsumerWidget {
@@ -13,11 +13,9 @@ class ParentCalendarScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => Scaffold(
-        appBar: AppBar(
-            title: const Text('Academic calendar'),
-            leading: IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () => context.go('/parent/home'))),
+        drawer: ParentNavigation.drawer(context),
+        appBar: AppBar(title: const Text('Academic calendar')),
+        bottomNavigationBar: const ParentNavigationBar(selectedIndex: 0),
         body: SafeArea(
             child: ParentPortalStateView(
           padding: const EdgeInsets.all(TmsSpace.md),

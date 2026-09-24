@@ -62,6 +62,8 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
       '/student/attendance',
     ),
     _StudentDrawerItem(
+        'Leave requests', Icons.event_note_outlined, '/student/leave'),
+    _StudentDrawerItem(
       'Certificates',
       Icons.workspace_premium_outlined,
       '/student/certificates',

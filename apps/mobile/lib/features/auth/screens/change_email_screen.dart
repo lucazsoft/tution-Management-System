@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/features/auth/data/account_repository.dart';
+import 'package:tms_mobile/features/auth/widgets/forgot_password_prompt.dart';
 
 class ChangeEmailScreen extends ConsumerStatefulWidget {
   const ChangeEmailScreen({super.key});
@@ -142,6 +143,7 @@ class _ChangeEmailScreenState extends ConsumerState<ChangeEmailScreen> {
                             : Icons.visibility)),
                   ),
                 ),
+                const ForgotPasswordPrompt(),
                 const SizedBox(height: 28),
                 FilledButton(
                   onPressed: _busy ? null : _submit,

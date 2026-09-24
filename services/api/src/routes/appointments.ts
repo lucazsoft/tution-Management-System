@@ -40,8 +40,8 @@ router.post('/request', authMiddleware, async (req: TenantRequest, res: Response
     || participantIds.some((id) => typeof id !== 'string' || !id.trim())) {
     return res.status(400).json({ error: 'isGroup must be a boolean and participantIds must be an array of non-empty user IDs.' });
   }
-  if (!['TEACHER', 'BRANCH_ADMIN'].includes(target)) return res.status(400).json({ error: 'Appointment target must be TEACHER or BRANCH_ADMIN.' });
-  if (!studentId || !scheduledTime || (target === 'TEACHER' && !requestedTeacherId) || (target === 'BRANCH_ADMIN' && !branchId)) {
+  if (!['TEACHER', 'BRANCH_ADMIN', 'STAFF'].includes(target)) return res.status(400).json({ error: 'Appointment target must be TEACHER, STAFF, or BRANCH_ADMIN.' });
+  if (!studentId || !scheduledTime || (target !== 'BRANCH_ADMIN' && !requestedTeacherId) || (target === 'BRANCH_ADMIN' && !branchId)) {
     return res.status(400).json({ error: 'Student, appointment recipient, and preferred date and time are required.' });
   }
   try {
@@ -70,6 +70,19 @@ router.post('/request', authMiddleware, async (req: TenantRequest, res: Response
       });
       if (!assignedAdmin) return res.status(422).json({ error: 'No active Branch Admin is assigned to this branch.' });
       teacherId = assignedAdmin.userId;
+      uniqueParticipants = [teacherId];
+    } else if (target === 'STAFF') {
+      const branchIds = [...new Set(student.enrollments.map((enrollment) => enrollment.class.branchId))];
+      const staff = await prisma.user.findFirst({
+        where: {
+          id: teacherId,
+          tenantId: req.tenantId!,
+          status: 'ACTIVE',
+          userRoles: { some: { branchId: { in: branchIds }, role: { name: { in: ['Teacher', 'Accountant'] } } } },
+        },
+        select: { id: true },
+      });
+      if (!staff) return res.status(403).json({ error: 'This staff member is not available for the child’s branch.' });
       uniqueParticipants = [teacherId];
     } else {
       if (!assignedTeacherIds.has(teacherId)) return res.status(403).json({ error: 'You can only book with teachers assigned to this child.' });

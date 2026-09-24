@@ -1,10 +1,9 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class RememberedCredentials {
-  const RememberedCredentials(this.email, this.password);
+  const RememberedCredentials(this.email);
 
   final String email;
-  final String password;
 }
 
 class RememberedCredentialsStore {
@@ -18,14 +17,18 @@ class RememberedCredentialsStore {
   Future<RememberedCredentials?> read() async {
     final values = await _storage.readAll();
     final email = values[_emailKey];
-    final password = values[_passwordKey];
-    if (email == null || email.isEmpty || password == null) return null;
-    return RememberedCredentials(email, password);
+    if (email == null || email.isEmpty) return null;
+    // Remove credentials written by older builds. Remember-me intentionally
+    // remembers identity only; a password must always be entered again.
+    if (values.containsKey(_passwordKey)) {
+      await _storage.delete(key: _passwordKey);
+    }
+    return RememberedCredentials(email);
   }
 
-  Future<void> save(String email, String password) async {
+  Future<void> save(String email) async {
     await _storage.write(key: _emailKey, value: email);
-    await _storage.write(key: _passwordKey, value: password);
+    await _storage.delete(key: _passwordKey);
   }
 
   Future<void> clear() async {

@@ -8,16 +8,44 @@ import 'package:tms_mobile/features/parent/viewmodels/parent_portal_viewmodel.da
 /// The selected value is the server-issued student id. Selecting a chip asks
 /// the consolidated portal endpoint to authorize and load that child; names
 /// are presentation only and are never used as scope.
-class ChildSwitcherBar extends ConsumerWidget {
+class ChildSwitcherBar extends ConsumerStatefulWidget {
   const ChildSwitcherBar({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChildSwitcherBar> createState() => _ChildSwitcherBarState();
+}
+
+class _ChildSwitcherBarState extends ConsumerState<ChildSwitcherBar> {
+  final _controller = ScrollController();
+  String? _positionedChildId;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(parentPortalProvider);
     final children = state.portal?.children ?? const [];
     if (children.isEmpty) return const SizedBox.shrink();
+    if (_positionedChildId != state.selectedChildId) {
+      _positionedChildId = state.selectedChildId;
+      final index =
+          children.indexWhere((child) => child.id == state.selectedChildId);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_controller.hasClients || index < 0) return;
+        _controller.animateTo(
+          (index * 150.0).clamp(0, _controller.position.maxScrollExtent),
+          duration: const Duration(milliseconds: 240),
+          curve: Curves.easeOut,
+        );
+      });
+    }
 
     return SingleChildScrollView(
+      controller: _controller,
       scrollDirection: Axis.horizontal,
       child: Row(
         children: children.map((child) {

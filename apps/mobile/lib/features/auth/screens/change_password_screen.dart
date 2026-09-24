@@ -13,6 +13,7 @@ import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/core/utils/validators.dart';
 import 'package:tms_mobile/features/auth/data/auth_service.dart';
 import 'package:tms_mobile/features/auth/widgets/password_strength_bar.dart';
+import 'package:tms_mobile/features/auth/widgets/forgot_password_prompt.dart';
 import 'package:tms_mobile/core/theme/app_tokens.dart';
 
 class ChangePasswordScreen extends ConsumerStatefulWidget {
@@ -229,6 +230,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                       return null;
                     },
                   ),
+                  const ForgotPasswordPrompt(),
                   const SizedBox(height: 20),
 
                   // New Password

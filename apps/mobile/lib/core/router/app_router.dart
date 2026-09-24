@@ -27,6 +27,8 @@ import 'package:tms_mobile/features/parent/screens/parent_academics_screen.dart'
 import 'package:tms_mobile/features/parent/screens/parent_messages_screen.dart';
 import 'package:tms_mobile/features/parent/screens/parent_appointments_screen.dart';
 import 'package:tms_mobile/features/parent/screens/parent_calendar_screen.dart';
+import 'package:tms_mobile/features/parent/screens/parent_timetable_screen.dart';
+import 'package:tms_mobile/features/parent/screens/parent_leave_screen.dart';
 import 'package:tms_mobile/features/student/screens/student_home_screen.dart';
 import 'package:tms_mobile/features/student/screens/student_timetable_screen.dart';
 import 'package:tms_mobile/features/student/screens/student_fees_screen.dart';
@@ -36,6 +38,7 @@ import 'package:tms_mobile/features/student/screens/student_attendance_screen.da
 import 'package:tms_mobile/features/student/screens/student_calendar_screen.dart';
 import 'package:tms_mobile/features/student/screens/student_certificates_screen.dart';
 import 'package:tms_mobile/features/student/screens/student_notifications_screen.dart';
+import 'package:tms_mobile/features/student/screens/student_leave_screen.dart';
 import 'package:tms_mobile/features/branch_manager/screens/branch_home_screen.dart';
 import 'package:tms_mobile/features/janitor/screens/janitor_home_screen.dart';
 import 'package:tms_mobile/features/tenant_admin/screens/tenant_admin_home_screen.dart';
@@ -345,10 +348,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           path: '/parent/accounts/add',
           builder: (_, __) => const LoginScreen(addAccountMode: true)),
       GoRoute(
+        path: '/parent/timetable',
+        builder: (_, __) => const ParentTimetableScreen(),
+      ),
+      GoRoute(
         path: '/parent/attendance',
         builder: (BuildContext context, GoRouterState state) =>
             const ParentAttendanceScreen(),
       ),
+      GoRoute(
+          path: '/parent/leave', builder: (_, __) => const ParentLeaveScreen()),
       GoRoute(
         path: '/parent/fees',
         builder: (BuildContext context, GoRouterState state) =>
@@ -434,13 +443,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/student/academics',
         builder: (BuildContext context, GoRouterState state) =>
-            const StudentAcademicsScreen(),
+            StudentAcademicsScreen(
+          initialSegment:
+              state.uri.queryParameters['tab'] == 'homework' ? 2 : 0,
+        ),
       ),
       GoRoute(
         path: '/student/attendance',
         builder: (BuildContext context, GoRouterState state) =>
             const StudentAttendanceScreen(),
       ),
+      GoRoute(
+          path: '/student/leave',
+          builder: (_, __) => const StudentLeaveScreen()),
       GoRoute(
         path: '/student/calendar',
         builder: (BuildContext context, GoRouterState state) =>

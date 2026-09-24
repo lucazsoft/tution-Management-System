@@ -125,7 +125,7 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
     };
     const classIds = currentEnrollments.map((enrollment) => enrollment.classId);
     const branchIds = [...new Set(currentEnrollments.map((enrollment) => enrollment.class.branchId))];
-    const [events, leaves, appointments, messages, remarks, scores, tenant, branchAdmins] = await Promise.all([
+    const [events, leaves, appointments, messages, remarks, scores, tenant, branchAdmins, branchStaff] = await Promise.all([
       prisma.academicEvent.findMany({
         where: await calendarAccessWhere(req.user!, req.tenantId!, { studentId: student.id, viewerRole: 'Parent' }),
         orderBy: { startDate: 'asc' },
@@ -149,6 +149,14 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
       prisma.studentScore.findMany({ where: { tenantId: req.tenantId!, studentId: student.id, publishedAt: { not: null } }, orderBy: { testDate: 'asc' } }),
       prisma.tenant.findUnique({ where: { id: req.tenantId! }, select: { appointmentWindowHours: true, name: true } }),
       prisma.user.findMany({ where: { tenantId: req.tenantId!, status: 'ACTIVE', userRoles: { some: { branchId: { in: branchIds }, role: { name: 'Branch Admin' } } } }, select: { id: true, firstName: true, lastName: true } }),
+      prisma.user.findMany({
+        where: {
+          tenantId: req.tenantId!,
+          status: 'ACTIVE',
+          userRoles: { some: { branchId: { in: branchIds }, role: { name: { in: ['Teacher', 'Accountant'] } } } },
+        },
+        select: { id: true, firstName: true, lastName: true, userRoles: { where: { branchId: { in: branchIds }, role: { name: { in: ['Teacher', 'Accountant'] } } }, include: { role: true } } },
+      }),
     ]);
 
     const weekday = new Intl.DateTimeFormat('en', { weekday: 'long', timeZone: 'Asia/Kathmandu' }).format(new Date()).toLowerCase();
@@ -168,8 +176,31 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
         type: enrollment.course.type.split('_').map((part) => part[0] + part.slice(1).toLowerCase()).join('-'),
       }));
     }).sort((a, b) => a.time.localeCompare(b.time));
-    type ParentContact = { id: string; childId: string; name: string; subject: string; initials: string; role: 'TEACHER' | 'BRANCH_ADMIN' };
-    const contactEntries: Array<[string, ParentContact]> = [...currentEnrollments
+    const timetableSessions = currentEnrollments.flatMap((enrollment) => {
+      const schedule = normalizeSchedule(enrollment.class.schedule);
+      return schedule.map((slot, index) => ({
+        id: `${enrollment.classId}-${index}`,
+        childId: student.id,
+        day: String(slot.day || ''),
+        time: slot.startTime,
+        endTime: slot.endTime,
+        subject: enrollment.course.name,
+        teacher: enrollment.class.assignedTeacher ? `${enrollment.class.assignedTeacher.firstName} ${enrollment.class.assignedTeacher.lastName}` : 'Teacher not assigned',
+        room: slot.room || enrollment.class.name,
+        type: enrollment.course.type.split('_').map((part) => part[0] + part.slice(1).toLowerCase()).join('-'),
+      }));
+    });
+    type ParentContact = { id: string; childId: string; name: string; subject: string; initials: string; role: 'TEACHER' | 'BRANCH_ADMIN' | 'STAFF' };
+    const contactEntries: Array<[string, ParentContact]> = [
+      ...branchStaff.map((staff) => [staff.id, {
+        id: staff.id,
+        childId: student.id,
+        name: `${staff.firstName} ${staff.lastName}`,
+        subject: staff.userRoles.some((assignment) => assignment.role.name === 'Accountant') ? 'Accounts office' : 'Teaching staff',
+        initials: `${staff.firstName[0] ?? ''}${staff.lastName[0] ?? ''}`.toUpperCase(),
+        role: 'STAFF' as const,
+      }] as [string, ParentContact]),
+      ...currentEnrollments
       .filter((enrollment) => enrollment.class.assignedTeacher)
       .map((enrollment) => {
         const teacher = enrollment.class.assignedTeacher!;
@@ -185,7 +216,7 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
     const teachers = [...new Map<string, ParentContact>(contactEntries).values()];
     const attendance = student.studentAttendance.map((record) => ({
       id: record.id, childId: student.id, date: formatDate(record.date), subject: record.class.course.name,
-      session: record.class.name, state: attendanceLabel(record.status),
+      occurredAt: record.date.toISOString(), session: record.class.name, state: attendanceLabel(record.status),
     }));
     const invoices = student.invoices.map((invoice) => ({
       id: invoice.id, childId: student.id,
@@ -347,6 +378,7 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
       billing,
       enrollmentAccess,
       sessions,
+      timetableSessions,
       attendance,
       remarks: visibleRemarks,
       teachers,

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/features/auth/data/account_repository.dart';
+import 'package:tms_mobile/features/auth/widgets/forgot_password_prompt.dart';
 
 class ChangeMobileScreen extends ConsumerStatefulWidget {
   const ChangeMobileScreen({super.key});
@@ -182,6 +183,7 @@ class _ChangeMobileScreenState extends ConsumerState<ChangeMobileScreen> {
                     ),
                   ),
                 ),
+                const ForgotPasswordPrompt(),
                 const SizedBox(height: 16),
                 TextField(
                   controller: _phone,

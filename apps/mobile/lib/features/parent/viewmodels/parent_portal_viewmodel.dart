@@ -211,15 +211,17 @@ String? _authenticatedParentSession(AuthState auth) =>
     auth.isAuthenticated ? auth.user?.id : null;
 
 /// Session-scoped repository so invoice snapshots cannot cross users.
-final parentPortalRepositoryProvider =
-    Provider.autoDispose<ParentPortalRepository>((ref) {
+final parentPortalRepositoryProvider = Provider<ParentPortalRepository>((ref) {
   ref.watch(authProvider.select(_authenticatedParentSession));
-  return ParentPortalRepository();
+  final repository = ParentPortalRepository();
+  ref.onDispose(repository.dispose);
+  return repository;
 });
 
-/// Shared only while parent screens are mounted and for one authenticated user.
+/// Session-scoped so the selected child survives navigation between parent
+/// pages. Watching the authenticated user still resets it on logout/switch.
 final parentPortalProvider =
-    StateNotifierProvider.autoDispose<ParentPortalViewModel, ParentPortalState>(
+    StateNotifierProvider<ParentPortalViewModel, ParentPortalState>(
   (ref) {
     ref.watch(authProvider.select(_authenticatedParentSession));
     return ParentPortalViewModel(

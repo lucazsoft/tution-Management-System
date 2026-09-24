@@ -6,6 +6,7 @@ import 'package:tms_mobile/core/providers/auth_provider.dart';
 
 import '../data/auth_service.dart';
 import '../data/device_account_vault.dart';
+import '../widgets/forgot_password_prompt.dart';
 
 class DeviceAccountsScreen extends ConsumerStatefulWidget {
   const DeviceAccountsScreen({super.key, this.loginMode = false});
@@ -81,6 +82,12 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
                             icon: Icon(obscurePassword
                                 ? Icons.visibility_outlined
                                 : Icons.visibility_off_outlined)))),
+                ForgotPasswordPrompt(
+                  onReset: () {
+                    Navigator.pop(dialogContext);
+                    if (mounted) this.context.push('/forgot-password');
+                  },
+                ),
                 const SizedBox(height: 12),
                 TextField(
                     controller: mpin,
@@ -212,6 +219,7 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
     String? error;
     var busy = false;
     var obscurePin = true;
+    var useMpin = true;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -220,18 +228,49 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             Text(account.email),
             const SizedBox(height: 16),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(
+                  value: true,
+                  icon: Icon(Icons.pin_outlined),
+                  label: Text('MPIN'),
+                ),
+                ButtonSegment(
+                  value: false,
+                  icon: Icon(Icons.password_rounded),
+                  label: Text('Password'),
+                ),
+              ],
+              selected: {useMpin},
+              onSelectionChanged: busy
+                  ? null
+                  : (selection) {
+                      FocusScope.of(context).unfocus();
+                      setDialogState(() {
+                        useMpin = selection.first;
+                        credential.clear();
+                        error = null;
+                      });
+                    },
+            ),
+            const SizedBox(height: 16),
             TextField(
+                key: ValueKey(useMpin ? 'switch-mpin' : 'switch-password'),
                 controller: credential,
                 autofocus: true,
                 obscureText: obscurePin,
-                keyboardType: TextInputType.visiblePassword,
+                keyboardType:
+                    useMpin ? TextInputType.number : TextInputType.text,
+                maxLength: useMpin ? 4 : null,
                 autofillHints: const <String>[],
                 autocorrect: false,
                 enableSuggestions: false,
                 enableIMEPersonalizedLearning: false,
                 decoration: InputDecoration(
-                    labelText: 'Password or 4-digit MPIN',
-                    helperText: 'Enter either credential for this account.',
+                    labelText: useMpin ? '4-digit MPIN' : 'Password',
+                    helperText: useMpin
+                        ? 'Use the private MPIN for this saved account.'
+                        : 'Use this account’s current password.',
                     suffixIcon: IconButton(
                         onPressed: () =>
                             setDialogState(() => obscurePin = !obscurePin),
@@ -239,6 +278,12 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
                             ? Icons.visibility_outlined
                             : Icons.visibility_off_outlined))),
                 onSubmitted: (_) {}),
+            ForgotPasswordPrompt(
+              onReset: () {
+                Navigator.pop(dialogContext);
+                if (mounted) this.context.push('/forgot-password');
+              },
+            ),
             if (error != null)
               Padding(
                   padding: const EdgeInsets.only(top: 12),
@@ -260,7 +305,7 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
                       });
                       try {
                         final value = credential.text;
-                        if (RegExp(r'^\d{4}$').hasMatch(value)) {
+                        if (useMpin && RegExp(r'^\d{4}$').hasMatch(value)) {
                           final verified =
                               await _vault.verifyMpin(account.userId, value);
                           if (!verified.allowed) {
@@ -270,6 +315,12 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
                             });
                             return;
                           }
+                        } else if (useMpin) {
+                          setDialogState(() {
+                            busy = false;
+                            error = 'Enter the 4-digit MPIN.';
+                          });
+                          return;
                         } else if (value.isEmpty) {
                           setDialogState(() {
                             busy = false;
@@ -279,11 +330,8 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
                         }
                         final user = await ref
                             .read(authProvider.notifier)
-                            .activateDeviceAccount(
-                                account.email,
-                                RegExp(r'^\d{4}$').hasMatch(value)
-                                    ? account.password
-                                    : value);
+                            .activateDeviceAccount(account.email,
+                                useMpin ? account.password : value);
                         if (!dialogContext.mounted) return;
                         Navigator.pop(dialogContext);
                         if (user != null && mounted) {

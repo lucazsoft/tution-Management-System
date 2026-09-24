@@ -9,6 +9,7 @@ import 'package:tms_mobile/features/auth/data/auth_service.dart';
 import 'package:tms_mobile/features/auth/data/remembered_credentials.dart';
 import 'package:tms_mobile/features/auth/data/device_account_vault.dart';
 import 'package:tms_mobile/features/auth/widgets/auth_card.dart';
+import 'package:tms_mobile/features/auth/widgets/forgot_password_prompt.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key, this.addAccountMode = false});
@@ -41,7 +42,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _emailController.clear();
       _passwordController.clear();
       TextInput.finishAutofillContext(shouldSave: false);
-      _loadingRememberedCredentials = false;
+      if (mounted) {
+        setState(() => _loadingRememberedCredentials = false);
+      }
       return;
     }
     try {
@@ -49,8 +52,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!mounted) return;
       if (saved != null) {
         _emailController.text = saved.email;
-        _passwordController.text = saved.password;
       }
+      // A password is never restored, even when remember-me is enabled.
+      _passwordController.clear();
       setState(() {
         _rememberMe = saved != null;
         _loadingRememberedCredentials = false;
@@ -166,11 +170,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!mounted) return;
       final auth = ref.read(authProvider);
       if (auth.isTwoFactorPending) {
-        await _persistRememberedCredentials(email, credential);
+        await _persistRememberedCredentials(email);
         if (!mounted) return;
         context.go('/2fa');
       } else if (auth.isAuthenticated) {
-        await _persistRememberedCredentials(email, credential);
+        await _persistRememberedCredentials(email);
         if (!mounted) return;
         context.go(auth.roleRedirectPath);
       } else {
@@ -267,11 +271,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return result;
   }
 
-  Future<void> _persistRememberedCredentials(
-      String email, String password) async {
-    if (widget.addAccountMode) return;
+  Future<void> _persistRememberedCredentials(String email) async {
     if (_rememberMe) {
-      await _credentialsStore.save(email, password);
+      await _credentialsStore.save(email);
     } else {
       await _credentialsStore.clear();
     }
@@ -474,73 +476,47 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
             const SizedBox(height: 8),
 
-            if (!widget.addAccountMode)
-              Row(
-                children: [
-                  Checkbox(
-                    value: _rememberMe,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    visualDensity: VisualDensity.compact,
-                    onChanged: isLoading || _loadingRememberedCredentials
+            Row(
+              children: [
+                Checkbox(
+                  value: _rememberMe,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                  onChanged: isLoading || _loadingRememberedCredentials
+                      ? null
+                      : (value) async {
+                          setState(() => _rememberMe = value ?? false);
+                          if (!_rememberMe) {
+                            await _credentialsStore.clear();
+                          }
+                        },
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: InkWell(
+                    onTap: isLoading || _loadingRememberedCredentials
                         ? null
-                        : (value) async {
-                            setState(() => _rememberMe = value ?? false);
+                        : () async {
+                            setState(() => _rememberMe = !_rememberMe);
                             if (!_rememberMe) {
                               await _credentialsStore.clear();
                             }
                           },
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: InkWell(
-                      onTap: isLoading || _loadingRememberedCredentials
-                          ? null
-                          : () async {
-                              setState(() => _rememberMe = !_rememberMe);
-                              if (!_rememberMe) {
-                                await _credentialsStore.clear();
-                              }
-                            },
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                        child: Text(
-                          'Remember me',
-                          style: TextStyle(fontSize: 13),
-                        ),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 10),
+                      child: Text(
+                        'Remember me',
+                        style: TextStyle(fontSize: 13),
                       ),
                     ),
-                  ),
-                  TextButton(
-                    onPressed: isLoading
-                        ? null
-                        : () => context.push('/forgot-password'),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 10,
-                      ),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Text(
-                      'Forgot password?',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                  ),
-                ],
-              )
-            else
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed:
-                      isLoading ? null : () => context.push('/forgot-password'),
-                  child: const Text(
-                    'Forgot password?',
-                    style: TextStyle(fontSize: 13),
                   ),
                 ),
-              ),
+                const Flexible(
+                  flex: 2,
+                  child: ForgotPasswordPrompt(),
+                ),
+              ],
+            ),
             const SizedBox(height: 14),
 
             // Sign In Button
