@@ -7,7 +7,6 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tms_mobile/core/sync/sync.dart';
 
@@ -15,6 +14,7 @@ import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_portal_dto.dart';
 import 'package:tms_mobile/features/teacher/viewmodels/teacher_portal_viewmodel.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_record_states.dart';
+import 'package:tms_mobile/features/teacher/widgets/teacher_navigation.dart';
 import 'package:tms_mobile/core/theme/app_tokens.dart';
 
 class TeacherTimetableScreen extends ConsumerStatefulWidget {
@@ -56,15 +56,12 @@ class _TeacherTimetableScreenState extends ConsumerState<TeacherTimetableScreen>
     final offline = connectivity == ConnectivityState.offline;
 
     return Scaffold(
+      drawer: TeacherNavigation.drawer(context),
       appBar: AppBar(
         title: Text(
           'My Timetable',
           style:
               GoogleFonts.fraunces(fontWeight: FontWeight.w700, fontSize: 22),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.go('/teacher/home'),
         ),
         bottom: TabBar(
           controller: _tabController,
@@ -94,6 +91,8 @@ class _TeacherTimetableScreenState extends ConsumerState<TeacherTimetableScreen>
           ],
         ),
       ),
+      bottomNavigationBar:
+          const TeacherDashboardNavigationBar(selectedIndex: 0),
     );
   }
 
@@ -147,10 +146,13 @@ class _TodayList extends StatelessWidget {
     }
     return ListView.separated(
       padding: const EdgeInsets.all(20),
-      itemCount: rows.length,
+      itemCount: rows.length + 1,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
-        final row = rows[index];
+        if (index == 0) {
+          return const _TimetableOverview();
+        }
+        final row = rows[index - 1];
         final item = row.item;
         return _TimetableCard(
           title: row.slot?.subject?.trim().isNotEmpty == true
@@ -165,6 +167,44 @@ class _TodayList extends StatelessWidget {
       },
     );
   }
+}
+
+class _TimetableOverview extends StatelessWidget {
+  const _TimetableOverview();
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+              colors: [Color(0xFF002D72), Color(0xFF1560BD)]),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: const Row(children: [
+          Icon(Icons.today_rounded, color: Colors.white, size: 34),
+          SizedBox(width: 14),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text('TODAY\'S PLAN',
+                    style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1)),
+                SizedBox(height: 4),
+                Text('Your teaching schedule',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 21,
+                        fontWeight: FontWeight.w800)),
+                SizedBox(height: 3),
+                Text(
+                    'Sessions are ordered by start time so the next class is always easy to find.',
+                    style: TextStyle(color: Colors.white70)),
+              ])),
+        ]),
+      );
 }
 
 class _DayList extends StatelessWidget {
@@ -299,7 +339,22 @@ class _TimetableCard extends StatelessWidget {
                 ],
               ),
             ),
-            Text(trailing, style: Theme.of(context).textTheme.bodySmall),
+            Flexible(
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: kColorPrimary.withValues(alpha: .08),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(trailing,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context)
+                        .textTheme
+                        .labelSmall
+                        ?.copyWith(color: kColorPrimary)),
+              ),
+            ),
           ],
         ),
       ),

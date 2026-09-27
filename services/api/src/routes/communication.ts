@@ -8,6 +8,17 @@ import { parseStrictKeys, readTrimmedString } from '../utils/request-validation'
 
 const router = Router();
 
+router.get('/messages/contacts', authMiddleware, async (req: TenantRequest, res: Response) => {
+  try {
+    const links = await prisma.studentParent.findMany({
+      where: { student: { user: { tenantId: req.tenantId! }, enrollments: { some: { status: { in: ['ACTIVE', 'BLOCKED'] }, class: { teacherId: req.user!.id } } } } },
+      include: { parent: { include: { user: { select: { id: true, firstName: true, lastName: true } } } }, student: { include: { user: { select: { firstName: true, lastName: true } }, grade: { select: { name: true } } } } },
+      orderBy: { student: { user: { firstName: 'asc' } } },
+    });
+    return res.json({ contacts: links.map((link) => ({ studentId: link.studentId, studentName: `${link.student.user.firstName} ${link.student.user.lastName}`.trim(), gradeName: link.student.grade?.name ?? 'Class not assigned', parentId: link.parent.user.id, parentName: `${link.parent.user.firstName} ${link.parent.user.lastName}`.trim() })) });
+  } catch (error: any) { return res.status(500).json({ error: 'Failed to load message contacts.', details: error.message }); }
+});
+
 async function canUseThread(userId: string, tenantId: string, studentId: string, otherUserId?: string) {
   const student = await prisma.student.findFirst({
     where: { id: studentId, user: { tenantId } },

@@ -18,6 +18,9 @@ import 'package:tms_mobile/features/auth/screens/unsupported_mobile_role_screen.
 import 'package:tms_mobile/features/teacher/screens/teacher_home_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_timetable_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_leave_screen.dart';
+import 'package:tms_mobile/features/teacher/screens/teacher_calendar_screen.dart';
+import 'package:tms_mobile/features/teacher/screens/teacher_learning_screens.dart';
+import 'package:tms_mobile/features/teacher/screens/teacher_messages_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/geo_attendance_screen.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_models.dart';
 import 'package:tms_mobile/features/parent/screens/parent_home_screen.dart';
@@ -127,7 +130,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       () => ref.read(authProvider.notifier).forceLogout();
 
   return GoRouter(
-    initialLocation: '/login',
+    initialLocation: '/auth-loading',
     debugLogDiagnostics: true,
     refreshListenable: authRefresh,
 
@@ -141,6 +144,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     },
 
     routes: <RouteBase>[
+      GoRoute(
+        path: '/auth-loading',
+        builder: (_, __) => const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
+      ),
       // ── Public auth routes ──
       GoRoute(
         path: '/login',
@@ -181,10 +190,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // ── Teacher routes ──
       GoRoute(
         path: '/teacher/home',
-        builder: (BuildContext context, GoRouterState state) =>
-            TeacherHomeScreen(
-          key: ValueKey(navigationSessionIdentity(authRefresh.value)),
-        ),
+        builder: (BuildContext context, GoRouterState state) {
+          final tab = switch (state.uri.queryParameters['tab']) {
+            'attendance' => 1,
+            'classes' => 2,
+            'more' => 3,
+            _ => 0,
+          };
+          return TeacherHomeScreen(
+            key: ValueKey(
+              '${navigationSessionIdentity(authRefresh.value)}-$tab',
+            ),
+            initialTab: tab,
+          );
+        },
       ),
       GoRoute(
         path: '/teacher/change-password',
@@ -299,6 +318,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (BuildContext context, GoRouterState state) =>
             const TeacherLeaveScreen(),
       ),
+      GoRoute(
+          path: '/teacher/calendar',
+          builder: (_, __) => const TeacherCalendarScreen()),
+      GoRoute(
+          path: '/teacher/syllabus',
+          builder: (_, __) => const TeacherSyllabusScreen()),
+      GoRoute(
+          path: '/teacher/homework',
+          builder: (_, __) => const TeacherHomeworkScreen()),
+      GoRoute(
+          path: '/teacher/results',
+          builder: (_, __) => const TeacherResultsScreen()),
+      GoRoute(
+          path: '/teacher/messages',
+          builder: (_, __) => const TeacherMessagesScreen()),
       GoRoute(
         path: '/teacher/attendance',
         builder: (BuildContext context, GoRouterState state) {

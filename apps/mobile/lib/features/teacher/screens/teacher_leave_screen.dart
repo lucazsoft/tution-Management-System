@@ -7,7 +7,6 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tms_mobile/core/sync/sync.dart';
 
@@ -15,6 +14,7 @@ import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_portal_dto.dart';
 import 'package:tms_mobile/features/teacher/viewmodels/teacher_leave_viewmodel.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_record_states.dart';
+import 'package:tms_mobile/features/teacher/widgets/teacher_navigation.dart';
 import 'package:tms_mobile/core/theme/app_tokens.dart';
 
 const _leaveTypes = [
@@ -35,15 +35,12 @@ class TeacherLeaveScreen extends ConsumerWidget {
     final offline = connectivity == ConnectivityState.offline;
 
     return Scaffold(
+      drawer: TeacherNavigation.drawer(context),
       appBar: AppBar(
         title: Text(
           'Leave Requests',
           style:
               GoogleFonts.fraunces(fontWeight: FontWeight.w700, fontSize: 22),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.pop(),
         ),
       ),
       body: SafeArea(
@@ -63,6 +60,8 @@ class TeacherLeaveScreen extends ConsumerWidget {
         icon: const Icon(Icons.add_rounded),
         label: const Text('New Request'),
       ),
+      bottomNavigationBar:
+          const TeacherDashboardNavigationBar(selectedIndex: 0),
     );
   }
 
@@ -98,9 +97,11 @@ class TeacherLeaveScreen extends ConsumerWidget {
       onRefresh: vm.load,
       child: ListView.separated(
         padding: const EdgeInsets.all(20),
-        itemCount: state.leaves.length,
+        itemCount: state.leaves.length + 1,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (context, index) => _LeaveCard(leave: state.leaves[index]),
+        itemBuilder: (context, index) => index == 0
+            ? _LeaveOverview(leaves: state.leaves)
+            : _LeaveCard(leave: state.leaves[index - 1]),
       ),
     );
   }
@@ -117,6 +118,7 @@ class TeacherLeaveScreen extends ConsumerWidget {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(
         borderRadius:
             BorderRadius.vertical(top: Radius.circular(TmsRadius.r20)),
@@ -143,12 +145,12 @@ class TeacherLeaveScreen extends ConsumerWidget {
               }
             }
 
-            return Padding(
+            return SingleChildScrollView(
               padding: EdgeInsets.only(
                 left: 24,
                 right: 24,
                 top: 24,
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+                bottom: MediaQuery.viewInsetsOf(ctx).bottom + 24,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -277,6 +279,68 @@ class TeacherLeaveScreen extends ConsumerWidget {
 
   String _fmt(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+}
+
+class _LeaveOverview extends StatelessWidget {
+  const _LeaveOverview({required this.leaves});
+  final List<TeacherLeaveEntry> leaves;
+  @override
+  Widget build(BuildContext context) {
+    final pending = leaves.where((item) => item.isPending).length;
+    final approved = leaves.where((item) => item.status == 'APPROVED').length;
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+            colors: [Color(0xFF002D72), Color(0xFF1560BD)]),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('TIME OFF',
+            style: TextStyle(
+                color: Colors.white70,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1)),
+        const SizedBox(height: 5),
+        const Text('Leave request centre',
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w800)),
+        const SizedBox(height: 14),
+        Row(children: [
+          Expanded(child: _LeaveMetric(label: 'Total', value: leaves.length)),
+          const SizedBox(width: 10),
+          Expanded(child: _LeaveMetric(label: 'Pending', value: pending)),
+          const SizedBox(width: 10),
+          Expanded(child: _LeaveMetric(label: 'Approved', value: approved)),
+        ]),
+      ]),
+    );
+  }
+}
+
+class _LeaveMetric extends StatelessWidget {
+  const _LeaveMetric({required this.label, required this.value});
+  final String label;
+  final int value;
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: .12),
+            borderRadius: BorderRadius.circular(12)),
+        child: Column(children: [
+          Text('$value',
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800)),
+          Text(label,
+              style: const TextStyle(color: Colors.white70, fontSize: 11))
+        ]),
+      );
 }
 
 class _LeaveCard extends StatelessWidget {

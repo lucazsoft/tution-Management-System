@@ -164,41 +164,52 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
             padding: const EdgeInsets.all(TmsSpace.md),
             child: Column(
               children: [
-                Row(children: [
-                  Expanded(
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                        Text(
-                            '${_bsMonths[firstBs.month - 1]} ${firstBs.year} BS',
-                            style: Theme.of(context).textTheme.titleLarge),
-                        Text(
-                            '${_englishMonth(_monthAnchor.month)} ${_monthAnchor.day} - '
-                            '${_englishMonth(last.month)} ${last.day}, ${last.year}',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: kColorMutedText)),
-                      ])),
-                  TextButton(
-                      onPressed: () => setState(() {
-                            _selected =
-                                DateTime(today.year, today.month, today.day);
-                            final todayBs = today.toNepaliDateTime();
-                            _monthAnchor =
-                                NepaliDateTime(todayBs.year, todayBs.month)
-                                    .toDateTime();
-                          }),
-                      child: const Text('आज / Today')),
-                  IconButton(
-                      tooltip: 'Previous month',
-                      onPressed: () => _moveMonth(-1),
-                      icon: const Icon(Icons.chevron_left)),
-                  IconButton(
-                      tooltip: 'Next month',
-                      onPressed: () => _moveMonth(1),
-                      icon: const Icon(Icons.chevron_right)),
-                ]),
+                LayoutBuilder(builder: (context, constraints) {
+                  final heading = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${_bsMonths[firstBs.month - 1]} ${firstBs.year} BS',
+                          style: Theme.of(context).textTheme.titleLarge),
+                      Text(
+                          '${_englishMonth(_monthAnchor.month)} ${_monthAnchor.day} - ${_englishMonth(last.month)} ${last.day}, ${last.year}',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: kColorMutedText)),
+                    ],
+                  );
+                  final controls =
+                      Row(mainAxisSize: MainAxisSize.min, children: [
+                    TextButton(
+                        onPressed: () => setState(() {
+                              _selected =
+                                  DateTime(today.year, today.month, today.day);
+                              final todayBs = today.toNepaliDateTime();
+                              _monthAnchor =
+                                  NepaliDateTime(todayBs.year, todayBs.month)
+                                      .toDateTime();
+                            }),
+                        child: const Text('आज / Today')),
+                    IconButton(
+                        tooltip: 'Previous month',
+                        onPressed: () => _moveMonth(-1),
+                        icon: const Icon(Icons.chevron_left)),
+                    IconButton(
+                        tooltip: 'Next month',
+                        onPressed: () => _moveMonth(1),
+                        icon: const Icon(Icons.chevron_right)),
+                  ]);
+                  if (constraints.maxWidth < 430)
+                    return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          heading,
+                          const SizedBox(height: 4),
+                          Align(
+                              alignment: Alignment.centerRight, child: controls)
+                        ]);
+                  return Row(children: [Expanded(child: heading), controls]);
+                }),
                 const SizedBox(height: 8),
                 Row(children: [
                   for (var i = 0; i < 7; i++)
@@ -215,8 +226,16 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                 GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 7, childAspectRatio: .86),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 7,
+                    mainAxisExtent: (48 +
+                            (MediaQuery.textScalerOf(context)
+                                        .scale(1)
+                                        .clamp(1, 1.5) -
+                                    1) *
+                                20)
+                        .toDouble(),
+                  ),
                   itemCount: days.length,
                   itemBuilder: (context, index) {
                     final day = days[index];
