@@ -8,7 +8,7 @@ import { validateRuntimeConfig } from './runtime-config';
 
 const runtimeConfig = validateRuntimeConfig();
 
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = ['development', 'test'].includes(process.env.NODE_ENV ?? '');
 
 export const auth = betterAuth({
   secret: runtimeConfig.authSecret,

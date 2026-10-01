@@ -38,7 +38,7 @@ export async function calendarAccessWhere(actor: UserPayload, tenantId: string, 
       // selector here would let a client probe another student's id.
       throw new CalendarAccessError('Student calendar access denied.');
     }
-    return { tenantId };
+    return { tenantId, audience: 'ALL' };
   }
   if (options.studentId || hasRole(actor, 'Parent')) {
     if (!hasRole(actor, 'Parent')) throw new CalendarAccessError('A linked parent account is required.');
