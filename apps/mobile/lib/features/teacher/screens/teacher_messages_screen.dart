@@ -117,6 +117,77 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
     }
   }
 
+  Future<void> _startNewChat() async {
+    try {
+      final recipients = await _repository.fetchMessageRecipients();
+      if (!mounted) return;
+      var query = '';
+      final selected = await showModalBottomSheet<TeacherMessageContact>(
+        context: context,
+        isScrollControlled: true,
+        builder: (sheetContext) => StatefulBuilder(
+          builder: (context, setSheetState) {
+            final filtered = recipients
+                .where((item) => item.parentName
+                    .toLowerCase()
+                    .contains(query.toLowerCase()))
+                .toList();
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                    20, 16, 20, MediaQuery.viewInsetsOf(context).bottom + 20),
+                child: SizedBox(
+                  height: MediaQuery.sizeOf(context).height * .65,
+                  child: Column(children: [
+                    Text('New chat',
+                        style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 12),
+                    TextField(
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search_rounded),
+                        hintText: 'Search teachers',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) => setSheetState(() => query = value),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? const Center(
+                              child: Text('No eligible teachers found.'))
+                          : ListView.builder(
+                              itemCount: filtered.length,
+                              itemBuilder: (_, index) {
+                                final item = filtered[index];
+                                return ListTile(
+                                  leading: const CircleAvatar(
+                                      child: Icon(Icons.person_outline)),
+                                  title: Text(item.parentName),
+                                  subtitle: const Text('Teacher'),
+                                  onTap: () =>
+                                      Navigator.pop(sheetContext, item),
+                                );
+                              },
+                            ),
+                    ),
+                  ]),
+                ),
+              ),
+            );
+          },
+        ),
+      );
+      if (selected != null && mounted) await _select(selected);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not load new-chat contacts: $error')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) => TeacherPortalScaffold(
         title: 'Messages',
@@ -124,24 +195,24 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
           onRefresh: _loadContacts,
           child:
               ListView(padding: const EdgeInsets.all(TmsSpace.md), children: [
-            Text('Parent communication',
+            Text('Messages',
                 style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 4),
             const Text(
-                'Private conversations are grouped by student so every message keeps the right context.'),
+                'Recent conversations stay here. Start a new chat with another teacher when needed.'),
             const SizedBox(height: TmsSpace.md),
             if (_contacts == null)
               const Center(
                   child: Padding(
                       padding: EdgeInsets.all(32),
                       child: CircularProgressIndicator()))
-            else if (_contacts!.isEmpty)
-              _empty(Icons.forum_outlined, 'No parent conversations',
-                  'Parents appear here when they are linked to students in your assigned classes.')
             else
               LayoutBuilder(builder: (context, box) {
                 final contacts = _contactCard();
-                final thread = _threadCard();
+                final thread = _selected == null
+                    ? _empty(Icons.forum_outlined, 'Select a conversation',
+                        'Choose a recent chat or start a new one.')
+                    : _threadCard();
                 return box.maxWidth < 760
                     ? (_selected == null ? contacts : thread)
                     : Row(
@@ -167,8 +238,20 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
           padding: const EdgeInsets.all(12),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Conversations',
-                style: Theme.of(context).textTheme.titleLarge),
+            Row(children: [
+              Expanded(
+                child: Text('Conversations',
+                    style: Theme.of(context).textTheme.titleLarge),
+              ),
+              IconButton.filledTonal(
+                tooltip: 'New chat',
+                onPressed: _startNewChat,
+                icon: const Icon(Icons.edit_square),
+              ),
+            ]),
+            if (_contacts!.isEmpty)
+              _empty(Icons.forum_outlined, 'No recent conversations',
+                  'Tap New chat to message another teacher.'),
             for (final contact in _contacts!)
               ListTile(
                 selected: contact == _selected,
@@ -206,7 +289,9 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
                           style: Theme.of(context).textTheme.titleLarge),
                     ),
                   ]),
-                  Text('Regarding ${contact.studentName}',
+                  Text(contact.studentId.isEmpty
+                      ? 'Direct teacher conversation'
+                      : 'Regarding ${contact.studentName}',
                       style: Theme.of(context).textTheme.bodySmall),
                   const Divider(height: 28),
                   if (_messages == null)

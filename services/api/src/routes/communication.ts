@@ -19,6 +19,8 @@ router.get('/messages/contacts', authMiddleware, async (req: TenantRequest, res:
       prisma.parentMessage.findMany({
         where: { tenantId: req.tenantId!, OR: [{ senderId: req.user!.id }, { receiverId: req.user!.id }] },
         include: {
+          sender: { select: { id: true, firstName: true, lastName: true } },
+          receiver: { select: { id: true, firstName: true, lastName: true } },
           student: {
             include: {
               user: { select: { firstName: true, lastName: true } },
@@ -32,6 +34,18 @@ router.get('/messages/contacts', authMiddleware, async (req: TenantRequest, res:
     ]);
     const conversations = new Map<string, any>();
     for (const message of conversationRows) {
+      if (!message.student) {
+        const participant = message.senderId === req.user!.id ? message.receiver : message.sender;
+        const key = `direct:${participant.id}`;
+        if (!conversations.has(key)) conversations.set(key, {
+          studentId: '', studentName: 'Direct message', gradeName: 'Teacher',
+          parentId: participant.id,
+          parentName: `${participant.firstName} ${participant.lastName}`.trim(),
+          lastMessage: message.messageText, lastMessageAt: message.createdAt, unreadCount: 0,
+        });
+        if (message.receiverId === req.user!.id && !message.readAt) conversations.get(key).unreadCount += 1;
+        continue;
+      }
       const link = message.student.studentParents.find((item) =>
         item.parent.user.id === message.senderId || item.parent.user.id === message.receiverId);
       if (!link) continue;
@@ -62,6 +76,47 @@ router.get('/messages/contacts', authMiddleware, async (req: TenantRequest, res:
     }));
     return res.json({ contacts: [...conversations.values()], availableContacts });
   } catch (error: any) { return res.status(500).json({ error: 'Failed to load message contacts.', details: error.message }); }
+});
+
+async function canUseDirectTeacherChat(userId: string, otherUserId: string, tenantId: string) {
+  if (userId === otherUserId) return false;
+  const [senderBranches, receiver] = await Promise.all([
+    prisma.userRole.findMany({ where: { userId, role: { name: 'Teacher' }, branchId: { not: null } }, select: { branchId: true } }),
+    prisma.user.findFirst({
+      where: {
+        id: otherUserId, tenantId, status: 'ACTIVE',
+        userRoles: { some: { role: { name: 'Teacher' }, branchId: { not: null } } },
+      },
+      select: { id: true, userRoles: { where: { role: { name: 'Teacher' } }, select: { branchId: true } } },
+    }),
+  ]);
+  if (!receiver) return false;
+  const branches = new Set(senderBranches.map((item) => item.branchId).filter(Boolean));
+  return receiver.userRoles.some((item) => item.branchId && branches.has(item.branchId));
+}
+
+router.get('/messages/recipients', authMiddleware, async (req: TenantRequest, res: Response) => {
+  try {
+    const memberships = await prisma.userRole.findMany({
+      where: { userId: req.user!.id, role: { name: 'Teacher' }, branchId: { not: null } },
+      select: { branchId: true },
+    });
+    const branchIds = memberships.map((item) => item.branchId).filter((id): id is string => Boolean(id));
+    const teachers = await prisma.user.findMany({
+      where: {
+        id: { not: req.user!.id }, tenantId: req.tenantId!, status: 'ACTIVE',
+        userRoles: { some: { branchId: { in: branchIds }, role: { name: 'Teacher' } } },
+      },
+      select: { id: true, firstName: true, lastName: true },
+      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+    });
+    return res.json({ recipients: teachers.map((teacher) => ({
+      studentId: '', studentName: 'Direct message', gradeName: 'Teacher',
+      parentId: teacher.id, parentName: `${teacher.firstName} ${teacher.lastName}`.trim(),
+    })) });
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Failed to load new-chat recipients.', details: error.message });
+  }
 });
 
 async function canUseThread(userId: string, tenantId: string, studentId: string, otherUserId?: string) {
@@ -116,15 +171,18 @@ router.get('/admin/parent-contacts', authMiddleware, async (req: TenantRequest, 
 router.post('/messages', authMiddleware, async (req: TenantRequest, res: Response) => {
   const { studentId, receiverId, messageText } = req.body;
   const text = typeof messageText === 'string' ? messageText.trim() : '';
-  if (!studentId || !receiverId || !text) {
-    return res.status(400).json({ error: 'Student, recipient, and message are required.' });
+  if (!receiverId || !text) {
+    return res.status(400).json({ error: 'Recipient and message are required.' });
   }
   if (text.length > 4000) return res.status(422).json({ error: 'Message must be 4,000 characters or fewer.' });
   try {
-    const access = await canUseThread(req.user!.id, req.tenantId!, studentId, receiverId);
-    if (!access) return res.status(403).json({ error: 'You may only message an assigned teacher or linked parent for this student.' });
+    const access = studentId
+      ? await canUseThread(req.user!.id, req.tenantId!, studentId, receiverId)
+      : null;
+    const directAllowed = !studentId && await canUseDirectTeacherChat(req.user!.id, receiverId, req.tenantId!);
+    if (!access && !directAllowed) return res.status(403).json({ error: 'You may only message an authorized school contact.' });
     const message = await prisma.parentMessage.create({
-      data: { tenantId: req.tenantId!, studentId, senderId: req.user!.id, receiverId, messageText: text },
+      data: { tenantId: req.tenantId!, studentId: studentId || null, senderId: req.user!.id, receiverId, messageText: text },
     });
     try {
       await prisma.notification.create({
@@ -134,17 +192,42 @@ router.post('/messages', authMiddleware, async (req: TenantRequest, res: Respons
           category: 'MESSAGE',
           title: 'New school message',
           body: 'You received a new message about a linked student.',
-          destination: access.userIsParent ? '/teacher/messages' : '/parent/messages',
+          destination: access?.userIsParent ? '/teacher/messages' : access ? '/parent/messages' : '/teacher/messages',
           entityId: message.id,
         },
       });
     } catch (notificationError) {
       console.warn('Message saved but inbox notification persistence failed.', notificationError);
     }
-    await PushNotificationService.sendPush(req.tenantId!, receiverId, 'New school message', `New message regarding ${access.student.id}.`);
+    await PushNotificationService.sendPush(req.tenantId!, receiverId, 'New school message', studentId ? 'New message regarding a linked student.' : 'You received a new message from a teacher.');
     return res.status(201).json({ message: 'Message sent.', record: message });
   } catch (error: any) {
     return res.status(500).json({ error: 'Failed to send message.', details: error.message });
+  }
+});
+
+router.get('/messages/direct/:participantId', authMiddleware, async (req: TenantRequest, res: Response) => {
+  try {
+    if (!await canUseDirectTeacherChat(req.user!.id, req.params.participantId, req.tenantId!)) {
+      return res.status(404).json({ error: 'Conversation not found.' });
+    }
+    const messages = await prisma.parentMessage.findMany({
+      where: {
+        tenantId: req.tenantId!, studentId: null,
+        OR: [
+          { senderId: req.user!.id, receiverId: req.params.participantId },
+          { senderId: req.params.participantId, receiverId: req.user!.id },
+        ],
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    await prisma.parentMessage.updateMany({
+      where: { id: { in: messages.filter((item) => item.receiverId === req.user!.id && !item.readAt).map((item) => item.id) } },
+      data: { readAt: new Date() },
+    });
+    return res.json({ messages });
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Failed to load direct conversation.', details: error.message });
   }
 });
 

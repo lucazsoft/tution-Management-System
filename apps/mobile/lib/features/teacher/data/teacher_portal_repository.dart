@@ -71,9 +71,12 @@ class TeacherPortalRepository {
   Future<List<TeacherMessageItem>> fetchMessageThread(
       TeacherMessageContact contact) async {
     try {
-      final response = await _dio.get<dynamic>(
-          '/api/communication/messages/thread/${Uri.encodeComponent(contact.studentId)}',
-          queryParameters: {'participantId': contact.parentId});
+      final response = contact.studentId.isEmpty
+          ? await _dio.get<dynamic>(
+              '/api/communication/messages/direct/${Uri.encodeComponent(contact.parentId)}')
+          : await _dio.get<dynamic>(
+              '/api/communication/messages/thread/${Uri.encodeComponent(contact.studentId)}',
+              queryParameters: {'participantId': contact.parentId});
       final rows = response.data is Map<String, dynamic>
           ? response.data['messages']
           : null;
@@ -122,6 +125,27 @@ class TeacherPortalRepository {
       return [
         for (final item in events)
           if (item is Map<String, dynamic>) TeacherAcademicEvent.fromJson(item)
+      ];
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
+  Future<List<TeacherMessageContact>> fetchMessageRecipients() async {
+    try {
+      final response =
+          await _dio.get<dynamic>('/api/communication/messages/recipients');
+      final rows = response.data is Map<String, dynamic>
+          ? response.data['recipients']
+          : null;
+      if (rows is! List) {
+        throw const ApiException(
+            kind: ApiErrorKind.unknown,
+            message: 'New-chat recipients returned an unexpected response.');
+      }
+      return [
+        for (final row in rows)
+          if (row is Map<String, dynamic>) TeacherMessageContact.fromJson(row)
       ];
     } on DioException catch (error) {
       throw _typed(error);

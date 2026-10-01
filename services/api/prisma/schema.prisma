@@ -525,8 +525,8 @@ model ParentMessage {
   id          String    @id @default(uuid())
   tenantId    String
   tenant      Tenant    @relation(fields: [tenantId], references: [id])
-  studentId   String
-  student     Student   @relation(fields: [studentId], references: [id])
+  studentId   String?
+  student     Student?  @relation(fields: [studentId], references: [id])
   senderId    String
   sender      User      @relation("ParentMessageSender", fields: [senderId], references: [id])
   receiverId  String
