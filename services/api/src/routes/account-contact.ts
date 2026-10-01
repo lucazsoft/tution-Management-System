@@ -33,7 +33,7 @@ router.post('/email', authMiddleware, async (req: TenantRequest, res) => {
     if (duplicate) return res.status(409).json({ error: 'That email address is already in use.' });
     await prisma.$transaction([
       prisma.user.update({ where: { id: user.id }, data: { email, emailVerified: false } }),
-      prisma.account.update({ where: { id: credential.id }, data: { accountId: email } }),
+      prisma.account.update({ where: { id: credential.id }, data: { accountId: user.id } }),
       prisma.session.deleteMany({ where: { userId: user.id } }),
     ]);
     return res.json({ success: true, signInRequired: true });
