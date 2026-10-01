@@ -46,22 +46,24 @@ router.get('/options', authMiddleware, async (req: TenantRequest, res: Response)
           grade: { select: { name: true } },
           enrollments: {
             where: { status: { in: ['ACTIVE', 'BLOCKED'] } },
-            select: { class: { select: { branch: { select: { id: true, name: true } } } } },
+            select: { class: { select: { id: true, name: true, branch: { select: { id: true, name: true } } } } },
           },
         },
         orderBy: { user: { firstName: 'asc' } },
       }),
     ]);
     const options = students.flatMap((student) => {
-      const branches = [...new Map(student.enrollments.map((entry) => [entry.class.branch.id, entry.class.branch])).values()];
-      return branches
-        .filter((branch) => isTenantAdmin(req.user!) || canAccessBranch(req.user!, branch.id))
-        .map((branch) => ({
+      const classes = [...new Map(student.enrollments.map((entry) => [entry.class.id, entry.class])).values()];
+      return classes
+        .filter((classroom) => isTenantAdmin(req.user!) || canAccessBranch(req.user!, classroom.branch.id))
+        .map((classroom) => ({
           studentId: student.id,
           studentName: `${student.user.firstName} ${student.user.lastName}`.trim(),
           gradeName: student.grade?.name ?? 'Ungraded',
-          branchId: branch.id,
-          branchName: branch.name,
+          classId: classroom.id,
+          className: classroom.name,
+          branchId: classroom.branch.id,
+          branchName: classroom.branch.name,
         }));
     });
     return res.json({
@@ -76,6 +78,7 @@ router.get('/options', authMiddleware, async (req: TenantRequest, res: Response)
           updatedAt: template.updatedAt,
           layoutConfig: {
             renderMode: layout.renderMode === 'HTML' ? 'HTML' : layout.renderMode === 'DESIGN' ? 'DESIGN' : 'FILE',
+            ...(layout.renderMode === 'HTML' && isTenantAdmin(req.user!) ? { html: layout.html ?? '' } : {}),
             ...(layout.renderMode === 'DESIGN' ? certificateDesign(layout, template.name) : {}),
             ...(layout.sourceFile ? { sourceFile: { name: layout.sourceFile.name ?? '', mimeType: layout.sourceFile.mimeType ?? '' } } : {}),
           },
@@ -126,6 +129,26 @@ router.post('/templates/:templateId/archive', authMiddleware, async (req: Tenant
   const result = await prisma.certificateTemplate.updateMany({ where: { id: req.params.templateId, tenantId: req.tenantId!, status: 'ACTIVE' }, data: { status: 'ARCHIVED' } });
   if (!result.count) return res.status(404).json({ error: 'Active certificate template not found.' });
   return res.json({ message: 'Certificate template archived.' });
+});
+
+router.patch('/templates/:templateId', authMiddleware, async (req: TenantRequest, res: Response) => {
+  if (!isTenantAdmin(req.user!)) return res.status(403).json({ error: 'Only the Tenant Admin may edit certificate templates.' });
+  const { name, type, layoutConfig } = req.body ?? {};
+  const normalizedName = typeof name === 'string' ? name.trim().slice(0, 120) : '';
+  if (!normalizedName || !layoutConfig) return res.status(400).json({ error: 'Template name and design are required.' });
+  if (!['COMPLETION', 'ACHIEVEMENT', 'ATTENDANCE', 'CUSTOM'].includes(String(type))) return res.status(400).json({ error: 'Choose a supported certificate type.' });
+  const htmlLayout = layoutConfig as HtmlCertificateLayout;
+  if (htmlLayout.renderMode === 'HTML' && (typeof htmlLayout.html !== 'string' || !htmlLayout.html.trim())) return res.status(400).json({ error: 'HTML certificate templates require HTML content.' });
+  if (htmlLayout.renderMode === 'HTML' && htmlLayout.html!.length > 250_000) return res.status(413).json({ error: 'HTML certificate templates must be smaller than 250 KB.' });
+  if (htmlLayout.renderMode === 'FILE' || (htmlLayout.renderMode && !['DESIGN', 'HTML'].includes(String(htmlLayout.renderMode)))) return res.status(400).json({ error: 'Choose a supported certificate template format.' });
+  const existing = await prisma.certificateTemplate.findFirst({ where: { id: req.params.templateId, tenantId: req.tenantId!, status: 'ACTIVE' } });
+  if (!existing) return res.status(404).json({ error: 'Active certificate template not found.' });
+  const normalizedLayout = htmlLayout.renderMode === 'HTML' ? htmlLayout : certificateDesign(layoutConfig, normalizedName);
+  await prisma.certificateTemplate.update({
+    where: { id: existing.id },
+    data: { name: normalizedName, type: type as CertificateType, layoutConfig: JSON.parse(JSON.stringify(normalizedLayout)), version: { increment: 1 } },
+  });
+  return res.json({ message: 'Certificate template updated.' });
 });
 
 router.get(

@@ -18,7 +18,7 @@ import { academicEventsApi, type AcademicEvent, type EventType } from '../servic
 import { API_BASE_URL, ApiError, errorMessage, request } from '../services/api/client';
 import { financeApi, type Expense, type PettyCashRecord } from '../services/api/finance';
 import { hrApi, type DocumentAlert, type PayrollPreviewRecord, type PayrollRecord } from '../services/api/hr';
-import { resourcesApi, type MaintenanceTask } from '../services/api/resources';
+import { resourcesApi, type InventoryItem } from '../services/api/resources';
 import { api } from '../services/api';
 import { toBsMonthRangeLabel, toDualDateLabel, type CalendarSystem } from '../utils/nepaliDate';
 import { englishDateLabel, nepaliDateHeading, nepalDateKey, nepalDateTimeInputToIso, NEPAL_TIME_ZONE } from '../utils/nepalCalendar';
@@ -227,11 +227,16 @@ export function TenantPayrollPage() {
 
 interface Branch { id: string; name: string; admissionFee?: number; }
 export function TenantResourcesPage() {
-  const [branches, setBranches] = useState<Branch[]>([]); const [branchId, setBranchId] = useState(''); const [tasks, setTasks] = useState<MaintenanceTask[]>([]); const [error, setError] = useState<unknown>(null); const [loading, setLoading] = useState(true);
-  const load = useCallback(async () => { setLoading(true); setError(null); try { const result = await request<{ branches: Branch[] }>('/branches'); setBranches(result.branches); const selected = branchId || result.branches[0]?.id || ''; setBranchId(selected); setTasks(selected ? (await resourcesApi.tasks(selected)).tasks : []); } catch (next) { setError(next); } finally { setLoading(false); } }, [branchId]);
-  useEffect(() => { void load(); }, [load]);
-  const visible = useMemo(() => tasks.map((task) => ({ ...task, escalated: task.status !== 'COMPLETED' && Date.now() - new Date(task.createdAt).getTime() > task.escalationDaysSnapshot * 86400000 })), [tasks]);
-  return <div style={{ display: 'grid', gap: 18 }}><Header title="Resource Oversight" description="Monitor maintenance work and policy-based escalation across branches."/><Card hoverable={false}><select style={{ ...input, maxWidth: 280 }} value={branchId} onChange={(e) => setBranchId(e.target.value)}>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></Card>{loading ? <RemoteState kind="loading"/> : error ? <RemoteState kind="error" message={errorMessage(error)} onRetry={() => void load()}/> : !visible.length ? <RemoteState kind="empty" message="No maintenance tasks for this branch."/> : <Card hoverable={false}>{visible.map((task) => <div key={task.id} style={row}><div style={{ display: 'flex', justifyContent: 'space-between' }}><strong>{task.description}</strong><StatusBadge variant={task.escalated ? 'error' : 'info'}>{task.escalated ? 'ESCALATED' : task.status}</StatusBadge></div><p style={{ color: 'var(--text-muted)', fontSize: 12 }}>Escalates after {task.escalationDaysSnapshot} days · Assignee {task.assignedStaffId}</p></div>)}</Card>}</div>;
+  const [branches, setBranches] = useState<Branch[]>([]); const [branchId, setBranchId] = useState(''); const [items, setItems] = useState<InventoryItem[]>([]); const [error, setError] = useState<unknown>(null); const [loading, setLoading] = useState(true);
+  const load = useCallback(async (quiet = false) => { if (!quiet) setLoading(true); setError(null); try { const [branchResult, inventory] = await Promise.all([request<{ branches: Branch[] }>('/branches'), resourcesApi.inventory(branchId || undefined)]); setBranches(branchResult.branches); setItems(inventory.items); } catch (next) { setError(next); } finally { if (!quiet) setLoading(false); } }, [branchId]);
+  useEffect(() => { void load(); const timer = window.setInterval(() => void load(true), 5000); return () => window.clearInterval(timer); }, [load]);
+  const visible = useMemo(() => branchId ? items.filter((item) => item.branchId === branchId) : items, [branchId, items]);
+  const attention = items.filter((item) => ['NEEDS_REPAIR', 'DAMAGED', 'MISSING'].includes(item.itemStatus)).length;
+  return <div className="resource-page"><Header title="Resource Oversight" description="Live inventory condition and maintenance activity across every branch."/>
+    <section className="resource-summary" aria-label="Inventory summary"><article><span>Listed units</span><strong>{items.reduce((sum, item) => sum + item.quantity, 0)}</strong></article><article><span>Items needing attention</span><strong>{attention}</strong></article><article><span>Active repair tasks</span><strong>{items.filter((item) => item.taskStatus && item.taskStatus !== 'COMPLETED').length}</strong></article></section>
+    <Card hoverable={false}><label className="resource-filter" htmlFor="tenant-resource-branch">Branch<select id="tenant-resource-branch" style={{ ...input, maxWidth: 320 }} value={branchId} onChange={(e) => setBranchId(e.target.value)}><option value="">All branches</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label></Card>
+    {loading ? <RemoteState kind="loading"/> : error ? <RemoteState kind="error" message={errorMessage(error)} onRetry={() => void load()}/> : !visible.length ? <RemoteState kind="empty" message="No inventory items have been listed yet."/> : <Card hoverable={false}><div className="resource-table-wrap"><table className="resource-table"><thead><tr><th>Item</th><th>Branch / location</th><th>Quantity</th><th>Condition</th><th>Maintenance</th><th>Updated</th></tr></thead><tbody>{visible.map((item) => <tr key={item.id}><td><strong>{item.itemName}</strong><small>{item.category}</small></td><td>{item.branchName}<small>{item.location}</small></td><td>{item.quantity}</td><td><StatusBadge variant={item.itemStatus === 'GOOD' ? 'success' : item.itemStatus === 'MISSING' ? 'error' : 'warning'}>{item.itemStatus.replaceAll('_', ' ')}</StatusBadge>{item.notes ? <small>{item.notes}</small> : null}</td><td>{item.taskStatus ? <StatusBadge variant={item.taskStatus === 'COMPLETED' ? 'success' : item.taskStatus === 'ESCALATED' ? 'error' : 'info'}>{item.taskStatus.replaceAll('_', ' ')}</StatusBadge> : '—'}</td><td>{new Date(item.updatedAt).toLocaleString('en-NP')}</td></tr>)}</tbody></table></div></Card>}
+  </div>;
 }
 
 export function TenantCalendarPage() {
@@ -371,20 +376,24 @@ export function TenantAdmissionsPage() {
 export function TenantCertificatesPage() {
   const { showToast } = useToast();
   type CertificateOptions = Awaited<ReturnType<typeof api.branchAdmin.getCertificateOptions>>;
+  const emptyTemplateForm = { name: '', type: 'COMPLETION', renderMode: 'DESIGN' as 'DESIGN' | 'HTML', html: '', theme: 'CLASSIC', title: 'Certificate of Completion', presentationLine: 'This certificate is proudly presented to', achievementLine: 'For successfully completing the learning program', signatoryName: '', signatoryTitle: 'Institution representative' };
   const [templates, setTemplates] = useState<Array<CertificateOptions['templates'][number] & { status: string }>>([]);
   const [students, setStudents] = useState<CertificateOptions['students']>([]);
-  const [form, setForm] = useState({ name: '', type: 'COMPLETION', theme: 'CLASSIC', title: 'Certificate of Completion', presentationLine: 'This certificate is proudly presented to', achievementLine: 'For successfully completing the learning program', signatoryName: '', signatoryTitle: 'Institution representative' });
+  const [form, setForm] = useState(emptyTemplateForm);
+  const [editingTemplateId, setEditingTemplateId] = useState('');
   const [activeTab, setActiveTab] = useState<'ISSUE' | 'TEMPLATES' | 'ISSUED'>('ISSUE');
   const [issued, setIssued] = useState<Awaited<ReturnType<typeof api.branchAdmin.getIssuedCertificates>>['certificates']>([]);
   const [revokeId, setRevokeId] = useState('');
   const [revokeReason, setRevokeReason] = useState('');
   const [studentKey, setStudentKey] = useState('');
+  const [classId, setClassId] = useState('');
   const [templateId, setTemplateId] = useState('');
   const [issuedId, setIssuedId] = useState('');
   const [issuing, setIssuing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [htmlError, setHtmlError] = useState('');
 
   const loadTemplates = useCallback(async () => {
     setLoading(true); setLoadError('');
@@ -394,22 +403,30 @@ export function TenantCertificatesPage() {
   }, [showToast]);
   useEffect(() => { void loadTemplates(); }, [loadTemplates]);
 
-  const addTemplate = async (e: FormEvent) => {
+  const saveTemplate = async (e: FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.title.trim() || !form.achievementLine.trim() || !form.signatoryName.trim()) return;
+    const htmlMode = form.renderMode === 'HTML';
+    if (!form.name.trim() || (htmlMode ? !form.html.trim() : !form.title.trim() || !form.achievementLine.trim() || !form.signatoryName.trim())) return;
+    if (htmlMode && form.html.length > 250_000) return setHtmlError('HTML templates must be smaller than 250 KB.');
+    setHtmlError('');
     setBusy(true);
     try {
-      const layoutConfig = { renderMode: 'DESIGN', theme: form.theme, title: form.title.trim(), presentationLine: form.presentationLine.trim(), achievementLine: form.achievementLine.trim(), signatoryName: form.signatoryName.trim(), signatoryTitle: form.signatoryTitle.trim() };
-      await request('/certificates/templates', { method: 'POST', body: JSON.stringify({ name: form.name.trim(), type: form.type, layoutConfig }) });
-      setForm((current) => ({ ...current, name: '' }));
-      await loadTemplates(); setActiveTab('TEMPLATES'); showToast('Certificate template created.', 'success');
+      const layoutConfig = htmlMode
+        ? { renderMode: 'HTML', html: form.html }
+        : { renderMode: 'DESIGN', theme: form.theme, title: form.title.trim(), presentationLine: form.presentationLine.trim(), achievementLine: form.achievementLine.trim(), signatoryName: form.signatoryName.trim(), signatoryTitle: form.signatoryTitle.trim() };
+      const payload = { name: form.name.trim(), type: form.type, layoutConfig };
+      if (editingTemplateId) await api.branchAdmin.updateCertificateTemplate(editingTemplateId, payload);
+      else await request('/certificates/templates', { method: 'POST', body: JSON.stringify(payload) });
+      const action = editingTemplateId ? 'updated' : 'created';
+      setEditingTemplateId(''); setForm(emptyTemplateForm);
+      await loadTemplates(); setActiveTab('TEMPLATES'); showToast(`Certificate template ${action}.`, 'success');
     } catch (next) { showToast(errorMessage(next), 'error'); }
     finally { setBusy(false); }
   };
 
   const issueCertificate = async (event: FormEvent) => {
     event.preventDefault();
-    const student = students.find((item) => `${item.studentId}:${item.branchId}` === studentKey);
+    const student = students.find((item) => `${item.studentId}:${item.classId}` === studentKey);
     if (!student || !templateId) return;
     setIssuing(true); setIssuedId('');
     try {
@@ -420,8 +437,38 @@ export function TenantCertificatesPage() {
   };
 
   const issuedTemplate = templates.find((template) => template.id === templateId);
-  const selectedStudent = students.find((item) => `${item.studentId}:${item.branchId}` === studentKey);
+  const selectedStudent = students.find((item) => `${item.studentId}:${item.classId}` === studentKey);
   const selectedTemplate = templates.find((item) => item.id === templateId);
+  const classes = useMemo(() => [...new Map(students.map((student) => [student.classId, { id: student.classId, name: student.className, branchName: student.branchName }])).values()].sort((a, b) => `${a.branchName} ${a.name}`.localeCompare(`${b.branchName} ${b.name}`)), [students]);
+  const classStudents = useMemo(() => students.filter((student) => student.classId === classId), [classId, students]);
+
+  const editTemplate = (template: CertificateOptions['templates'][number]) => {
+    setEditingTemplateId(template.id);
+    setForm({
+      name: template.name,
+      type: template.type,
+      renderMode: template.layoutConfig.renderMode === 'HTML' ? 'HTML' : 'DESIGN',
+      html: template.layoutConfig.html ?? '',
+      theme: template.layoutConfig.theme ?? 'CLASSIC',
+      title: template.layoutConfig.title ?? template.name,
+      presentationLine: template.layoutConfig.presentationLine ?? emptyTemplateForm.presentationLine,
+      achievementLine: template.layoutConfig.achievementLine ?? emptyTemplateForm.achievementLine,
+      signatoryName: template.layoutConfig.signatoryName ?? '',
+      signatoryTitle: template.layoutConfig.signatoryTitle ?? emptyTemplateForm.signatoryTitle,
+    });
+    document.getElementById('certificate-name')?.focus();
+  };
+
+  const uploadHtml = async (file: File | undefined) => {
+    if (!file) return;
+    if (!/\.html?$/i.test(file.name) && !['text/html', 'application/xhtml+xml'].includes(file.type)) return setHtmlError('Choose an HTML file ending in .html or .htm.');
+    if (file.size > 250_000) return setHtmlError('HTML templates must be smaller than 250 KB.');
+    try {
+      const html = await file.text();
+      if (!html.trim()) return setHtmlError('The selected HTML file is empty.');
+      setForm((current) => ({ ...current, html })); setHtmlError('');
+    } catch { setHtmlError('The HTML file could not be read. Choose another file.'); }
+  };
 
   const revokeCertificate = async () => {
     if (!revokeId || revokeReason.trim().length < 5) return;
@@ -451,7 +498,7 @@ export function TenantCertificatesPage() {
             </thead>
             <tbody>
               {templates.map(t => (
-                <tr key={t.id}><td>{t.name}<small>{t.layoutConfig?.renderMode === 'DESIGN' ? `${t.layoutConfig.theme ?? 'Classic'} design` : 'Legacy template'}</small></td><td>{t.type}</td><td>v{t.version}</td><td><StatusBadge variant={t.status === 'ACTIVE' ? 'success' : 'warning'}>{t.status}</StatusBadge></td><td><Button type="button" variant="ghost" disabled={busy} onClick={() => void archiveTemplate(t.id)}>Archive</Button></td>
+                <tr key={t.id}><td>{t.name}<small>{t.layoutConfig?.renderMode === 'DESIGN' ? `${t.layoutConfig.theme ?? 'Classic'} design` : t.layoutConfig?.renderMode === 'HTML' ? 'Custom HTML' : 'Legacy template'}</small></td><td>{t.type}</td><td>v{t.version}</td><td><StatusBadge variant={t.status === 'ACTIVE' ? 'success' : 'warning'}>{t.status}</StatusBadge></td><td><div className="tenant-certificate-row-actions"><Button type="button" variant="outline" disabled={busy || t.layoutConfig?.renderMode === 'FILE'} onClick={() => editTemplate(t)}>Edit</Button><Button type="button" variant="ghost" disabled={busy} onClick={() => void archiveTemplate(t.id)}>Archive</Button></div></td>
                 </tr>
               ))}
               {!loading && !templates.length ? <tr><td colSpan={5} className="tenant-certificate-empty">No certificate templates have been created.</td></tr> : null}
@@ -460,8 +507,8 @@ export function TenantCertificatesPage() {
         </Card>
 
         <Card hoverable={false}>
-          <div className="tenant-certificate-heading"><div><h3>Create template</h3><p>Build a reusable, print-ready design without writing code.</p></div></div>
-          <form onSubmit={addTemplate} className="tenant-certificate-form">
+          <div className="tenant-certificate-heading"><div><h3>{editingTemplateId ? 'Edit template' : 'Create template'}</h3><p>{editingTemplateId ? 'Update the reusable design. Already issued certificates remain unchanged.' : 'Build a reusable, print-ready design without writing code.'}</p></div></div>
+          <form onSubmit={saveTemplate} className="tenant-certificate-form">
             <label htmlFor="certificate-name">Template name<input id="certificate-name" style={input} placeholder="Special Achievement" value={form.name} onChange={e => setForm(old => ({ ...old, name: e.target.value }))} required /></label>
             <label htmlFor="certificate-type">Certificate type<select id="certificate-type" style={input} value={form.type} onChange={e => setForm(old => ({ ...old, type: e.target.value }))}>
                 <option value="COMPLETION">Course Completion</option>
@@ -469,19 +516,27 @@ export function TenantCertificatesPage() {
                 <option value="ATTENDANCE">Attendance</option>
                 <option value="CUSTOM">Custom</option>
               </select></label>
+            <fieldset className="tenant-certificate-source"><legend>Template format</legend><div className="tenant-certificate-format-options">{([['DESIGN', 'Design builder'], ['HTML', 'Custom HTML']] as const).map(([mode, label]) => <label key={mode} className={form.renderMode === mode ? 'is-selected' : ''}><input type="radio" name="certificate-format" checked={form.renderMode === mode} onChange={() => { setForm((old) => ({ ...old, renderMode: mode })); setHtmlError(''); }} />{label}</label>)}</div></fieldset>
+            {form.renderMode === 'DESIGN' ? <>
             <fieldset className="tenant-certificate-source"><legend>Visual style</legend><div>{(['CLASSIC', 'MODERN', 'ACADEMIC'] as const).map((theme) => <label key={theme} className={form.theme === theme ? 'is-selected' : ''}><input type="radio" name="certificate-theme" checked={form.theme === theme} onChange={() => setForm((old) => ({ ...old, theme }))} />{theme.charAt(0) + theme.slice(1).toLowerCase()}</label>)}</div></fieldset>
             <label htmlFor="certificate-title">Certificate heading<input id="certificate-title" style={input} value={form.title} onChange={(event) => setForm((old) => ({ ...old, title: event.target.value }))} required /></label>
             <label htmlFor="certificate-achievement">Achievement statement<textarea id="certificate-achievement" rows={3} value={form.achievementLine} onChange={(event) => setForm((old) => ({ ...old, achievementLine: event.target.value }))} required /><small>Describe exactly what the student earned or completed.</small></label>
             <div className="tenant-certificate-form-row"><label htmlFor="certificate-signatory">Signatory name<input id="certificate-signatory" style={input} value={form.signatoryName} onChange={(event) => setForm((old) => ({ ...old, signatoryName: event.target.value }))} required /></label><label htmlFor="certificate-signatory-title">Signatory role<input id="certificate-signatory-title" style={input} value={form.signatoryTitle} onChange={(event) => setForm((old) => ({ ...old, signatoryTitle: event.target.value }))} required /></label></div>
             <div className={`tenant-certificate-design-preview is-${form.theme.toLowerCase()}`} aria-label="Certificate design preview"><small>Main Branch</small><h4>{form.title || 'Certificate title'}</h4><p>{form.presentationLine}</p><strong>Sample Student</strong><p>{form.achievementLine || 'Achievement statement'}</p><footer><span>{form.signatoryName || 'Signatory name'}</span><span>Issue date</span></footer></div>
-            <Button type="submit" disabled={busy || !form.name.trim() || !form.title.trim() || !form.achievementLine.trim() || !form.signatoryName.trim()} aria-busy={busy}>{busy ? 'Creating template…' : 'Create template'}</Button>
+            </> : <div className="tenant-certificate-html-workspace">
+              <label htmlFor="certificate-html-file">Upload HTML file<input id="certificate-html-file" type="file" accept=".html,.htm,text/html,application/xhtml+xml" onChange={(event) => void uploadHtml(event.target.files?.[0])} /><small>Maximum 250 KB. External scripts are blocked when certificates are viewed.</small></label>
+              <label htmlFor="certificate-html">Certificate HTML<textarea id="certificate-html" rows={12} value={form.html} spellCheck={false} aria-invalid={htmlError ? 'true' : undefined} aria-describedby={htmlError ? 'certificate-html-error' : 'certificate-html-help'} onChange={(event) => { setForm((old) => ({ ...old, html: event.target.value })); setHtmlError(''); }} placeholder="<!doctype html>…" required /><small id="certificate-html-help">Available placeholders: {'{{studentName}}'}, {'{{gradeName}}'}, {'{{branchName}}'}, {'{{templateName}}'}, {'{{certificateType}}'}, {'{{issuedDate}}'}, {'{{certificateId}}'}.</small>{htmlError ? <small id="certificate-html-error" role="alert" className="tenant-certificate-field-error">{htmlError}</small> : null}</label>
+              {form.html.trim() ? <div className="tenant-certificate-preview"><span>Sandboxed preview with sample data</span><iframe title="HTML certificate preview" sandbox="" srcDoc={form.html.replace(/\{\{\s*studentName\s*\}\}/g, 'Sample Student').replace(/\{\{\s*gradeName\s*\}\}/g, 'Grade 10').replace(/\{\{\s*branchName\s*\}\}/g, 'Main Branch').replace(/\{\{\s*templateName\s*\}\}/g, form.name || 'Certificate').replace(/\{\{\s*certificateType\s*\}\}/g, form.type).replace(/\{\{\s*issuedDate\s*\}\}/g, new Date().toLocaleDateString('en-GB')).replace(/\{\{\s*certificateId\s*\}\}/g, 'CERT-PREVIEW')} /></div> : null}
+            </div>}
+            <div className="tenant-certificate-form-actions"><Button type="submit" disabled={busy || !form.name.trim() || (form.renderMode === 'HTML' ? !form.html.trim() || form.html.length > 250_000 : !form.title.trim() || !form.achievementLine.trim() || !form.signatoryName.trim())} aria-busy={busy}>{busy ? 'Saving template…' : editingTemplateId ? 'Save changes' : 'Create template'}</Button>{editingTemplateId ? <Button type="button" variant="outline" disabled={busy} onClick={() => { setEditingTemplateId(''); setForm(emptyTemplateForm); setHtmlError(''); }}>Cancel</Button> : null}</div>
           </form>
         </Card>
       </div> : null}
       {activeTab === 'ISSUE' ? <Card hoverable={false}>
         <div className="tenant-certificate-heading"><div><h3>Issue certificate</h3><p>Choose the recipient and approved design, then review the final details.</p></div></div>
         <form onSubmit={issueCertificate} className="tenant-certificate-issue-form">
-          <label htmlFor="certificate-student">Student *<select id="certificate-student" style={input} value={studentKey} onChange={(event) => { setStudentKey(event.target.value); setIssuedId(''); }} required><option value="">Select enrolled student</option>{students.map((student) => <option key={`${student.studentId}:${student.branchId}`} value={`${student.studentId}:${student.branchId}`}>{student.studentName} · {student.gradeName} · {student.branchName}</option>)}</select></label>
+          <label htmlFor="certificate-class">Class *<select id="certificate-class" style={input} value={classId} disabled={loading || !classes.length} onChange={(event) => { setClassId(event.target.value); setStudentKey(''); setIssuedId(''); }} required><option value="">Select class</option>{classes.map((classroom) => <option key={classroom.id} value={classroom.id}>{classroom.name} · {classroom.branchName}</option>)}</select></label>
+          <label htmlFor="certificate-student">Student *<select id="certificate-student" style={input} value={studentKey} disabled={loading || !classId} onChange={(event) => { setStudentKey(event.target.value); setIssuedId(''); }} required><option value="">{classId ? 'Select student from this class' : 'Choose a class first'}</option>{classStudents.map((student) => <option key={`${student.studentId}:${student.classId}`} value={`${student.studentId}:${student.classId}`}>{student.studentName} · {student.gradeName}</option>)}</select></label>
           <label htmlFor="certificate-template">Template *<select id="certificate-template" style={input} value={templateId} onChange={(event) => { setTemplateId(event.target.value); setIssuedId(''); }} required><option value="">Select certificate template</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name} · {template.layoutConfig?.renderMode === 'DESIGN' ? `${template.layoutConfig.theme ?? 'Classic'} design` : 'Legacy'}</option>)}</select></label>
           <Button type="submit" disabled={issuing || !studentKey || !templateId} aria-busy={issuing}>{issuing ? 'Issuing…' : 'Issue certificate'}</Button>
         </form>

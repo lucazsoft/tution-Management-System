@@ -31,6 +31,8 @@ import { ChangePasswordForm } from '../components/ChangePasswordForm';
 import { InvoiceDocumentDialog } from '../components/InvoiceDocument';
 import { toDualDateLabel } from '../utils/nepaliDate';
 import { PaymentCheckoutDialog } from '../components/PaymentCheckoutDialog';
+import { SyllabusTracker } from '../components/syllabus/SyllabusTracker';
+import { StudentAvatar } from '../components/common/StudentAvatar';
 import '../features/parent/parentPortal.css';
 
 type ParentView = OriginalParentView | 'security';
@@ -40,6 +42,7 @@ const VIEW_COPY: Record<ParentView, [string, string]> = {
   timetable: ['Timetable', 'Every class shown only for the selected child.'],
   attendance: ['Attendance', 'Teacher-marked sessions and approved-leave outcomes.'],
   performance: ['Performance & remarks', 'Only institution-approved, parent-visible insights.'],
+  syllabus: ['Syllabus tracking', 'Track chapter milestones, completion rates, and lesson notes.'],
   messages: ['Teacher messages', 'Conversations remain separate for each child and teacher.'],
   appointments: ['Appointments', 'Requests, alternatives, approvals, and final confirmations.'],
   leave: ['Leave management', 'Planned leave and branch-recorded emergency departures.'],
@@ -74,10 +77,10 @@ function EmptyState({ title, message, iconName }: { title: string; message: stri
 }
 
 function ChildSwitcher({ linkedChildren, activeChild, onSelect }: { linkedChildren: ParentChild[]; activeChild: ParentChild; onSelect: (id: string) => void }) {
-  return <section className="parent-child-switcher" aria-labelledby="linked-children-title"><div><span className="parent-eyebrow">LINKED STUDENTS</span><h2 id="linked-children-title">Choose a child</h2><p>Every record below changes with this selection.</p></div><div className="parent-child-tabs" role="group" aria-label="Linked children">{linkedChildren.map((child) => <button key={child.id} type="button" aria-pressed={child.id === activeChild.id} className={child.id === activeChild.id ? 'is-active' : ''} onClick={() => onSelect(child.id)}><span>{child.initials}</span><span><strong>{child.name}</strong><small>{child.grade} · Roll {child.rollNumber}</small></span>{icon(child.blocked ? 'lock' : 'verified')}</button>)}</div></section>;
+  return <section className="parent-child-switcher" aria-labelledby="linked-children-title"><div><span className="parent-eyebrow">LINKED STUDENTS</span><h2 id="linked-children-title">Choose a child</h2><p>Every record below changes with this selection.</p></div><div className="parent-child-tabs" role="group" aria-label="Linked children">{linkedChildren.map((child) => <button key={child.id} type="button" aria-pressed={child.id === activeChild.id} className={child.id === activeChild.id ? 'is-active' : ''} onClick={() => onSelect(child.id)}><StudentAvatar name={child.name} photoUrl={child.photoUrl} size="md" /><span><strong>{child.name}</strong><small>{child.grade} · Roll {child.rollNumber}</small></span>{icon(child.blocked ? 'lock' : 'verified')}</button>)}</div></section>;
 }
 function ChildContext({ child }: { child: ParentChild }) {
-  return <div className="parent-child-context" aria-label={`Currently viewing ${child.name}`}><span className="parent-child-context__avatar">{child.initials}</span><span><small>Currently viewing</small><strong>{child.name}</strong><small>{child.grade} · {child.branch}</small></span><ParentStatus label={child.blocked ? 'Blocked' : 'Active'} tone={child.blocked ? 'error' : 'success'} iconName={child.blocked ? 'lock' : 'verified'} /></div>;
+  return <div className="parent-child-context" aria-label={`Currently viewing ${child.name}`}><StudentAvatar name={child.name} photoUrl={child.photoUrl} size="md" className="parent-child-context__avatar" style={{ border: 'none' }} /><span><small>Currently viewing</small><strong>{child.name}</strong><small>{child.grade} · {child.branch}</small></span><ParentStatus label={child.blocked ? 'Blocked' : 'Active'} tone={child.blocked ? 'error' : 'success'} iconName={child.blocked ? 'lock' : 'verified'} /></div>;
 }
 function SessionList({ compact = false }: { compact?: boolean }) {
   const { sessions } = useParentData();
@@ -86,13 +89,13 @@ function SessionList({ compact = false }: { compact?: boolean }) {
 }
 
 function DashboardView({ child, go }: { child: ParentChild; go: (view: ParentView) => void }) {
-  const { appointments, leaves, remarks, sessions } = useParentData();
+  const { appointments, leaves, remarks, sessions, syllabi = [] } = useParentData();
   const today = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date()).toUpperCase();
   return <div className="parent-view">
     {child.blocked ? <section className="parent-alert parent-alert--error">{icon('lock')}<div><strong>{child.name} is blocked due to fee dues</strong><p>{money(child.outstanding)} remains outstanding. Records remain visible.</p></div><button type="button" onClick={() => go('fees')}>View fees{icon('arrow_forward')}</button></section> : null}
     <section className="parent-hero"><div><span className="parent-eyebrow">{today}</span><h2>{child.name}’s day at a glance</h2><p>Timetable, attendance, fees, remarks, and events stay separate from every sibling.</p></div><div className="parent-hero__summary"><span>Attendance</span><strong>{child.attendanceRate}%</strong><small>{child.blocked ? `${money(child.outstanding)} due` : 'Fees up to date'}</small></div></section>
     <div className="parent-dashboard-grid"><section className="parent-card"><SectionHeader title="Today’s timetable" description={`${sessions.length} scheduled session${sessions.length === 1 ? '' : 's'}`} action="Full timetable" onAction={() => go('timetable')} /><SessionList compact /></section><aside className="parent-card"><SectionHeader title="Parent-visible remarks" description="Internal institution notes are excluded." action="View performance" onAction={() => go('performance')} />{remarks.length ? <div className="parent-remark-list">{remarks.slice(0, 2).map((remark) => <article key={remark.id}><ParentStatus label={remark.signal} tone={remark.signal === 'Improving' ? 'success' : remark.signal === 'Needs support' ? 'warning' : 'info'} iconName="insights" /><h3>{remark.subject}</h3><p>{remark.message}</p><small>{remark.author} · {remark.date}</small></article>)}</div> : <EmptyState title="No visible remarks" message="Published remarks and performance signals will appear here." iconName="visibility" />}</aside></div>
-    <section className="parent-metrics" aria-label={`${child.name} summary`}><button type="button" onClick={() => go('attendance')}>{icon('fact_check')}<span><small>Attendance</small><strong>{child.attendanceRate}%</strong></span>{icon('arrow_forward')}</button><button type="button" onClick={() => go('fees')}>{icon('payments')}<span><small>Outstanding</small><strong>{money(child.outstanding)}</strong></span>{icon('arrow_forward')}</button><button type="button" onClick={() => go('appointments')}>{icon('event')}<span><small>Appointments</small><strong>{appointments.length}</strong></span>{icon('arrow_forward')}</button><button type="button" onClick={() => go('leave')}>{icon('event_available')}<span><small>Leave records</small><strong>{leaves.length}</strong></span>{icon('arrow_forward')}</button></section>
+    <section className="parent-metrics" aria-label={`${child.name} summary`}><button type="button" onClick={() => go('attendance')}>{icon('fact_check')}<span><small>Attendance</small><strong>{child.attendanceRate}%</strong></span>{icon('arrow_forward')}</button><button type="button" onClick={() => go('syllabus')}>{icon('timeline')}<span><small>Syllabus</small><strong>{syllabi.length} track{syllabi.length === 1 ? '' : 's'}</strong></span>{icon('arrow_forward')}</button><button type="button" onClick={() => go('fees')}>{icon('payments')}<span><small>Outstanding</small><strong>{money(child.outstanding)}</strong></span>{icon('arrow_forward')}</button><button type="button" onClick={() => go('appointments')}>{icon('event')}<span><small>Appointments</small><strong>{appointments.length}</strong></span>{icon('arrow_forward')}</button><button type="button" onClick={() => go('leave')}>{icon('event_available')}<span><small>Leave records</small><strong>{leaves.length}</strong></span>{icon('arrow_forward')}</button></section>
     <AcademicCalendarView viewerRole="Parent" key={child.id} studentId={child.id} upcoming calendarPath={`/parent/calendar?child=${encodeURIComponent(child.id)}`} />
   </div>;
 }
@@ -108,6 +111,33 @@ function AttendanceView({ child }: { child: ParentChild }) {
 function PerformanceView({ child }: { child: ParentChild }) {
   const { remarks } = useParentData();
   return <div className="parent-view"><div className="parent-privacy-note">{icon('visibility')}<span><strong>Visibility rules are enforced.</strong> Only remarks explicitly published for parents are returned by the API.</span></div><section className="parent-card"><SectionHeader title="Performance signals & remarks" description={`Published observations for ${child.name}.`} />{remarks.length ? <div className="parent-performance-list">{remarks.map((remark) => <article key={remark.id}><span className="parent-icon-box">{icon(remark.signal === 'Improving' ? 'trending_up' : remark.signal === 'Needs support' ? 'track_changes' : 'remove')}</span><div><span className="parent-eyebrow">{remark.subject}</span><h3>{remark.signal}</h3><p>{remark.message}</p><small>{remark.author} · {remark.date}</small></div></article>)}</div> : <EmptyState title="No parent-visible insights" message="The institution has not published remarks or score signals for this child." iconName="insights" />}</section></div>;
+}
+
+function ParentSyllabusView({ child }: { child: ParentChild }) {
+  const { syllabi = [] } = useParentData();
+
+  if (!syllabi.length) {
+    return (
+      <div className="parent-view">
+        <section className="parent-card">
+          <EmptyState
+            title="No syllabus tracking available"
+            message={`There are currently no active syllabus tracks published for ${child.name}'s enrolled classes.`}
+            iconName="timeline"
+          />
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="parent-view">
+      <SyllabusTracker
+        syllabi={syllabi as any}
+        role="parent"
+      />
+    </div>
+  );
 }
 
 function MessagesView({ child, refresh }: { child: ParentChild; refresh: () => void }) {
@@ -261,7 +291,7 @@ function FeesView({ child }: { child: ParentChild }) {
 
 function ProfileView() {
   const { children } = useParentData();
-  return <div className="parent-view"><section className="parent-card"><SectionHeader title="Linked students" description={`${children.length} student account${children.length === 1 ? '' : 's'} connected to your profile.`} /><div className="parent-profile-children">{children.map((child) => <article key={child.id}><span aria-hidden="true">{child.initials}</span><div><h3>{child.name}</h3><p>{child.grade} · {child.branch}</p><small>Roll {child.rollNumber}</small></div><ParentStatus label={child.blocked ? 'Blocked' : 'Active'} tone={child.blocked ? 'error' : 'success'} iconName={child.blocked ? 'lock' : 'verified'} /></article>)}</div></section></div>;
+  return <div className="parent-view"><section className="parent-card"><SectionHeader title="Linked students" description={`${children.length} student account${children.length === 1 ? '' : 's'} connected to your profile.`} /><div className="parent-profile-children">{children.map((child) => <article key={child.id}><StudentAvatar name={child.name} photoUrl={child.photoUrl} size="lg" /><div><h3>{child.name}</h3><p>{child.grade} · {child.branch}</p><small>Roll {child.rollNumber}</small></div><ParentStatus label={child.blocked ? 'Blocked' : 'Active'} tone={child.blocked ? 'error' : 'success'} iconName={child.blocked ? 'lock' : 'verified'} /></article>)}</div></section></div>;
 }
 function CertificatesView({ child }: { child: ParentChild }) {
   const { certificates } = useParentData();
@@ -309,7 +339,8 @@ export function ParentStudentPortal() {
     : view === 'timetable' ? <TimetableView child={child} />
       : view === 'attendance' ? <AttendanceView child={child} />
         : view === 'performance' ? <PerformanceView child={child} />
-          : view === 'messages' ? <MessagesView child={child} refresh={refresh} />
+          : view === 'syllabus' ? <ParentSyllabusView child={child} />
+            : view === 'messages' ? <MessagesView child={child} refresh={refresh} />
             : view === 'appointments' ? <AppointmentsView child={child} refresh={refresh} />
               : view === 'leave' ? <LeaveView child={child} refresh={refresh} />
                 : view === 'fees' ? <><ParentBillingPlan /><FeesView child={child} /></>

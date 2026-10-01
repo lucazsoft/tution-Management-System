@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useToast } from '../components/ui/Toast';
 import { ChangePasswordForm } from '../components/ChangePasswordForm';
@@ -27,20 +27,27 @@ export function StaffTasksPage() {
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState<string | null>(null);
   const [completingId, setCompletingId] = useState<string | null>(null);
+  const knownTaskIds = useRef<Set<string> | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setFailure(null);
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
+    if (!quiet) setFailure(null);
     try {
-      setTasks(await janitorTaskService.listMine());
+      const nextTasks = await janitorTaskService.listMine();
+      if (knownTaskIds.current) {
+        const assigned = nextTasks.filter((task) => !knownTaskIds.current!.has(task.id));
+        if (assigned.length) { setFilter('open'); showToast(assigned.length === 1 ? `New task assigned: ${assigned[0].classroomId}` : `${assigned.length} new maintenance tasks assigned.`, 'info'); }
+      }
+      knownTaskIds.current = new Set(nextTasks.map((task) => task.id));
+      setTasks(nextTasks);
     } catch (error) {
-      setFailure(errorMessage(error));
+      if (!quiet) setFailure(errorMessage(error));
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
-  }, []);
+  }, [showToast]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); const timer = window.setInterval(() => void load(true), 5000); return () => window.clearInterval(timer); }, [load]);
 
   const counts = useMemo(() => ({
     open: tasks.filter((task) => task.status !== 'COMPLETED').length,

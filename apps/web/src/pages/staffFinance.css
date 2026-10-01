@@ -360,19 +360,25 @@
 .tenant-certificate-source { margin: 0; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .tenant-certificate-source legend { padding: 0 6px; font-size: 13px; font-weight: 700; }
 .tenant-certificate-source > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tenant-certificate-source > .tenant-certificate-format-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .tenant-certificate-source label { min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; cursor: pointer; }
 .tenant-certificate-source label.is-selected { border-color: var(--color-primary); background: var(--color-primary-soft); color: var(--color-primary); }
 .tenant-certificate-source input { width: 18px; height: 18px; accent-color: var(--color-primary); }
 .tenant-certificate-preview { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--color-surface); }
 .tenant-certificate-preview > span { display: block; padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }
 .tenant-certificate-preview iframe { display: block; width: 100%; min-height: 320px; border: 0; background: #fff; }
-.tenant-certificate-issue-form { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto; align-items: end; gap: 12px; margin-top: 18px; }
+.tenant-certificate-issue-form { display: grid; grid-template-columns: repeat(3, minmax(190px, 1fr)) auto; align-items: end; gap: 12px; margin-top: 18px; }
 .tenant-certificate-issued { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; margin-top: 16px; padding: 14px; border: 1px solid color-mix(in srgb, var(--color-success) 28%, var(--border)); border-radius: var(--radius-sm); background: var(--color-success-soft); }
 .tenant-certificate-issued > .material-symbols-outlined { color: var(--color-success); font-size: 28px; }
 .tenant-certificate-issued p { margin-top: 3px; color: var(--text-muted); font-size: 12px; }
 .tenant-certificate-issued > div:last-child { display: flex; flex-wrap: wrap; gap: 8px; }
 .tenant-certificate-form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .tenant-certificate-form-row label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; }
+.tenant-certificate-form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.tenant-certificate-html-workspace { display: grid; gap: 14px; }
+.tenant-certificate-html-workspace > label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; }
+.tenant-certificate-html-workspace input[type="file"] { min-height: 44px; padding: 8px; border: 1px dashed var(--border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); }
+.tenant-certificate-field-error { color: var(--color-error) !important; font-weight: 700 !important; }
 .tenant-certificate-design-preview { min-height: 260px; display: grid; place-content: center; gap: 8px; padding: 28px; border: 6px double var(--color-primary); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); text-align: center; }
 .tenant-certificate-design-preview h4 { color: var(--color-primary); font-family: var(--font-display); font-size: 25px; }
 .tenant-certificate-design-preview > strong { margin: 5px 0; color: var(--color-warning); font-family: var(--font-display); font-size: 23px; }
@@ -544,6 +550,34 @@
 @media (max-width: 980px) { .payroll-period-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); } .payroll-search { grid-column: 1 / -1; } .payroll-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .payroll-heading { align-items: stretch; flex-direction: column; } .payroll-heading > button { width: 100%; } .payroll-period-controls, .payroll-summary { grid-template-columns: 1fr; } .payroll-search { grid-column: auto; } .payroll-search > div { grid-template-columns: 1fr; } .payroll-search .material-symbols-outlined { top: 11px; } }
 @media (prefers-reduced-motion: reduce) { .payroll-list-skeleton span { animation: none; } }
+.resource-page { display: grid; gap: 18px; }
+.resource-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.resource-summary article { display: grid; gap: 6px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--color-surface); }
+.resource-summary span { color: var(--text-muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.resource-summary strong { font-size: 24px; font-variant-numeric: tabular-nums; }
+.resource-filter, .resource-add-form label, .resource-row-editor label { display: grid; gap: 6px; color: var(--color-text); font-size: 12px; font-weight: 700; }
+.resource-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.resource-section-head h2 { font-size: 18px; }
+.resource-section-head p { margin-top: 4px; color: var(--text-muted); font-size: 13px; }
+.resource-add-form { display: grid; grid-template-columns: 1.3fr 1fr 110px 1fr 1fr; align-items: end; gap: 12px; }
+.resource-add-form .resource-notes { grid-column: 1 / -2; }
+.resource-table-wrap { overflow-x: auto; }
+.resource-table { width: 100%; min-width: 880px; border-collapse: collapse; }
+.resource-table th { padding: 11px 12px; border-bottom: 1px solid var(--border); color: var(--text-muted); background: color-mix(in srgb, var(--color-primary) 4%, var(--color-surface)); font-size: 11px; text-align: left; text-transform: uppercase; letter-spacing: .05em; }
+.resource-table td { padding: 13px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.resource-table tbody tr:last-child td { border-bottom: 0; }
+.resource-table td strong, .resource-table td small { display: block; }
+.resource-table td small { max-width: 42ch; margin-top: 4px; color: var(--text-muted); font-size: 11px; }
+.resource-row-editor { display: grid; grid-template-columns: repeat(2, minmax(150px, 1fr)); gap: 8px; min-width: 340px; }
+.resource-row-editor label:last-of-type { grid-column: 1 / -1; }
+.resource-row-editor select, .resource-row-editor textarea { min-height: 40px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-card); color: var(--color-text); font: inherit; }
+.resource-row-editor textarea { resize: vertical; }
+.resource-row-editor select:focus-visible, .resource-row-editor textarea:focus-visible { outline: 3px solid var(--color-primary-soft); outline-offset: 1px; border-color: var(--color-primary); }
+.resource-loading { padding: 24px; color: var(--text-muted); text-align: center; }
+.resource-empty { min-height: 220px; display: grid; place-content: center; justify-items: center; gap: 6px; color: var(--text-muted); text-align: center; }
+.resource-empty .material-symbols-outlined { color: var(--color-primary); font-size: 40px; }
+@media (max-width: 900px) { .resource-add-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } .resource-add-form .resource-notes { grid-column: 1 / -1; } }
+@media (max-width: 640px) { .resource-summary, .resource-add-form { grid-template-columns: 1fr; } .resource-add-form .resource-notes { grid-column: auto; } }
 .admin-detail-dialog {
   width: min(920px, calc(100vw - 32px));
   max-height: min(860px, calc(100dvh - 32px));

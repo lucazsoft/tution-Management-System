@@ -15,12 +15,14 @@ import { Card } from '../components/ui/Card';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { AcademicFees } from './AcademicFees';
 import { api, type BranchAppointment } from '../services/api';
-import { resourcesApi, type MaintenanceTask } from '../services/api/resources';
+import { resourcesApi, type InventoryItem } from '../services/api/resources';
 import { API_BASE_URL, request } from '../services/api/client';
 import { normalizeSchedule, type ScheduleSlot } from '../utils/schedule';
 import { calendarDateLabel, calendarDayNumber, calendarMonthCells, calendarMonthLabel, isInCalendarMonth, moveCalendarMonth, toDualDateLabel, type CalendarSystem } from '../utils/nepaliDate';
 import { CalendarSystemToggle } from '../components/CalendarSystemToggle';
 import { BranchClassesWorkspace as BranchClassesView } from '../features/classes/BranchClassesWorkspace';
+import { SyllabusTracker } from '../components/syllabus/SyllabusTracker';
+import { StudentAvatar } from '../components/common/StudentAvatar';
 
 function calendarDateKey(date: Date): string {
   const year = date.getFullYear();
@@ -604,69 +606,69 @@ function ResourceTasks() {
   const action = useAction();
   const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([]);
   const [branchId, setBranchId] = useState('');
-  const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [janitors, setJanitors] = useState<Array<{ id: string; name: string }>>([]);
+  const [drafts, setDrafts] = useState<Record<string, { status: string; notes: string; assignedStaffId: string }>>({});
+  const [newItem, setNewItem] = useState({ itemName: '', category: 'Classroom', quantity: '1', location: '', status: 'GOOD', notes: '' });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
-  const load = useCallback(async (requestedBranchId?: string) => {
-    setLoading(true); setLoadError('');
+  const load = useCallback(async (requestedBranchId?: string, quiet = false) => {
+    if (!quiet) setLoading(true); setLoadError('');
     try {
       const dashboard = await api.branchAdmin.getDashboard(requestedBranchId);
       const selected = requestedBranchId || dashboard.selectedBranch.id;
       setBranches(dashboard.branches);
       setBranchId(selected);
-      setTasks((await resourcesApi.tasks(selected)).tasks);
+      const [inventory, staff] = await Promise.all([resourcesApi.inventory(selected), resourcesApi.janitors(selected)]);
+      setItems(inventory.items); setJanitors(staff.janitors);
+      setDrafts((current) => Object.fromEntries(inventory.items.map((item) => [item.id, current[item.id] ?? { status: item.itemStatus, notes: item.notes, assignedStaffId: item.assignedStaffId ?? '' }])));
     } catch (cause) {
-      setTasks([]);
+      setItems([]);
       setLoadError(cause instanceof Error ? cause.message : 'Maintenance tasks could not be loaded.');
-    } finally { setLoading(false); }
+    } finally { if (!quiet) setLoading(false); }
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { if (!branchId) return; const timer = window.setInterval(() => void load(branchId, true), 5000); return () => window.clearInterval(timer); }, [branchId, load]);
 
-  const handleComplete = (id: string) => {
+  const addItem = (event: FormEvent) => {
+    event.preventDefault();
     void action.run(async () => {
-      await resourcesApi.complete(id);
+      await resourcesApi.addInventoryItem({ ...newItem, branchId, quantity: Number(newItem.quantity) });
+      setNewItem({ itemName: '', category: 'Classroom', quantity: '1', location: '', status: 'GOOD', notes: '' });
       await load(branchId);
-    }, 'Task marked complete with actor and timestamp recorded.');
+    }, 'Item added to the branch inventory.');
   };
 
-  const openTasks = tasks.filter((task) => task.status !== 'COMPLETED');
+  const saveItem = (item: InventoryItem) => {
+    const draft = drafts[item.id]; if (!draft) return;
+    const needsRepair = ['NEEDS_REPAIR', 'DAMAGED'].includes(draft.status);
+    void action.run(async () => {
+      const result = await resourcesApi.updateInventoryItem(item.id, { status: draft.status, notes: draft.notes, ...(needsRepair && draft.assignedStaffId ? { assignedStaffId: draft.assignedStaffId } : {}) });
+      await load(branchId);
+      if (needsRepair && draft.assignedStaffId && !result.notificationDelivered) throw new Error('The task was assigned, but push delivery failed. The janitor will still see it in their portal.');
+    }, needsRepair && draft.assignedStaffId ? 'Item updated and the assigned janitor was notified.' : 'Item status updated.');
+  };
+
+  const units = items.reduce((sum, item) => sum + item.quantity, 0);
+  const attention = items.filter((item) => item.itemStatus !== 'GOOD' && item.itemStatus !== 'RETIRED').length;
 
   return (
-    <Page title="Resource and maintenance" description="Action-required logs auto-assign maintenance staff; escalated tasks remain visible for direct follow-up.">
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '20px' }}>
-        <Card hoverable={false}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'end', marginBottom: 16 }}><h2 style={{ fontSize: '18px' }}>Pending Maintenance Tasks</h2>{branches.length > 1 ? <label style={label}>Branch<select style={field} value={branchId} disabled={loading} onChange={(event) => void load(event.target.value)}>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label> : null}</div>
-          <Feedback message={action.message} error={loadError || action.error} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {loading ? <p aria-busy="true" style={{ color: 'var(--text-muted)' }}>Loading maintenance tasks…</p> : openTasks.map(task => (
-              <div key={task.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--color-surface)' }}>
-                <div>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '4px' }}>
-                    <span style={{ fontWeight: 600, fontSize: '15px' }}>{task.id}</span>
-                    <StatusBadge variant={task.status === 'ESCALATED' ? 'error' : 'warning'}>{task.status.replaceAll('_', ' ')}</StatusBadge>
-                  </div>
-                  <div style={{ color: 'var(--color-text)', fontSize: '14px' }}>{task.description}</div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '4px' }}>Classroom: {task.classroomId} · Logged {new Date(task.createdAt).toLocaleString('en-NP')}</div>
-                </div>
-                <Button disabled={action.busy} onClick={() => handleComplete(task.id)}>Mark Complete</Button>
-              </div>
-            ))}
-            {!loading && !loadError && !openTasks.length ? <p role="status" style={{ color: 'var(--text-muted)', padding: 24, textAlign: 'center' }}>All caught up. No maintenance tasks need action.</p> : null}
-          </div>
-        </Card>
-        
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <Card hoverable={false}>
-            <h2 style={{ fontSize: 16 }}>Escalation policy</h2>
-            <p style={{ marginTop: 8, color: 'var(--color-text-muted, rgba(44,62,80,.7))', fontSize: '13px' }}>Tasks unresolved after the Tenant Admin-configured threshold are marked escalated. Default assignment remains branch-scoped.</p>
-            <div style={{ marginTop: '12px' }}>
-              <StatusBadge variant="warning">Requires follow-up</StatusBadge>
-            </div>
-          </Card>
-        </div>
-      </div>
+    <Page title="Resource inventory" description="List every branch item, keep its condition current, and assign repairs to a specific maintenance staff member.">
+      <section className="resource-summary" aria-label="Branch inventory summary"><article><span>Inventory entries</span><strong>{items.length}</strong></article><article><span>Total units</span><strong>{units}</strong></article><article><span>Need attention</span><strong>{attention}</strong></article></section>
+      <Feedback message={action.message} error={loadError || action.error} />
+      {branches.length > 1 ? <Card hoverable={false}><label style={label} htmlFor="resource-branch">Branch<select id="resource-branch" style={field} value={branchId} disabled={loading} onChange={(event) => void load(event.target.value)}>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label></Card> : null}
+      <Card hoverable={false}><div className="resource-section-head"><div><h2>Add inventory item</h2><p>Record furniture, equipment, supplies, or facilities in this branch.</p></div></div><form className="resource-add-form" onSubmit={addItem}>
+        <label htmlFor="resource-name">Item name *<input id="resource-name" style={field} value={newItem.itemName} onChange={(event) => setNewItem((old) => ({ ...old, itemName: event.target.value }))} required /></label>
+        <label htmlFor="resource-category">Category<select id="resource-category" style={field} value={newItem.category} onChange={(event) => setNewItem((old) => ({ ...old, category: event.target.value }))}><option>Classroom</option><option>IT equipment</option><option>Furniture</option><option>Cleaning</option><option>Facility</option><option>Other</option></select></label>
+        <label htmlFor="resource-quantity">Quantity *<input id="resource-quantity" style={field} type="text" inputMode="numeric" pattern="[0-9]+" value={newItem.quantity} onChange={(event) => setNewItem((old) => ({ ...old, quantity: event.target.value }))} required /></label>
+        <label htmlFor="resource-location">Location *<input id="resource-location" style={field} placeholder="Room 204" value={newItem.location} onChange={(event) => setNewItem((old) => ({ ...old, location: event.target.value }))} required /></label>
+        <label htmlFor="resource-initial-status">Condition<select id="resource-initial-status" style={field} value={newItem.status} onChange={(event) => setNewItem((old) => ({ ...old, status: event.target.value }))}><option value="GOOD">Good</option><option value="NEEDS_REPAIR">Needs repair</option><option value="DAMAGED">Damaged</option><option value="MISSING">Missing</option><option value="RETIRED">Retired</option></select></label>
+        <label className="resource-notes" htmlFor="resource-notes">Notes<textarea id="resource-notes" style={field} rows={2} value={newItem.notes} onChange={(event) => setNewItem((old) => ({ ...old, notes: event.target.value }))} /></label>
+        <Button type="submit" disabled={action.busy || !branchId}>{action.busy ? 'Saving…' : 'Add item'}</Button>
+      </form></Card>
+      {loading ? <Card hoverable={false}><p aria-busy="true" className="resource-loading">Loading inventory…</p></Card> : !items.length && !loadError ? <Card hoverable={false}><div className="resource-empty"><span className="material-symbols-outlined" aria-hidden="true">inventory_2</span><strong>No items listed</strong><p>Add the first item to start this branch’s inventory tally.</p></div></Card> : <Card hoverable={false}><div className="resource-section-head"><div><h2>Branch inventory</h2><p>Status changes are visible to the tenant admin within seconds.</p></div><StatusBadge variant="info">{items.length} entries</StatusBadge></div><div className="resource-table-wrap"><table className="resource-table"><thead><tr><th>Item</th><th>Location</th><th>Qty</th><th>Status and assignment</th><th>Action</th></tr></thead><tbody>{items.map((item) => { const draft = drafts[item.id] ?? { status: item.itemStatus, notes: item.notes, assignedStaffId: item.assignedStaffId ?? '' }; const needsRepair = ['NEEDS_REPAIR', 'DAMAGED'].includes(draft.status); return <tr key={item.id}><td><strong>{item.itemName}</strong><small>{item.category}</small></td><td>{item.location}</td><td>{item.quantity}</td><td><div className="resource-row-editor"><label htmlFor={`resource-status-${item.id}`}>Condition<select id={`resource-status-${item.id}`} value={draft.status} onChange={(event) => setDrafts((old) => ({ ...old, [item.id]: { ...draft, status: event.target.value } }))}><option value="GOOD">Good</option><option value="NEEDS_REPAIR">Needs repair</option><option value="DAMAGED">Damaged</option><option value="MISSING">Missing</option><option value="RETIRED">Retired</option></select></label>{needsRepair ? <label htmlFor={`resource-janitor-${item.id}`}>Assign janitor<select id={`resource-janitor-${item.id}`} value={draft.assignedStaffId} onChange={(event) => setDrafts((old) => ({ ...old, [item.id]: { ...draft, assignedStaffId: event.target.value } }))}><option value="">Choose janitor</option>{janitors.map((janitor) => <option key={janitor.id} value={janitor.id}>{janitor.name}</option>)}</select></label> : null}<label htmlFor={`resource-note-${item.id}`}>Notes<textarea id={`resource-note-${item.id}`} rows={2} value={draft.notes} onChange={(event) => setDrafts((old) => ({ ...old, [item.id]: { ...draft, notes: event.target.value } }))} /></label>{item.taskStatus ? <StatusBadge variant={item.taskStatus === 'COMPLETED' ? 'success' : item.taskStatus === 'ESCALATED' ? 'error' : 'info'}>Task {item.taskStatus.replaceAll('_', ' ')}</StatusBadge> : null}</div></td><td><Button disabled={action.busy || (needsRepair && !draft.assignedStaffId)} onClick={() => saveItem(item)}>{needsRepair ? 'Save & notify' : 'Update'}</Button></td></tr>; })}</tbody></table></div></Card>}
     </Page>
   );
 }
@@ -941,6 +943,7 @@ function ResultsView() {
 
 function CertificatesView() {
   type CertificateOptions = Awaited<ReturnType<typeof api.branchAdmin.getCertificateOptions>>;
+  const [classId, setClassId] = useState('');
   const [studentKey, setStudentKey] = useState('');
   const [template, setTemplate] = useState('');
   const [preview, setPreview] = useState(false);
@@ -950,7 +953,13 @@ function CertificatesView() {
   const [loadError, setLoadError] = useState('');
   const [issuedId, setIssuedId] = useState('');
   const action = useAction();
-  const selectedStudent = students.find((item) => `${item.studentId}:${item.branchId}` === studentKey);
+  const classes = useMemo(() => Array.from(new Map(students.map((item) => [item.classId, {
+    id: item.classId,
+    name: item.className,
+    branchName: item.branchName,
+  }])).values()).sort((a, b) => a.name.localeCompare(b.name)), [students]);
+  const studentsInClass = useMemo(() => students.filter((item) => item.classId === classId), [classId, students]);
+  const selectedStudent = students.find((item) => `${item.studentId}:${item.classId}` === studentKey);
   const selectedTemplate = templates.find((item) => item.id === template);
 
   const load = useCallback(async () => {
@@ -978,8 +987,18 @@ function CertificatesView() {
           <h2 style={{ fontSize: '18px' }}>Certificate details</h2>
           <form onSubmit={submit} style={{ ...form, marginTop: '16px' }} aria-busy={action.busy}>
             <label style={label}>
+              Select Class
+              <select required style={field} value={classId} disabled={loading || !classes.length} onChange={e => { setClassId(e.target.value); setStudentKey(''); setPreview(false); setIssuedId(''); }}>
+                <option value="">Choose a class…</option>
+                {classes.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.branchName}</option>)}
+              </select>
+            </label>
+            <label style={label}>
               Select Student
-              <select required style={field} value={studentKey} disabled={loading} onChange={e => { setStudentKey(e.target.value); setPreview(false); setIssuedId(''); }}><option value="">Choose a student…</option>{students.map((item) => <option key={`${item.studentId}:${item.branchId}`} value={`${item.studentId}:${item.branchId}`}>{item.studentName} · {item.gradeName} · {item.branchName}</option>)}</select>
+              <select required style={field} value={studentKey} disabled={loading || !classId} onChange={e => { setStudentKey(e.target.value); setPreview(false); setIssuedId(''); }}>
+                <option value="">{classId ? 'Choose a student…' : 'Choose a class first'}</option>
+                {studentsInClass.map((item) => <option key={`${item.studentId}:${item.classId}`} value={`${item.studentId}:${item.classId}`}>{item.studentName} · {item.gradeName}</option>)}
+              </select>
             </label>
             <label style={label}>
               Select Template
@@ -1343,7 +1362,6 @@ function BranchStudentsView() {
 
   const filtered = students.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.class.toLowerCase().includes(search.toLowerCase()));
 
-  const initials = (name: string) => name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
   const futureBilling = (s: any) => {
     const paidMonths = s.billing.filter((b: any) => b.status === 'Paid').length;
@@ -1402,7 +1420,7 @@ function BranchStudentsView() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {filtered.map(s => (
             <div key={s.id} role="button" tabIndex={0} aria-pressed={selectedStudent?.id === s.id} aria-label={`Open ${s.name}'s student record`} onClick={() => { setSelectedStudent(s); setEditMode(false); setIsAdding(false); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedStudent(s); setEditMode(false); setIsAdding(false); } }} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px', border: `1px solid ${selectedStudent?.id === s.id ? 'var(--color-primary)' : 'var(--border)'}`, borderRadius: '12px', cursor: 'pointer', background: selectedStudent?.id === s.id ? 'var(--color-primary-soft, #e6f0fa)' : 'var(--bg-card)' }}>
-              <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: '15px', flexShrink: 0 }}>{initials(s.name)}</div>
+              <StudentAvatar name={s.name} photoUrl={(s as any).photoUrl || s.avatar} size="md" />
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: '15px' }}>{s.name}</div>
                 <div style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{s.class} · {s.email}</div>
@@ -1417,7 +1435,7 @@ function BranchStudentsView() {
         <Card hoverable={false}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
             <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-              <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: '22px' }}>{initials(selectedStudent.name)}</div>
+              <StudentAvatar name={selectedStudent.name} photoUrl={(selectedStudent as any).photoUrl || selectedStudent.avatar} size="xl" />
               <div>
                 <h2 style={{ fontSize: '20px' }}>{selectedStudent.name}</h2>
                 <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>{selectedStudent.class} · Enrolled {selectedStudent.enrollDate}</p>
@@ -1832,6 +1850,40 @@ export function BranchResultsView() {
   </Page>;
 }
 
+function BranchSyllabusTrackerView({ data, controls }: { data: any; controls: ReactNode }) {
+  const rawSyllabi = data.syllabi || [];
+  const syllabi = rawSyllabi.map((s: any) => ({
+    id: s.id,
+    subject: s.subject,
+    className: s.class?.name || 'Class',
+    teacherName: s.class?.assignedTeacher
+      ? `${s.class.assignedTeacher.firstName} ${s.class.assignedTeacher.lastName}`
+      : 'Assigned Teacher',
+    chapters: s.chapters || [],
+    dailyLogs: s.dailyLogs || [],
+  }));
+
+  return (
+    <Page title="Syllabus progress" description="Live topic progress shared by branch teachers.">
+      {controls}
+      {syllabi.length ? (
+        <SyllabusTracker
+          syllabi={syllabi}
+          role="admin"
+        />
+      ) : (
+        <Card hoverable={false}>
+          <div role="status" style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>
+            <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: 36 }}>menu_book</span>
+            <h3 style={{ marginTop: 8 }}>No syllabus has been shared</h3>
+            <p>Teacher-created subject syllabi for this branch will appear here.</p>
+          </div>
+        </Card>
+      )}
+    </Page>
+  );
+}
+
 function LiveTeacherWorkflow({ mode }: { mode: 'attendance' | 'homework' | 'results' | 'syllabus' | 'leaves' }) {
   const [data, setData] = useState<any>(null); const [branchId, setBranchId] = useState(''); const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const action = useAction();
   const [selectedHomework, setSelectedHomework] = useState<any>(null);
@@ -1848,10 +1900,70 @@ function LiveTeacherWorkflow({ mode }: { mode: 'attendance' | 'homework' | 'resu
   }, [mode, branchId, date]);
   if (loading) return <Page title="Teacher workflows" description="Loading branch records…"><Card hoverable={false}><div aria-busy="true">Loading synchronized records…</div></Card></Page>;
   if (error || !data) return <Page title="Teacher workflows" description="Branch-scoped teacher operations."><Card hoverable={false}><Feedback message="" error={error} /><Button onClick={() => void load()}>Try again</Button></Card></Page>;
-  const controls = <Card hoverable={false}><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }}><label style={label}>Branch<select style={field} value={branchId} onChange={(event) => { setBranchId(event.target.value); void load(event.target.value, date); }}>{data.branches.map((branch: any) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>{mode === 'attendance' ? <label style={label}>Academic date<input style={field} type="date" value={date} onChange={(event) => { setDate(event.target.value); void load(branchId, event.target.value); }} /></label> : null}</div></Card>;
+  const controls = (
+    <div style={{
+      display: 'inline-flex',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      gap: 12,
+      padding: '8px 16px',
+      background: 'var(--color-surface, #fff)',
+      border: '1px solid var(--border, #e2e8f0)',
+      borderRadius: '24px',
+      marginBottom: '16px',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+      width: 'fit-content',
+      maxWidth: '100%'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>
+        <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--color-primary)' }}>domain</span>
+        <span>Branch:</span>
+        <select
+          aria-label="Select branch"
+          style={{
+            height: '32px',
+            padding: '2px 10px',
+            borderRadius: '16px',
+            border: '1px solid var(--border)',
+            background: 'var(--bg-card, #fff)',
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            color: 'var(--text)'
+          }}
+          value={branchId}
+          onChange={(event) => { setBranchId(event.target.value); void load(event.target.value, date); }}
+        >
+          {data.branches.map((branch: any) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+        </select>
+      </div>
+      {mode === 'attendance' ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', borderLeft: '1px solid var(--border)', paddingLeft: 12 }}>
+          <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--color-primary)' }}>calendar_today</span>
+          <span>Date:</span>
+          <input
+            aria-label="Select academic date"
+            style={{
+              height: '32px',
+              padding: '2px 10px',
+              borderRadius: '16px',
+              border: '1px solid var(--border)',
+              background: 'var(--bg-card, #fff)',
+              fontSize: '13px',
+              fontWeight: 500,
+              color: 'var(--text)'
+            }}
+            type="date"
+            value={date}
+            onChange={(event) => { setDate(event.target.value); void load(branchId, event.target.value); }}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
   if (mode === 'attendance') return <Page title="Branch attendance" description="Teacher-marked student attendance by real academic date and class.">{controls}<Card hoverable={false}>{data.attendance.length ? <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th>Student</th><th>Class</th><th>Subject</th><th>Teacher</th><th>Status</th></tr></thead><tbody>{data.attendance.map((row: any) => <tr key={row.id}><td>{row.studentName}</td><td>{row.className}</td><td>{row.subject}</td><td>{row.teacherName}</td><td><StatusBadge variant={row.status === 'PRESENT' ? 'success' : row.status === 'EXCUSED' ? 'warning' : 'error'}>{row.status}</StatusBadge></td></tr>)}</tbody></table> : <p>No attendance was submitted for this date.</p>}</Card></Page>;
   if (mode === 'homework') return <Page title="Branch homework" description="All teacher-published homework for this branch.">{controls}<Card hoverable={false}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}><h2 style={{ fontSize: 18 }}>Published homework</h2><StatusBadge variant="info">{data.homework.length} assignments</StatusBadge></div>{data.homework.length ? <div className="admin-record-list">{data.homework.map((item: any) => <button type="button" key={item.id} onClick={() => setSelectedHomework(item)}><span><strong>{item.title}</strong><small>{item.class.name} · {item.subject} · Due {new Date(item.deadline).toLocaleDateString()}</small></span><StatusBadge variant={new Date(item.deadline) < new Date() ? 'warning' : 'info'}>{new Date(item.deadline) < new Date() ? 'Closed' : 'Active'}</StatusBadge><span className="material-symbols-outlined" aria-hidden="true">chevron_right</span></button>)}</div> : <div role="status" className="admin-empty-state"><span className="material-symbols-outlined" aria-hidden="true">assignment</span><h3>No homework published</h3><p>Teacher-published assignments will appear here.</p></div>}</Card><AdminDetailDialog open={Boolean(selectedHomework)} title={selectedHomework?.title || 'Homework details'} eyebrow="Homework details" onClose={() => setSelectedHomework(null)}>{selectedHomework ? <><dl className="admin-detail-grid"><div><dt>Class</dt><dd>{selectedHomework.class.name}</dd></div><div><dt>Subject</dt><dd>{selectedHomework.subject}</dd></div><div><dt>Teacher</dt><dd>{selectedHomework.class.assignedTeacher ? `${selectedHomework.class.assignedTeacher.firstName} ${selectedHomework.class.assignedTeacher.lastName}` : 'Not assigned'}</dd></div><div><dt>Published</dt><dd>{new Date(selectedHomework.createdAt).toLocaleString()}</dd></div><div><dt>Due date</dt><dd>{new Date(selectedHomework.deadline).toLocaleString()}</dd></div><div><dt>Status</dt><dd>{new Date(selectedHomework.deadline) < new Date() ? 'Closed' : 'Active'}</dd></div></dl><section className="admin-detail-section"><h3>Instructions</h3><p>{selectedHomework.description?.trim() || 'No additional instructions were provided.'}</p></section><div className="admin-detail-actions">{selectedHomework.contentUrl ? <a href={selectedHomework.contentUrl} target="_blank" rel="noreferrer">Open Attached File</a> : <span>No Attached File</span>}<Button variant="outline" onClick={() => setSelectedHomework(null)}>Close</Button></div></> : null}</AdminDetailDialog></Page>;
-  if (mode === 'syllabus') return <Page title="Syllabus progress" description="Live topic progress shared by branch teachers.">{controls}{data.syllabi.length ? data.syllabi.map((syllabus: any) => <Card key={syllabus.id} hoverable={false}><h2>{syllabus.subject} · {syllabus.class.name}</h2><p>{syllabus.class.assignedTeacher ? `${syllabus.class.assignedTeacher.firstName} ${syllabus.class.assignedTeacher.lastName}` : 'Teacher'}</p>{syllabus.chapters.map((chapter: any) => <section key={chapter.id} style={{ padding: 12, borderTop: '1px solid var(--border)' }}><strong>{chapter.position}. {chapter.title}</strong><StatusBadge variant={chapter.status === 'COMPLETED' ? 'success' : chapter.status === 'IN_PROGRESS' ? 'warning' : 'error'}>{chapter.status}</StatusBadge>{chapter.topics.map((topic: any) => <p key={topic.id}>{topic.position}. {topic.title} — {topic.status}{topic.logs[0]?.notes ? ` · ${topic.logs[0].notes}` : ''}</p>)}</section>)}</Card>) : <Card hoverable={false}>No syllabus has been shared.</Card>}</Page>;
+  if (mode === 'syllabus') return <BranchSyllabusTrackerView data={data} controls={controls} />;
   if (mode === 'leaves') { const decide = async (id: string, decision: 'APPROVE' | 'REJECT') => { await action.run(() => api.branchAdmin.decideLeave(id, decision, decision === 'REJECT' ? 'Rejected by Branch Admin.' : 'Reviewed by Branch Admin.'), `Leave ${decision === 'APPROVE' ? 'approved or forwarded' : 'rejected'}.`); await load(); }; return <Page title="Teacher leave requests" description="Review live teacher requests; long sick leave is forwarded after Level 1 approval.">{controls}<Feedback message={action.message} error={action.error} /><Card hoverable={false}>{data.leaves.filter((item: any) => item.status === 'PENDING').length ? data.leaves.filter((item: any) => item.status === 'PENDING').map((item: any) => <article key={item.id} style={{ padding: 12, borderBottom: '1px solid var(--border)' }}><strong>{item.user.firstName} {item.user.lastName} · {item.leaveType}</strong><p>{new Date(item.startDate).toLocaleDateString()} – {new Date(item.endDate).toLocaleDateString()} · {item.reason}</p><div style={{ display: 'flex', gap: 8 }}><Button disabled={action.busy} onClick={() => void decide(item.id, 'APPROVE')}>Approve</Button><Button variant="outline" disabled={action.busy} onClick={() => void decide(item.id, 'REJECT')}>Reject</Button></div></article>) : <p>No pending teacher leave requests.</p>}</Card></Page>; }
   const submitDefinition = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const values = new FormData(event.currentTarget); void action.run(async () => { await api.branchAdmin.createResultDefinition({ branchId, classId: String(values.get('classId')), title: String(values.get('title')), subject: String(values.get('subject')), testDate: String(values.get('testDate')) }); await load(); event.currentTarget.reset(); }, 'Result created and sent to the assigned teacher.'); };
   return <Page title="Branch results" description="Create result entry windows before teachers enter and publish marks.">{controls}<Card hoverable={false}><form style={form} onSubmit={submitDefinition} aria-busy={action.busy}><label style={label}>Assigned class<select name="classId" required style={field}>{data.classes.map((item: any) => <option key={item.id} value={item.id}>{item.name} · {item.course.name}</option>)}</select></label><label style={label}>Result title<input name="title" required style={field} placeholder="First terminal examination" /></label><label style={label}>Subject<input name="subject" required style={field} /></label><label style={label}>Test date<input name="testDate" type="date" required style={field} /></label><Feedback message={action.message} error={action.error} /><Button type="submit" disabled={action.busy}>{action.busy ? 'Creating…' : 'Create result'}</Button></form></Card><Card hoverable={false}><h2>Available results</h2>{data.resultDefinitions.map((item: any) => <p key={item.id}>{item.title} · {item.subject} · {new Date(item.testDate).toLocaleDateString()}</p>)}</Card></Page>;

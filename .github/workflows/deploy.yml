@@ -1,0 +1,44 @@
+name: Deploy to Coolify
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Coolify production deploy
+        run: |
+          if [ -z "${{ secrets.COOLIFY_DEPLOY_WEBHOOK }}" ]; then
+            echo "::error::COOLIFY_DEPLOY_WEBHOOK secret is not set."
+            echo "Get it from Coolify → API service → Deploy Webhooks → copy the URL."
+            exit 1
+          fi
+          echo "Triggering Coolify deploy..."
+          curl -sS -X POST "${{ secrets.COOLIFY_DEPLOY_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -w "\nHTTP %{http_code}\n" \
+            -o /tmp/deploy_response.json
+          cat /tmp/deploy_response.json
+      - name: Wait for deploy to start
+        run: sleep 15
+      - name: Verify production health
+        run: |
+          echo "Checking /api/health ..."
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
+              "https://api.tms.sanskardipshikshalaya.com.np/api/health" || echo "000")
+            echo "Attempt $i: HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "✓ Production is healthy"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::warning::Health check did not return 200 within 60s — verify in Coolify dashboard."
+          exit 0

@@ -9,6 +9,7 @@ import {
   type ReceptionAppointment,
   type ReceptionToday,
 } from '../features/reception/receptionService';
+import { StudentAvatar } from '../components/common/StudentAvatar';
 import '../features/reception/reception.css';
 
 type View = 'roster' | 'academic-attendance' | 'appointments' | 'announcements';
@@ -145,7 +146,7 @@ export function StaffReceptionPage() {
                 <thead><tr><th>Student</th><th>Class / destination</th><th>Arrival</th><th><span className="sr-only">Check-in action</span></th></tr></thead>
                 <tbody>{visibleRoster.map((student) => (
                   <tr key={student.id}>
-                    <td><span className="student-avatar">{student.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</span><strong>{student.name}</strong></td>
+                    <td><StudentAvatar name={student.name} photoUrl={student.photoUrl} size="sm" style={{ width: 34, height: 34 }} /><strong>{student.name}</strong></td>
                     <td>{student.className}</td>
                     <td>{student.checkedInAt ? <span className="arrival-status"><span className="material-symbols-outlined">check_circle</span>{TIME_FORMAT.format(new Date(student.checkedInAt))}</span> : <span className="muted-status">Not arrived</span>}</td>
                     <td><button type="button" className="check-in-button" disabled={Boolean(student.checkedInAt) || checkingIn === student.id} onClick={() => void handleCheckIn(student.id)}>{checkingIn === student.id ? 'Checking in…' : student.checkedInAt ? 'Checked in' : 'Check in'}</button></td>

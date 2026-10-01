@@ -5,6 +5,7 @@ import { authMiddleware } from '../middleware/auth';
 import { TenantRequest } from '../middleware/tenant';
 import { hasRole } from '../utils/access-control';
 import { normalizeSchedule } from '../utils/schedule';
+import { privateImageUrl } from '../services/object-storage';
 
 const router = Router();
 
@@ -42,7 +43,7 @@ router.get('/today', authMiddleware, async (req: TenantRequest, res: Response) =
       prisma.enrollment.findMany({
         where: { status: 'ACTIVE', class: { branchId } },
         select: {
-          student: { select: { id: true, user: { select: { firstName: true, lastName: true } } } },
+          student: { select: { id: true, user: { select: { firstName: true, lastName: true, image: true } } } },
           class: { select: { name: true, schedule: true } },
         },
         orderBy: { student: { user: { firstName: 'asc' } } },
@@ -75,12 +76,13 @@ router.get('/today', authMiddleware, async (req: TenantRequest, res: Response) =
 
     const checkedByStudent = new Map(checkIns.map((item) => [item.studentId, item.checkedInAt]));
     const rosterByStudent = new Map<string, {
-      id: string; name: string; classNames: string[]; schedules: unknown[]; checkedInAt: Date | null;
+      id: string; name: string; image: string | null; classNames: string[]; schedules: unknown[]; checkedInAt: Date | null;
     }>();
     for (const item of enrollments) {
       const current = rosterByStudent.get(item.student.id) ?? {
         id: item.student.id,
         name: `${item.student.user.firstName} ${item.student.user.lastName}`.trim(),
+        image: item.student.user.image,
         classNames: [],
         schedules: [],
         checkedInAt: checkedByStudent.get(item.student.id) ?? null,
@@ -89,13 +91,14 @@ router.get('/today', authMiddleware, async (req: TenantRequest, res: Response) =
       current.schedules.push(normalizeSchedule(item.class.schedule));
       rosterByStudent.set(item.student.id, current);
     }
-    const roster = Array.from(rosterByStudent.values()).map((item) => ({
+    const roster = await Promise.all(Array.from(rosterByStudent.values()).map(async (item) => ({
       id: item.id,
       name: item.name,
       className: item.classNames.join(' · '),
       schedule: item.schedules,
       checkedInAt: item.checkedInAt,
-    }));
+      photoUrl: await privateImageUrl(item.image),
+    })));
 
     return res.json({
       branchName: branch.name,
