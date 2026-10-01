@@ -23,6 +23,7 @@ jobs:
           fi
           echo "Triggering Coolify deploy..."
           curl -sS -X POST "${{ secrets.COOLIFY_DEPLOY_WEBHOOK }}" \
+            -H "Authorization: ${{ secrets.COOLIFY_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -w "\nHTTP %{http_code}\n" \
             -o /tmp/deploy_response.json
