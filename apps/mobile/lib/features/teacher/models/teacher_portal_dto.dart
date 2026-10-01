@@ -224,11 +224,13 @@ class TeacherAcademicEvent {
       required this.title,
       required this.type,
       required this.startDate,
+      this.endDate,
       this.description = ''});
   final String id;
   final String title;
   final String type;
   final DateTime startDate;
+  final DateTime? endDate;
   final String description;
   factory TeacherAcademicEvent.fromJson(Map<String, dynamic> json) =>
       TeacherAcademicEvent(
@@ -236,6 +238,7 @@ class TeacherAcademicEvent {
           title: _str(json['title']),
           type: _str(json['eventType']),
           startDate: _date(json['startDate']) ?? DateTime.now(),
+          endDate: _date(json['endDate']),
           description: _str(json['description']));
 }
 
@@ -355,15 +358,24 @@ class TeacherMessageContact {
       required this.studentName,
       required this.gradeName,
       required this.parentId,
-      required this.parentName});
+      required this.parentName,
+      this.lastMessage = '',
+      this.lastMessageAt,
+      this.unreadCount = 0});
   final String studentId, studentName, gradeName, parentId, parentName;
+  final String lastMessage;
+  final DateTime? lastMessageAt;
+  final int unreadCount;
   factory TeacherMessageContact.fromJson(Map<String, dynamic> json) =>
       TeacherMessageContact(
           studentId: _str(json['studentId']),
           studentName: _str(json['studentName']),
           gradeName: _str(json['gradeName']),
           parentId: _str(json['parentId']),
-          parentName: _str(json['parentName']));
+          parentName: _str(json['parentName']),
+          lastMessage: _str(json['lastMessage']),
+          lastMessageAt: _date(json['lastMessageAt']),
+          unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0);
 }
 
 class TeacherMessageItem {

@@ -30,22 +30,37 @@ router.get('/messages/contacts', authMiddleware, async (req: TenantRequest, res:
         orderBy: { createdAt: 'desc' },
       }),
     ]);
-    const contacts = [
-      ...links.map((link) => ({ studentId: link.studentId, studentName: `${link.student.user.firstName} ${link.student.user.lastName}`.trim(), gradeName: link.student.grade?.name ?? 'Class not assigned', parentId: link.parent.user.id, parentName: `${link.parent.user.firstName} ${link.parent.user.lastName}`.trim() })),
-      ...conversationRows.flatMap((message) => message.student.studentParents
-        .filter((link) => link.parent.user.id === message.senderId || link.parent.user.id === message.receiverId)
-        .map((link) => ({
+    const conversations = new Map<string, any>();
+    for (const message of conversationRows) {
+      const link = message.student.studentParents.find((item) =>
+        item.parent.user.id === message.senderId || item.parent.user.id === message.receiverId);
+      if (!link) continue;
+      const key = `${message.studentId}:${link.parent.user.id}`;
+      const existing = conversations.get(key);
+      if (!existing) {
+        conversations.set(key, {
           studentId: message.studentId,
           studentName: `${message.student.user.firstName} ${message.student.user.lastName}`.trim(),
           gradeName: message.student.grade?.name ?? 'Class not assigned',
           parentId: link.parent.user.id,
           parentName: `${link.parent.user.firstName} ${link.parent.user.lastName}`.trim(),
-        }))),
-    ];
-    // A student may have overlapping active enrollments taught by the same
-    // teacher. Keep one stable parent/student conversation instead of showing
-    // duplicate contacts that can select the wrong-looking thread.
-    return res.json({ contacts: [...new Map(contacts.map((contact) => [`${contact.studentId}:${contact.parentId}`, contact])).values()] });
+          lastMessage: message.messageText,
+          lastMessageAt: message.createdAt,
+          unreadCount: 0,
+        });
+      }
+      if (message.receiverId === req.user!.id && !message.readAt) {
+        conversations.get(key).unreadCount += 1;
+      }
+    }
+    const availableContacts = links.map((link) => ({
+      studentId: link.studentId,
+      studentName: `${link.student.user.firstName} ${link.student.user.lastName}`.trim(),
+      gradeName: link.student.grade?.name ?? 'Class not assigned',
+      parentId: link.parent.user.id,
+      parentName: `${link.parent.user.firstName} ${link.parent.user.lastName}`.trim(),
+    }));
+    return res.json({ contacts: [...conversations.values()], availableContacts });
   } catch (error: any) { return res.status(500).json({ error: 'Failed to load message contacts.', details: error.message }); }
 });
 

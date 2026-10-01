@@ -6,9 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tms_mobile/core/sync/sync.dart';
 import 'package:tms_mobile/core/theme/app_colors.dart';
-import 'package:tms_mobile/features/teacher/models/teacher_models.dart';
+import 'package:tms_mobile/features/teacher/data/teacher_portal_repository.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_portal_dto.dart';
-import 'package:tms_mobile/features/teacher/screens/geo_attendance_screen.dart';
 import 'package:tms_mobile/features/teacher/viewmodels/teacher_portal_viewmodel.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_navigation.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_record_states.dart';
@@ -25,11 +24,13 @@ class _TeacherTimetableScreenState extends ConsumerState<TeacherTimetableScreen>
     with SingleTickerProviderStateMixin {
   static const _days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   late final TabController _tabController;
+  List<TeacherAcademicEvent> _events = const [];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: _days.length + 1, vsync: this);
+    _loadEvents();
   }
 
   @override
@@ -100,45 +101,74 @@ class _TeacherTimetableScreenState extends ConsumerState<TeacherTimetableScreen>
     return TabBarView(controller: _tabController, children: [
       _TimetablePage(
         rows: _todayRows(workspace.todayClasses),
+        events: _eventsOn(DateTime.now()),
         emptyTitle: 'No classes today',
         emptyMessage: 'Nothing scheduled for today.',
-        onTakeClass: (item) => _openClassWorkflow(workspace, item),
+        onTakeClass: (item) => _markTaken(workspace, item),
+        onRefresh: _refresh,
       ),
       for (final day in _days)
         _TimetablePage(
           rows: _dayRows(day, workspace.classes),
+          events: _eventsOn(_dateForDay(day)),
           emptyTitle: 'No classes on $day',
           emptyMessage: 'Nothing scheduled for this day.',
           weeklyTemplate: true,
+          onRefresh: _refresh,
         ),
     ]);
   }
 
-  Future<void> _openClassWorkflow(
+  Future<void> _loadEvents() async {
+    try {
+      final events = await TeacherPortalRepository().fetchCalendar();
+      if (mounted) setState(() => _events = events);
+    } catch (_) {
+      // The timetable remains usable if the calendar is temporarily offline.
+    }
+  }
+
+  Future<void> _refresh() async {
+    await Future.wait([
+      ref.read(teacherPortalViewModelProvider.notifier).refresh(),
+      _loadEvents(),
+    ]);
+  }
+
+  Future<void> _markTaken(
       TeacherWorkspace workspace, TeacherTodayClass today) async {
-    final matches = workspace.classes.where((item) => item.id == today.classId);
-    final klass = matches.isEmpty ? null : matches.first;
-    final branch = klass?.branch;
-    final now = DateTime.now();
-    await Navigator.of(context).push<void>(MaterialPageRoute<void>(
-      builder: (_) => GeoAttendanceScreen(
-        session: TeacherClassSession(
-          id: today.sessionId,
-          subject: '${today.courseName} - ${today.className}',
-          room: today.scheduleLabel ?? '',
-          branch: today.branchName ?? branch?.name ?? '',
-          enrolledCount: klass?.studentCount ?? 0,
-          status: ClassSessionStatus.scheduled,
-          scheduledStart: now,
-          scheduledEnd: now,
-        ),
-        branchId: branch?.id,
-        branchRadiusMeters: branch?.radiusMeters,
-        branchLatitude: branch?.latitude,
-        branchLongitude: branch?.longitude,
-      ),
+    if (!workspace.checkedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Mark yourself present before confirming this class.'),
+      ));
+      return;
+    }
+    final ok = await ref
+        .read(teacherPortalViewModelProvider.notifier)
+        .markSessionTaken(today.sessionId);
+    if (!mounted) return;
+    final error = ref.read(teacherPortalViewModelProvider).error;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(ok ? 'Class marked as taken.' : error ?? 'Could not confirm the class.'),
     ));
-    if (mounted) await ref.read(teacherPortalViewModelProvider.notifier).refresh();
+  }
+
+  List<TeacherAcademicEvent> _eventsOn(DateTime date) {
+    final target = DateTime(date.year, date.month, date.day);
+    return _events.where((event) {
+      final start = event.startDate.toLocal();
+      final end = (event.endDate ?? event.startDate).toLocal();
+      final first = DateTime(start.year, start.month, start.day);
+      final last = DateTime(end.year, end.month, end.day);
+      return !target.isBefore(first) && !target.isAfter(last);
+    }).toList();
+  }
+
+  DateTime _dateForDay(String day) {
+    final now = DateTime.now();
+    final sunday = DateTime(now.year, now.month, now.day)
+        .subtract(Duration(days: now.weekday % 7));
+    return sunday.add(Duration(days: _days.indexOf(day)));
   }
 }
 
@@ -163,28 +193,53 @@ class _TimetablePage extends StatelessWidget {
     required this.rows,
     required this.emptyTitle,
     required this.emptyMessage,
+    this.events = const [],
+    required this.onRefresh,
     this.onTakeClass,
     this.weeklyTemplate = false,
   });
   final List<_RowData> rows;
   final String emptyTitle;
   final String emptyMessage;
+  final List<TeacherAcademicEvent> events;
+  final Future<void> Function() onRefresh;
   final ValueChanged<TeacherTodayClass>? onTakeClass;
   final bool weeklyTemplate;
 
   @override
   Widget build(BuildContext context) {
-    if (rows.isEmpty) {
+    if (rows.isEmpty && events.isEmpty) {
       return TeacherEmptyView(
           icon: Icons.event_available_rounded,
           title: emptyTitle,
           message: emptyMessage);
     }
     return RefreshIndicator(
-      onRefresh: () => ProviderScope.containerOf(context)
-          .read(teacherPortalViewModelProvider.notifier)
-          .refresh(),
+      onRefresh: onRefresh,
       child: ListView(padding: const EdgeInsets.all(20), children: [
+        if (events.isNotEmpty) ...[
+          Text('Events', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          for (final event in events)
+            Card(
+              color: kColorAccent.withValues(alpha: .09),
+              child: ListTile(
+                leading: const Icon(Icons.event_rounded, color: kColorPrimary),
+                title: Text(event.title),
+                subtitle: Text([
+                  event.type,
+                  if (event.description.trim().isNotEmpty) event.description,
+                ].join(' • ')),
+              ),
+            ),
+          const SizedBox(height: 12),
+        ],
+        if (rows.isEmpty)
+          TeacherEmptyView(
+              icon: Icons.event_available_rounded,
+              title: emptyTitle,
+              message: emptyMessage)
+        else
         Card(
           clipBehavior: Clip.antiAlias,
           child: Column(children: [

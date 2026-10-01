@@ -66,14 +66,21 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
             // The parent endpoint is already scoped to the selected child.
             // Do not discard contacts/messages when older payloads omit the
             // redundant childId field.
-            final sourceContacts = portal.contacts;
-            final contacts = [...sourceContacts]
-              ..sort((a, b) => a.role.compareTo(b.role));
-            final selected =
-                sourceContacts.where((item) => item.id == _contactId);
-            final contact = selected.isNotEmpty
-                ? selected.first
-                : (sourceContacts.isEmpty ? null : sourceContacts.first);
+            final latestByContact = <String, DateTime>{};
+            for (final message in portal.messages) {
+              final instant = message.occurredAt ?? DateTime(1970);
+              final current = latestByContact[message.teacherId];
+              if (current == null || instant.isAfter(current)) {
+                latestByContact[message.teacherId] = instant;
+              }
+            }
+            final contacts = portal.contacts
+                .where((item) => latestByContact.containsKey(item.id))
+                .toList()
+              ..sort((a, b) =>
+                  latestByContact[b.id]!.compareTo(latestByContact[a.id]!));
+            final selected = contacts.where((item) => item.id == _contactId);
+            final contact = selected.isNotEmpty ? selected.first : null;
             final thread = contact == null
                 ? const <ParentMessageItem>[]
                 : portal.messages
@@ -104,13 +111,10 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
                         onSend: contact == null
                             ? null
                             : () => _send(child, contact),
+                        onBack: () => setState(() => _contactId = null),
                       );
                       if (constraints.maxWidth < 760) {
-                        return Column(children: [
-                          contactList,
-                          const SizedBox(height: TmsSpace.md),
-                          conversation,
-                        ]);
+                        return contact == null ? contactList : conversation;
                       }
                       return Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -230,6 +234,7 @@ class _Conversation extends StatelessWidget {
     required this.controller,
     required this.sending,
     required this.onSend,
+    required this.onBack,
   });
   final ParentChild child;
   final ParentContact? contact;
@@ -237,6 +242,7 @@ class _Conversation extends StatelessWidget {
   final TextEditingController controller;
   final bool sending;
   final VoidCallback? onSend;
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) => Card(
@@ -245,8 +251,17 @@ class _Conversation extends StatelessWidget {
           padding: const EdgeInsets.all(TmsSpace.md),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text(contact?.name ?? 'Conversation',
-                style: Theme.of(context).textTheme.titleLarge),
+            Row(children: [
+              IconButton(
+                tooltip: 'Back to conversations',
+                onPressed: onBack,
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+              Expanded(
+                child: Text(contact?.name ?? 'Conversation',
+                    style: Theme.of(context).textTheme.titleLarge),
+              ),
+            ]),
             if (contact != null)
               Text('${contact!.subject} · regarding ${child.name}',
                   style: Theme.of(context)

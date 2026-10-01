@@ -133,6 +133,10 @@ app.all('/api/auth/*', monitorCredentialSignIn, toNodeHandler(auth));
 
 app.use('/api/finances/manual-payment', express.json({ limit: '2mb' }));
 app.use('/api/finances/branches', express.json({ limit: '2mb' }));
+// Result entry can contain one checked answer sheet per student. Authenticate
+// before accepting the larger payload; the global 256 KB JSON ceiling remains
+// in force for every other API surface.
+app.use('/api/teacher/results', authMiddleware, express.json({ limit: '64mb' }));
 app.use(express.json({ limit: '256kb' }));
 
 // Global tenant middleware; authenticated scope comes from the verified session.

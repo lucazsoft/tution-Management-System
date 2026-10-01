@@ -39,6 +39,8 @@ class TeacherPortalRepository {
   static const String geoOutPath = '/api/attendance/out';
   static String sessionUpdatePath(String sessionId) =>
       '/api/teacher/session/$sessionId/update';
+  static String sessionTakenPath(String sessionId) =>
+      '/api/teacher/session/$sessionId/taken';
   static String classAttendancePath(String classId) =>
       '/api/teacher/class/$classId/attendance';
 
@@ -121,6 +123,14 @@ class TeacherPortalRepository {
         for (final item in events)
           if (item is Map<String, dynamic>) TeacherAcademicEvent.fromJson(item)
       ];
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
+  Future<void> markSessionTaken(String sessionId) async {
+    try {
+      await _dio.post<dynamic>(sessionTakenPath(sessionId));
     } on DioException catch (error) {
       throw _typed(error);
     }

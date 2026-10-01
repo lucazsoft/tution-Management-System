@@ -46,6 +46,8 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
   Future<void> _loadContacts() async {
     try {
       final contacts = await _repository.fetchMessageContacts();
+      contacts.sort((a, b) => (b.lastMessageAt ?? DateTime(1970))
+          .compareTo(a.lastMessageAt ?? DateTime(1970)));
       if (!mounted) return;
       final selectedId = _selected == null
           ? null
@@ -53,7 +55,7 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
       setState(() {
         _contacts = contacts;
         _error = null;
-        _selected = contacts.isEmpty
+        _selected = selectedId == null || contacts.isEmpty
             ? null
             : contacts.firstWhere(
                 (item) => '${item.studentId}:${item.parentId}' == selectedId,
@@ -141,11 +143,7 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
                 final contacts = _contactCard();
                 final thread = _threadCard();
                 return box.maxWidth < 760
-                    ? Column(children: [
-                        contacts,
-                        const SizedBox(height: 16),
-                        thread
-                      ])
+                    ? (_selected == null ? contacts : thread)
                     : Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -169,7 +167,8 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
           padding: const EdgeInsets.all(12),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Parents', style: Theme.of(context).textTheme.titleLarge),
+            Text('Conversations',
+                style: Theme.of(context).textTheme.titleLarge),
             for (final contact in _contacts!)
               ListTile(
                 selected: contact == _selected,
@@ -177,6 +176,9 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
                 title: Text(contact.parentName),
                 subtitle: Text('${contact.studentName} · ${contact.gradeName}',
                     maxLines: 2, overflow: TextOverflow.ellipsis),
+                trailing: contact.unreadCount > 0
+                    ? Badge(label: Text('${contact.unreadCount}'))
+                    : null,
                 onTap: () => _select(contact),
               ),
           ])));
@@ -190,8 +192,20 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(contact.parentName,
-                      style: Theme.of(context).textTheme.titleLarge),
+                  Row(children: [
+                    IconButton(
+                      tooltip: 'Back to conversations',
+                      onPressed: () => setState(() {
+                        _selected = null;
+                        _messages = null;
+                      }),
+                      icon: const Icon(Icons.arrow_back_rounded),
+                    ),
+                    Expanded(
+                      child: Text(contact.parentName,
+                          style: Theme.of(context).textTheme.titleLarge),
+                    ),
+                  ]),
                   Text('Regarding ${contact.studentName}',
                       style: Theme.of(context).textTheme.bodySmall),
                   const Divider(height: 28),

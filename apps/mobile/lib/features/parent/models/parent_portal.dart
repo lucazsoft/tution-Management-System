@@ -109,7 +109,8 @@ class ParentMessageItem {
       required this.teacherId,
       required this.sender,
       required this.text,
-      required this.time});
+      required this.time,
+      this.occurredAt});
   factory ParentMessageItem.fromJson(Map<String, dynamic> json) =>
       ParentMessageItem(
           id: _str(json['id']),
@@ -117,13 +118,15 @@ class ParentMessageItem {
           teacherId: _str(json['teacherId']),
           sender: _str(json['sender']),
           text: _str(json['text']),
-          time: _str(json['time']));
+          time: _str(json['time']),
+          occurredAt: DateTime.tryParse(_str(json['occurredAt'])));
   final String id;
   final String childId;
   final String teacherId;
   final String sender;
   final String text;
   final String time;
+  final DateTime? occurredAt;
 }
 
 class ParentAppointmentItem {
