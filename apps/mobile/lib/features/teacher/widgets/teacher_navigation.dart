@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/features/auth/data/device_account_vault.dart';
+import 'package:tms_mobile/core/theme/app_theme.dart';
 
 /// Shared navigation chrome for the teacher portal's route-based screens.
 abstract final class TeacherNavigation {
@@ -25,6 +26,21 @@ abstract final class TeacherNavigation {
     ),
     (label: 'Messages', icon: Icons.forum_outlined, route: '/teacher/messages'),
     (
+      label: 'Meetings',
+      icon: Icons.groups_outlined,
+      route: '/teacher/meetings'
+    ),
+    (
+      label: 'Notifications',
+      icon: Icons.notifications_outlined,
+      route: '/teacher/notifications'
+    ),
+    (
+      label: 'Notice board',
+      icon: Icons.campaign_outlined,
+      route: '/teacher/notices'
+    ),
+    (
       label: 'Update syllabus',
       icon: Icons.menu_book_outlined,
       route: '/teacher/syllabus'
@@ -46,6 +62,8 @@ abstract final class TeacherNavigation {
     final section = sections[index];
     if (section == 'messages') {
       context.go('/teacher/messages');
+    } else if (section == 'classes') {
+      context.go('/teacher/timetable');
     } else {
       context.go(
           section == 'home' ? '/teacher/home' : '/teacher/home?tab=$section');
@@ -64,102 +82,119 @@ abstract final class TeacherNavigation {
     }
 
     return Consumer(
-      builder: (context, ref, _) => NavigationDrawer(
-        selectedIndex: selected < 0 ? null : selected,
-        onDestinationSelected: (index) => open(drawerItems[index].route),
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(28, 28, 28, 18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  radius: 30,
-                  backgroundColor:
-                      Theme.of(context).colorScheme.primaryContainer,
-                  child: const Icon(Icons.person_rounded, size: 30),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  ref.watch(authProvider).user?.name ?? 'Teacher',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                Text(
-                  ref.watch(authProvider).user?.email ?? 'Teacher portal',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+      builder: (context, ref, _) => Theme(
+        data: Theme.of(context).copyWith(
+          navigationDrawerTheme: NavigationDrawerThemeData(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.transparent,
+            indicatorColor: kColorPrimary.withValues(alpha: .10),
+            iconTheme: const WidgetStatePropertyAll(
+              IconThemeData(color: kColorPrimary, size: 24),
             ),
           ),
-          for (final item in drawerItems)
-            NavigationDrawerDestination(
-              icon: Icon(item.icon),
-              selectedIcon: Icon(item.icon),
-              label: SizedBox(
-                width: 150,
-                child: Text(
-                  item.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+          listTileTheme: const ListTileThemeData(
+            iconColor: kColorPrimary,
+            minLeadingWidth: 24,
+            horizontalTitleGap: 16,
+          ),
+        ),
+        child: NavigationDrawer(
+          selectedIndex: selected < 0 ? null : selected,
+          onDestinationSelected: (index) => open(drawerItems[index].route),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(28, 28, 28, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundColor:
+                        Theme.of(context).colorScheme.primaryContainer,
+                    child: const Icon(Icons.person_rounded, size: 30),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    ref.watch(authProvider).user?.name ?? 'Teacher',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  Text(
+                    ref.watch(authProvider).user?.email ?? 'Teacher portal',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
               ),
             ),
-          const Divider(indent: 28, endIndent: 28),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(28, 8, 28, 4),
-            child: Text('ACCOUNT'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.manage_accounts_outlined),
-            title: const Text('Profile settings'),
-            onTap: () => open('/teacher/account'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.key_rounded),
-            title: const Text('Change password'),
-            onTap: () => open('/teacher/change-password'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.pin_outlined),
-            title: const Text('Set or change MPIN'),
-            onTap: () => open('/teacher/mpin'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.switch_account_rounded),
-            title: const Text('Switch account'),
-            onTap: () async {
-              Navigator.of(context).pop();
-              final currentId = ref.read(authProvider).user?.id;
-              final accounts = await DeviceAccountVault().accounts();
-              final hasCurrentMpin =
-                  accounts.any((account) => account.userId == currentId);
-              if (!hasCurrentMpin) {
-                router?.push(
-                  '/teacher/mpin?switchAccount=${accounts.isEmpty ? 'add' : 'accounts'}',
-                );
-              } else {
-                router?.push(accounts.length > 1
-                    ? '/teacher/accounts'
-                    : '/teacher/accounts/add');
-              }
-            },
-          ),
-          ListTile(
-            leading: Icon(
-              Icons.logout_rounded,
-              color: Theme.of(context).colorScheme.error,
+            for (final item in drawerItems)
+              NavigationDrawerDestination(
+                icon: Icon(item.icon),
+                selectedIcon: Icon(item.icon),
+                label: SizedBox(
+                  width: 150,
+                  child: Text(
+                    item.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            const Divider(indent: 28, endIndent: 28),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(28, 8, 28, 4),
+              child: Text('ACCOUNT'),
             ),
-            title: Text(
-              'Log out',
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ListTile(
+              leading: const Icon(Icons.manage_accounts_outlined),
+              title: const Text('Profile settings'),
+              onTap: () => open('/teacher/account'),
             ),
-            onTap: () {
-              Navigator.of(context).pop();
-              ref.read(authProvider.notifier).logout();
-            },
-          ),
-          const SizedBox(height: 16),
-        ],
+            ListTile(
+              leading: const Icon(Icons.key_rounded),
+              title: const Text('Change password'),
+              onTap: () => open('/teacher/change-password'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.pin_outlined),
+              title: const Text('Set or change MPIN'),
+              onTap: () => open('/teacher/mpin'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.switch_account_rounded),
+              title: const Text('Switch account'),
+              onTap: () async {
+                Navigator.of(context).pop();
+                final currentId = ref.read(authProvider).user?.id;
+                final accounts = await DeviceAccountVault().accounts();
+                final hasCurrentMpin =
+                    accounts.any((account) => account.userId == currentId);
+                if (!hasCurrentMpin) {
+                  router?.push(
+                    '/teacher/mpin?switchAccount=${accounts.isEmpty ? 'add' : 'accounts'}',
+                  );
+                } else {
+                  router?.push(accounts.length > 1
+                      ? '/teacher/accounts'
+                      : '/teacher/accounts/add');
+                }
+              },
+            ),
+            ListTile(
+              leading: Icon(
+                Icons.logout_rounded,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              title: Text(
+                'Log out',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+              onTap: () {
+                Navigator.of(context).pop();
+                ref.read(authProvider.notifier).logout();
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
     );
   }

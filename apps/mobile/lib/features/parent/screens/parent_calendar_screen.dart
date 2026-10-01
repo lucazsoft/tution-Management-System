@@ -19,6 +19,7 @@ class ParentCalendarScreen extends ConsumerWidget {
         body: SafeArea(
             child: ParentPortalStateView(
           padding: const EdgeInsets.all(TmsSpace.md),
+          wrapInScrollView: false,
           builder: (context, portal, child) => Column(children: [
             const ChildSwitcherBar(),
             const SizedBox(height: TmsSpace.md),

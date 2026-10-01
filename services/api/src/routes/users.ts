@@ -903,13 +903,21 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
       history,
     }));
 
-    const attendance = student.studentAttendance.map((record) => ({
-      id: record.id,
-      date: formatDate(record.date),
-      subject: record.class.course.name,
-      session: record.class.name,
-      state: attendanceLabel(record.status),
-    }));
+    const attendance = student.studentAttendance.map((record) => {
+      const approvedLeave = leaveRows.find((leave) =>
+        ['APPROVED_LEVEL1', 'APPROVED_LEVEL2'].includes(leave.status)
+        && leave.startDate <= record.date
+        && leave.endDate >= record.date
+      );
+      return {
+        id: record.id,
+        date: formatDate(record.date),
+        subject: record.class.course.name,
+        session: record.class.name,
+        state: attendanceLabel(record.status),
+        leaveReason: approvedLeave?.reason,
+      };
+    });
     const attendanceCounts = student.studentAttendance.reduce<Record<string, number>>((counts, record) => {
       counts[record.status] = (counts[record.status] ?? 0) + 1;
       return counts;

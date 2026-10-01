@@ -45,6 +45,10 @@ class StudentAttendanceState extends ViewModelState {
   final bool sessionExpired;
 
   List<AttendanceEntry> get pagedRecords => records.take(visibleCount).toList();
+  List<AttendanceEntry> get absentRecords =>
+      records.where((record) => !record.isPresent).toList();
+  int get absentDayCount =>
+      absentRecords.map((record) => record.date).toSet().length;
 
   bool get hasMore => visibleCount < records.length;
   bool get hasData => records.isNotEmpty;

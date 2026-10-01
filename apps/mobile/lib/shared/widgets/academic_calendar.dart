@@ -155,6 +155,11 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
     ).toDateTime();
     final today = (widget.now ?? DateTime.now)();
     final selectedEvents = _eventsOn(_selected);
+    final upcomingEvents = widget.events
+        .where((event) => !event.date.isBefore(
+            DateTime(today.year, today.month, today.day)))
+        .toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -343,6 +348,38 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                       event.kind,
                       if (event.details.isNotEmpty) event.details
                     ].join(' · ')))),
+        const SizedBox(height: TmsSpace.lg),
+        Text('Upcoming events', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: TmsSpace.xs),
+        if (upcomingEvents.isEmpty)
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.event_busy_outlined),
+              title: Text('No upcoming events published'),
+              subtitle: Text(
+                'Holidays, exams, ceremonies and deadlines will appear here when the institution publishes them.',
+              ),
+            ),
+          )
+        else
+          for (final event in upcomingEvents.take(12))
+            Card(
+              child: ListTile(
+                leading: CircleAvatar(child: Text('${event.date.day}')),
+                title: Text(event.title),
+                subtitle: Text([
+                  '${_englishMonth(event.date.month)} ${event.date.day}, ${event.date.year}',
+                  event.kind,
+                  if (event.details.isNotEmpty) event.details,
+                ].join(' - ')),
+                onTap: () => setState(() {
+                  _selected = event.date;
+                  final eventBs = event.date.toNepaliDateTime();
+                  _monthAnchor =
+                      NepaliDateTime(eventBs.year, eventBs.month).toDateTime();
+                }),
+              ),
+            ),
       ],
     );
   }

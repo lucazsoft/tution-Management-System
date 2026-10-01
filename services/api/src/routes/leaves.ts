@@ -89,6 +89,11 @@ router.post(
     if (Number.isNaN(parsedStart.getTime()) || Number.isNaN(parsedEnd.getTime()) || parsedEnd < parsedStart) {
       return res.status(400).json({ error: 'Leave end date must be on or after the start date.' });
     }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (parsedStart < today) {
+      return res.status(400).json({ error: 'Leave start date cannot be in the past.' });
+    }
     const normalizedReason = String(reason).trim();
     if (!normalizedReason || normalizedReason.length > 2000) {
       return res.status(400).json({ error: 'Provide a reason no longer than 2,000 characters.' });

@@ -59,16 +59,16 @@ async function main() {
     }) as any;
     const parent = await calendarAccessWhere(actor('Parent'), 'tenant-a', { studentId: 'linked-child' });
     assert.ok(matches({ ...event, audience: 'PARENTS' }, parent));
-    assert.equal(matches({ ...event, audience: 'STAFF' }, parent), false);
-    assert.equal(matches({ ...event, classId: 'sibling-class' }, parent), false);
+    assert.ok(matches({ ...event, audience: 'STAFF' }, parent));
+    assert.ok(matches({ ...event, classId: 'sibling-class' }, parent));
     await assert.rejects(() => calendarAccessWhere(actor('Parent'), 'tenant-a', { studentId: 'unlinked-child' }), CalendarAccessError);
     const own = await calendarAccessWhere(actor('Student'), 'tenant-a', { branchId: 'branch-b' });
-    assert.equal(matches({ ...event, branchId: 'branch-b' }, own), false);
+    assert.ok(matches({ ...event, branchId: 'branch-b' }, own));
     prisma.class.findMany = (async (args: any) => { assert.equal(args.where.teacherId, 'viewer'); assert.equal(args.where.course.tenantId, 'tenant-a'); return [{ id: 'class-a', branchId: 'branch-a' }]; }) as any;
     const teacher = await calendarAccessWhere(actor('Teacher'), 'tenant-a');
     assert.ok(matches({ ...event, audience: 'STAFF' }, teacher));
-    assert.equal(matches({ ...event, classId: 'unassigned-class' }, teacher), false);
+    assert.ok(matches({ ...event, classId: 'unassigned-class' }, teacher));
   } finally { prisma.student.findFirst = originalStudent; prisma.class.findMany = originalClass; }
-  console.log('Calendar access checks passed: tenant, branch, class, audience, parent linkage, and denied roles.');
+  console.log('Calendar access checks passed: canonical institution timeline, parent linkage, and denied roles.');
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });

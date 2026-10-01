@@ -329,18 +329,7 @@ class _ResultsViewState extends State<_ResultsView> {
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: TmsSpace.sm),
-          SizedBox(
-            height: 310,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: results.length,
-              separatorBuilder: (_, __) => const SizedBox(width: TmsSpace.sm),
-              itemBuilder: (context, index) => SizedBox(
-                width: 310,
-                child: _ResultCard(result: results[index]),
-              ),
-            ),
-          ),
+          _GradeSheetTable(results: results),
           const SizedBox(height: TmsSpace.sm),
           Align(
             alignment: Alignment.centerRight,
@@ -373,116 +362,122 @@ class _ResultsViewState extends State<_ResultsView> {
   }
 }
 
-class _ResultCard extends StatelessWidget {
-  const _ResultCard({required this.result});
-  final AcademicResult result;
+class _GradeSheetTable extends StatelessWidget {
+  const _GradeSheetTable({required this.results});
+  final List<AcademicResult> results;
 
-  @override
-  Widget build(BuildContext context) {
-    final classAverage = result.classAverage;
-    final aboveAverage = classAverage == null || result.score >= classAverage;
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => showModalBottomSheet<void>(
-          context: context,
-          isScrollControlled: true,
-          showDragHandle: true,
-          builder: (_) => _ResultDetails(result: result),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(TmsSpace.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(result.subject,
-                            style: Theme.of(context).textTheme.titleMedium),
-                        const SizedBox(height: TmsSpace.xxs),
-                        Text(result.assessment,
-                            style: Theme.of(context).textTheme.bodySmall),
-                      ],
-                    ),
-                  ),
-                  Text(
-                    '${result.score.toStringAsFixed(0)}/${result.maximum.toStringAsFixed(0)}',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: StudentColors.primaryDark,
-                        ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: TmsSpace.md),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(TmsRadius.pill),
-                child: LinearProgressIndicator(
-                  minHeight: 8,
-                  value: (result.percentage / 100).clamp(0.0, 1.0).toDouble(),
-                  backgroundColor: StudentColors.border,
-                ),
-              ),
-              const SizedBox(height: TmsSpace.sm),
-              Row(
-                children: [
-                  StudentStatusPill(
-                    label: aboveAverage
-                        ? 'Above class average'
-                        : 'Below class average',
-                    icon: aboveAverage
-                        ? Icons.trending_up_rounded
-                        : Icons.trending_down_rounded,
-                    color: aboveAverage
-                        ? StudentColors.success
-                        : StudentColors.warning,
-                  ),
-                  const Spacer(),
-                  if (result.publishedLabel != null)
-                    Text(
-                      result.publishedLabel!,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                ],
-              ),
-              if (result.teacherRemarks?.isNotEmpty == true) ...[
-                const SizedBox(height: TmsSpace.sm),
-                Text(
-                  'Teacher feedback: ${result.teacherRemarks}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-              const Divider(height: TmsSpace.lg),
-              Row(
-                children: [
-                  const Icon(Icons.description_outlined,
-                      color: StudentColors.primary),
-                  const SizedBox(width: TmsSpace.sm),
-                  const Expanded(child: Text('Teacher-shared exam sheet')),
-                  if (result.resultSheetUrl?.isNotEmpty == true)
-                    TextButton.icon(
-                      onPressed: () =>
-                          _openStudentFile(context, result.resultSheetUrl!),
-                      icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                      label: const Text('View'),
-                    )
-                  else
-                    Text('Not shared',
-                        style: Theme.of(context).textTheme.bodySmall),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+  String _grade(double percentage) => switch (percentage) {
+        >= 90 => 'A+',
+        >= 80 => 'A',
+        >= 70 => 'B+',
+        >= 60 => 'B',
+        >= 50 => 'C+',
+        >= 40 => 'C',
+        >= 35 => 'D',
+        _ => 'NG',
+      };
+
+  bool _passed(AcademicResult result) {
+    final passMarks = result.passMarks;
+    return passMarks == null
+        ? result.percentage >= 35
+        : result.score >= passMarks;
+  }
+
+  String _marks(double value) => value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(1);
+
+  void _openDetails(BuildContext context, AcademicResult result) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _ResultDetails(result: result),
     );
   }
+
+  @override
+  Widget build(BuildContext context) => Card(
+        clipBehavior: Clip.antiAlias,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(TmsSpace.md),
+            color: StudentColors.primary.withValues(alpha: .07),
+            child: Row(children: [
+              const Icon(Icons.table_chart_outlined,
+                  color: StudentColors.primary),
+              const SizedBox(width: TmsSpace.sm),
+              Expanded(
+                child: Text('Grade sheet',
+                    style: Theme.of(context).textTheme.titleMedium),
+              ),
+              Text('${results.length} subjects',
+                  style: Theme.of(context).textTheme.bodySmall),
+            ]),
+          ),
+          LayoutBuilder(builder: (context, constraints) {
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                child: DataTable(
+                  headingRowColor: WidgetStatePropertyAll(
+                    StudentColors.surface.withValues(alpha: .8),
+                  ),
+                  columnSpacing: 24,
+                  horizontalMargin: TmsSpace.md,
+                  columns: const [
+                    DataColumn(label: Text('Subject')),
+                    DataColumn(label: Text('Full marks'), numeric: true),
+                    DataColumn(label: Text('Obtained'), numeric: true),
+                    DataColumn(label: Text('Grade')),
+                    DataColumn(label: Text('Result')),
+                  ],
+                  rows: [
+                    for (final result in results)
+                      DataRow(
+                        onSelectChanged: (_) => _openDetails(context, result),
+                        cells: [
+                          DataCell(SizedBox(
+                            width: 130,
+                            child: Text(result.subject,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700)),
+                          )),
+                          DataCell(Text(_marks(result.maximum))),
+                          DataCell(Text(_marks(result.score))),
+                          DataCell(Text(_grade(result.percentage),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800))),
+                          DataCell(StudentStatusPill(
+                            label: _passed(result) ? 'Pass' : 'Needs support',
+                            icon: _passed(result)
+                                ? Icons.check_circle_outline
+                                : Icons.info_outline,
+                            color: _passed(result)
+                                ? StudentColors.success
+                                : StudentColors.error,
+                          )),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            );
+          }),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                TmsSpace.md, 0, TmsSpace.md, TmsSpace.sm),
+            child: Text(
+                'Tap any row to view remarks and the shared result sheet.',
+                style: Theme.of(context).textTheme.bodySmall),
+          ),
+        ]),
+      );
 }
 
 class _ResultDetails extends StatelessWidget {
@@ -568,65 +563,73 @@ class _SyllabusViewState extends State<_SyllabusView> {
         message: 'Your teachers share the term syllabus here once it is ready.',
       );
     }
+    if (!state.syllabi.any((item) => item.id == selectedId)) {
+      selectedId = state.syllabi.first.id;
+    }
+    final selected = state.syllabi.firstWhere((item) => item.id == selectedId);
+
     return RefreshIndicator(
       onRefresh: widget.viewModel.refresh,
       child: ListView(
-        padding: const EdgeInsets.all(TmsSpace.md),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(
+            TmsSpace.md, TmsSpace.md, TmsSpace.md, TmsSpace.xl),
         children: [
-          Text('Term syllabus', style: Theme.of(context).textTheme.titleLarge),
+          Text('Syllabus progress',
+              style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: TmsSpace.xs),
           Text(
-            'Follow the current topics and your class progress.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: StudentColors.mutedText,
-                ),
+            'Chapter plans and daily progress shared by your teachers.',
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: StudentColors.mutedText),
           ),
           const SizedBox(height: TmsSpace.lg),
-          for (final syllabus in state.syllabi) ...[
-            GestureDetector(
-              onTap: () => setState(() =>
-                  selectedId = selectedId == syllabus.id ? null : syllabus.id),
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(TmsSpace.md),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.menu_book_outlined,
-                              color: StudentColors.primary),
-                          const SizedBox(width: TmsSpace.sm),
-                          Expanded(
-                            child: Text(syllabus.subject,
-                                style: Theme.of(context).textTheme.titleMedium),
-                          ),
-                          Text('${syllabus.topicCount} topics'),
-                        ],
-                      ),
-                      const SizedBox(height: TmsSpace.xs),
-                      Text(
-                        syllabus.className,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: StudentColors.mutedText,
-                            ),
-                      ),
-                      const SizedBox(height: TmsSpace.sm),
-                      for (final chapter in syllabus.chapters)
-                        Padding(
-                          padding: const EdgeInsets.only(top: TmsSpace.xs),
-                          child: Text(
-                            '• ${chapter.title} (${chapter.topics.length})',
-                          ),
-                        ),
-                    ],
+          SizedBox(
+            height: 50,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: state.syllabi.length,
+              separatorBuilder: (_, __) => const SizedBox(width: TmsSpace.sm),
+              itemBuilder: (context, index) {
+                final syllabus = state.syllabi[index];
+                final isSelected = syllabus.id == selectedId;
+                return ChoiceChip(
+                  selected: isSelected,
+                  showCheckmark: false,
+                  avatar: Icon(
+                    isSelected
+                        ? Icons.menu_book_rounded
+                        : Icons.menu_book_outlined,
+                    size: 19,
+                    color: isSelected ? Colors.white : StudentColors.primary,
                   ),
-                ),
-              ),
+                  label: Text(syllabus.subject),
+                  labelStyle: TextStyle(
+                    color: isSelected ? Colors.white : StudentColors.text,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  selectedColor: StudentColors.primary,
+                  backgroundColor: StudentColors.background,
+                  side: BorderSide(
+                    color: isSelected
+                        ? StudentColors.primary
+                        : StudentColors.border,
+                  ),
+                  onSelected: (_) => setState(() => selectedId = syllabus.id),
+                );
+              },
             ),
-            _SyllabusDetails(syllabus: syllabus),
-            const SizedBox(height: TmsSpace.sm),
-          ],
+          ),
+          const SizedBox(height: TmsSpace.md),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: _SyllabusDetails(
+              key: ValueKey(selected.id),
+              syllabus: selected,
+            ),
+          ),
         ],
       ),
     );
@@ -634,7 +637,7 @@ class _SyllabusViewState extends State<_SyllabusView> {
 }
 
 class _SyllabusDetails extends StatelessWidget {
-  const _SyllabusDetails({required this.syllabus});
+  const _SyllabusDetails({super.key, required this.syllabus});
   final SyllabusSummary syllabus;
 
   Color _color(String status) => status == 'COMPLETED'
@@ -649,35 +652,264 @@ class _SyllabusDetails extends StatelessWidget {
           : 'Left to start';
 
   @override
-  Widget build(BuildContext context) => Card(
-        color: StudentColors.primary.withValues(alpha: .025),
-        child: Padding(
-          padding: const EdgeInsets.all(TmsSpace.md),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${syllabus.subject} course details',
-                style: Theme.of(context).textTheme.titleLarge),
-            Text(
-                '${syllabus.className}${syllabus.teacherName.isEmpty ? '' : ' · ${syllabus.teacherName}'}',
-                style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: TmsSpace.md),
-            for (final chapter in syllabus.chapters)
-              _ChapterDetails(
-                  chapter: chapter,
-                  syllabus: syllabus,
-                  color: _color,
-                  label: _label),
-          ]),
+  Widget build(BuildContext context) {
+    final completed =
+        syllabus.chapters.where((item) => item.status == 'COMPLETED').length;
+    final progress =
+        syllabus.chapters.isEmpty ? 0.0 : completed / syllabus.chapters.length;
+    final inProgress =
+        syllabus.chapters.where((item) => item.status == 'IN_PROGRESS').length;
+    final remaining = syllabus.chapters.length - completed - inProgress;
+    final topics = syllabus.chapters.expand((item) => item.topics).toList();
+    final completedTopics =
+        topics.where((item) => item.status == 'COMPLETED').length;
+    return Column(children: [
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(TmsSpace.lg),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [StudentColors.primaryDark, StudentColors.primary],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(TmsRadius.card),
+          boxShadow: [
+            BoxShadow(
+              color: StudentColors.primary.withValues(alpha: .18),
+              blurRadius: 22,
+              offset: const Offset(0, 10),
+            ),
+          ],
         ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: .14),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child:
+                  const Icon(Icons.auto_stories_rounded, color: Colors.white),
+            ),
+            const SizedBox(width: TmsSpace.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(syllabus.subject,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(color: Colors.white, fontSize: 22)),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${syllabus.className}${syllabus.teacherName.isEmpty ? '' : ' · ${syllabus.teacherName}'}',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: Colors.white.withValues(alpha: .78)),
+                  ),
+                ],
+              ),
+            ),
+            Text('${(progress * 100).round()}%',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: Colors.white, fontWeight: FontWeight.w800)),
+          ]),
+          const SizedBox(height: TmsSpace.lg),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 8,
+              backgroundColor: Colors.white.withValues(alpha: .18),
+              valueColor: const AlwaysStoppedAnimation(Colors.white),
+            ),
+          ),
+          const SizedBox(height: TmsSpace.sm),
+          Text(
+            '$completed of ${syllabus.chapters.length} chapters completed',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Colors.white.withValues(alpha: .82),
+                fontWeight: FontWeight.w600),
+          ),
+        ]),
+      ),
+      const SizedBox(height: TmsSpace.md),
+      _SyllabusMetrics(
+        totalChapters: syllabus.chapters.length,
+        totalTopics: topics.length,
+        completedChapters: completed,
+        completedTopics: completedTopics,
+        inProgressChapters: inProgress,
+        remainingChapters: remaining,
+      ),
+      const SizedBox(height: TmsSpace.md),
+      for (final chapter in syllabus.chapters)
+        _ChapterDetails(
+          chapter: chapter,
+          syllabus: syllabus,
+          color: _color,
+          label: _label,
+        ),
+    ]);
+  }
+}
+
+class _SyllabusMetrics extends StatelessWidget {
+  const _SyllabusMetrics({
+    required this.totalChapters,
+    required this.totalTopics,
+    required this.completedChapters,
+    required this.completedTopics,
+    required this.inProgressChapters,
+    required this.remainingChapters,
+  });
+
+  final int totalChapters;
+  final int totalTopics;
+  final int completedChapters;
+  final int completedTopics;
+  final int inProgressChapters;
+  final int remainingChapters;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [
+      _SyllabusMetricData(
+        label: 'Total Chapters',
+        value: totalChapters,
+        supportingText:
+            '$totalTopics ${totalTopics == 1 ? 'topic' : 'topics'} overall',
+        icon: Icons.menu_book_outlined,
+        color: StudentColors.primary,
+      ),
+      _SyllabusMetricData(
+        label: 'Completed',
+        value: completedChapters,
+        supportingText:
+            '$completedTopics ${completedTopics == 1 ? 'topic' : 'topics'} done',
+        icon: Icons.check_circle_outline_rounded,
+        color: StudentColors.success,
+      ),
+      _SyllabusMetricData(
+        label: 'In Progress',
+        value: inProgressChapters,
+        supportingText: 'Actively being taught',
+        icon: Icons.pending_outlined,
+        color: StudentColors.warning,
+      ),
+      _SyllabusMetricData(
+        label: 'Remaining',
+        value: remainingChapters,
+        supportingText: 'Untouched chapters',
+        icon: Icons.schedule_outlined,
+        color: StudentColors.mutedText,
+      ),
+    ];
+    return LayoutBuilder(builder: (context, constraints) {
+      final columns = constraints.maxWidth >= 640 ? 2 : 1;
+      const gap = TmsSpace.sm;
+      final width = columns == 1
+          ? constraints.maxWidth
+          : (constraints.maxWidth - gap) / columns;
+      return Wrap(
+        spacing: gap,
+        runSpacing: gap,
+        children: [
+          for (final item in items)
+            SizedBox(width: width, child: _SyllabusMetricCard(data: item)),
+        ],
+      );
+    });
+  }
+}
+
+class _SyllabusMetricData {
+  const _SyllabusMetricData({
+    required this.label,
+    required this.value,
+    required this.supportingText,
+    required this.icon,
+    required this.color,
+  });
+
+  final String label;
+  final int value;
+  final String supportingText;
+  final IconData icon;
+  final Color color;
+}
+
+class _SyllabusMetricCard extends StatelessWidget {
+  const _SyllabusMetricCard({required this.data});
+  final _SyllabusMetricData data;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        constraints: const BoxConstraints(minHeight: 96),
+        padding: const EdgeInsets.all(TmsSpace.md),
+        decoration: BoxDecoration(
+          color: StudentColors.background,
+          borderRadius: BorderRadius.circular(TmsRadius.card),
+          border: Border.all(color: StudentColors.border),
+          boxShadow: [
+            BoxShadow(
+              color: StudentColors.text.withValues(alpha: .055),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: data.color.withValues(alpha: .10),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(data.icon, color: data.color, size: 25),
+          ),
+          const SizedBox(width: TmsSpace.md),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  data.label,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: StudentColors.mutedText,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                Text(
+                  '${data.value}',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        color: StudentColors.text,
+                        fontSize: 24,
+                      ),
+                ),
+                Text(data.supportingText,
+                    style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          ),
+        ]),
       );
 }
 
 class _ChapterDetails extends StatelessWidget {
-  const _ChapterDetails(
-      {required this.chapter,
-      required this.syllabus,
-      required this.color,
-      required this.label});
+  const _ChapterDetails({
+    required this.chapter,
+    required this.syllabus,
+    required this.color,
+    required this.label,
+  });
   final SyllabusChapter chapter;
   final SyllabusSummary syllabus;
   final Color Function(String) color;
@@ -688,77 +920,156 @@ class _ChapterDetails extends StatelessWidget {
     final logs =
         syllabus.dailyLogs.where((log) => log.chapterId == chapter.id).toList();
     final latest = logs.isEmpty ? null : logs.first;
+    final statusColor = color(chapter.status);
     return Container(
       margin: const EdgeInsets.only(bottom: TmsSpace.sm),
-      padding: const EdgeInsets.all(TmsSpace.md),
       decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(TmsRadius.control),
-          border:
-              Border(left: BorderSide(color: color(chapter.status), width: 4))),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          CircleAvatar(
-              radius: 15,
-              backgroundColor: color(chapter.status).withValues(alpha: .12),
-              foregroundColor: color(chapter.status),
-              child: Text('${chapter.position}')),
-          const SizedBox(width: TmsSpace.sm),
-          Expanded(
-              child: Text(chapter.title,
-                  style: Theme.of(context).textTheme.titleMedium)),
-          StudentStatusPill(
-              label: label(chapter.status),
-              icon: chapter.status == 'COMPLETED'
-                  ? Icons.check_circle
-                  : chapter.status == 'IN_PROGRESS'
-                      ? Icons.pending
-                      : Icons.radio_button_unchecked,
-              color: color(chapter.status)),
-        ]),
-        const SizedBox(height: TmsSpace.xs),
-        Text(latest?.notes.isNotEmpty == true
-            ? latest!.notes
-            : chapter.status == 'COMPLETED'
-                ? 'All topics completed'
-                : chapter.status == 'IN_PROGRESS'
-                    ? 'Chapter in progress'
-                    : 'Not started'),
-        if (chapter.topics.isNotEmpty) ...[
-          const Divider(height: TmsSpace.lg),
-          for (final topic in chapter.topics)
-            ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(
-                  topic.status == 'COMPLETED'
-                      ? Icons.check_circle
-                      : topic.status == 'IN_PROGRESS'
-                          ? Icons.pending
-                          : Icons.radio_button_unchecked,
-                  size: 18,
-                  color: color(topic.status)),
-              title: Text(topic.title),
-              subtitle: topic.logs.isNotEmpty &&
-                      topic.logs.first.notes.isNotEmpty
-                  ? Text(
-                      '${topic.logs.first.notes} · ${topic.logs.first.logDate}')
-                  : null,
-              trailing: Text(label(topic.status),
-                  style: TextStyle(
-                      color: color(topic.status),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700)),
-            ),
+        color: StudentColors.background,
+        borderRadius: BorderRadius.circular(TmsRadius.card),
+        border: Border.all(color: StudentColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: StudentColors.text.withValues(alpha: .035),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
         ],
-        Text(
-            latest == null
-                ? 'Shared by ${syllabus.teacherName.isEmpty ? 'your teacher' : syllabus.teacherName}'
-                : 'Updated by ${syllabus.teacherName.isEmpty ? 'your teacher' : syllabus.teacherName} · ${latest.logDate}',
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: StudentColors.mutedText)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Container(width: 5, color: statusColor),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(TmsSpace.md),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CircleAvatar(
+                            radius: 19,
+                            backgroundColor:
+                                StudentColors.primary.withValues(alpha: .10),
+                            foregroundColor: StudentColors.primary,
+                            child: Text('${chapter.position}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w800)),
+                          ),
+                          const SizedBox(width: TmsSpace.sm),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(chapter.title,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium),
+                                const SizedBox(height: 3),
+                                Text(
+                                  latest?.notes.isNotEmpty == true
+                                      ? latest!.notes
+                                      : chapter.status == 'COMPLETED'
+                                          ? 'All topics completed'
+                                          : chapter.status == 'IN_PROGRESS'
+                                              ? 'Chapter in progress'
+                                              : 'Not started',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                          color: StudentColors.mutedText),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ]),
+                    const SizedBox(height: TmsSpace.sm),
+                    StudentStatusPill(
+                      label: label(chapter.status),
+                      icon: chapter.status == 'COMPLETED'
+                          ? Icons.check_circle
+                          : chapter.status == 'IN_PROGRESS'
+                              ? Icons.pending
+                              : Icons.radio_button_unchecked,
+                      color: statusColor,
+                    ),
+                    if (chapter.topics.isNotEmpty) ...[
+                      const SizedBox(height: TmsSpace.md),
+                      for (final topic in chapter.topics)
+                        _TopicProgressTile(
+                          topic: topic,
+                          color: color(topic.status),
+                          label: label(topic.status),
+                        ),
+                    ],
+                    const SizedBox(height: TmsSpace.sm),
+                    Text(
+                      latest == null
+                          ? 'Shared by ${syllabus.teacherName.isEmpty ? 'your teacher' : syllabus.teacherName}'
+                          : 'Updated by ${syllabus.teacherName.isEmpty ? 'your teacher' : syllabus.teacherName} · ${latest.logDate}',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: StudentColors.mutedText),
+                    ),
+                  ]),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _TopicProgressTile extends StatelessWidget {
+  const _TopicProgressTile({
+    required this.topic,
+    required this.color,
+    required this.label,
+  });
+
+  final SyllabusTopic topic;
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final log = topic.logs.isEmpty ? null : topic.logs.first;
+    return Container(
+      margin: const EdgeInsets.only(bottom: TmsSpace.xs),
+      padding: const EdgeInsets.symmetric(
+          horizontal: TmsSpace.sm, vertical: TmsSpace.sm),
+      decoration: BoxDecoration(
+        color: StudentColors.surface,
+        borderRadius: BorderRadius.circular(TmsRadius.control),
+        border: Border.all(color: StudentColors.border),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+          width: 10,
+          height: 10,
+          margin: const EdgeInsets.only(top: 5),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: TmsSpace.sm),
+        Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(topic.title,
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+            if (log != null && log.notes.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text('${log.notes} · ${log.logDate}',
+                  style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ]),
+        ),
+        const SizedBox(width: TmsSpace.xs),
+        Text(label,
+            style: TextStyle(
+                color: color, fontSize: 11, fontWeight: FontWeight.w800)),
       ]),
     );
   }
@@ -1044,6 +1355,28 @@ class _InsightsView extends StatefulWidget {
 class _InsightsViewState extends State<_InsightsView> {
   String _selectedSubject = 'Overall';
   String _selectedPeriod = 'all';
+  DateTimeRange? _dateRange;
+
+  String _dateLabel(DateTime date) =>
+      '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+
+  Future<void> _selectDates() async {
+    final dates = widget.state.results.map((item) => item.testDate).nonNulls;
+    final earliest = dates.isEmpty
+        ? DateTime(DateTime.now().year - 1)
+        : dates.reduce((a, b) => a.isBefore(b) ? a : b);
+    final latest = dates.isEmpty
+        ? DateTime.now()
+        : dates.reduce((a, b) => a.isAfter(b) ? a : b);
+    final selected = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(earliest.year - 1),
+      lastDate: DateTime(latest.year + 1, 12, 31),
+      initialDateRange: _dateRange,
+      helpText: 'Select performance period',
+    );
+    if (selected != null && mounted) setState(() => _dateRange = selected);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1059,10 +1392,6 @@ class _InsightsViewState extends State<_InsightsView> {
         message: 'Insights are calculated from your published scores.',
       );
     }
-    final strongest = [...insights]
-      ..sort((a, b) => b.average.compareTo(a.average));
-    final weakest = [...insights]
-      ..sort((a, b) => a.average.compareTo(b.average));
     final years = state.results
         .map((item) => item.academicYear)
         .whereType<int>()
@@ -1078,12 +1407,35 @@ class _InsightsViewState extends State<_InsightsView> {
     };
     if (!periodOptions.containsKey(_selectedPeriod)) _selectedPeriod = 'all';
     final visibleMarks = state.results.where((item) {
+      final testDate = item.testDate;
+      if (_dateRange != null &&
+          (testDate == null ||
+              testDate.isBefore(_dateRange!.start) ||
+              testDate.isAfter(_dateRange!.end.add(const Duration(days: 1))))) {
+        return false;
+      }
       if (_selectedPeriod == 'all') return true;
       if (_selectedPeriod.startsWith('year:')) {
         return item.academicYear.toString() == _selectedPeriod.substring(5);
       }
       return item.assessment == _selectedPeriod.substring('assessment:'.length);
     }).toList();
+    final scoresBySubject = <String, List<double>>{};
+    for (final result in visibleMarks) {
+      scoresBySubject
+          .putIfAbsent(result.subject, () => [])
+          .add(result.percentage);
+    }
+    final periodAverages = scoresBySubject.entries
+        .map((entry) => (
+              subject: entry.key,
+              average: entry.value.reduce((a, b) => a + b) / entry.value.length,
+            ))
+        .toList();
+    final strongest = [...periodAverages]
+      ..sort((a, b) => b.average.compareTo(a.average));
+    final weakest = [...periodAverages]
+      ..sort((a, b) => a.average.compareTo(b.average));
     if (_selectedSubject != 'Overall' &&
         !insights.any((item) => item.subject == _selectedSubject)) {
       _selectedSubject = 'Overall';
@@ -1092,8 +1444,12 @@ class _InsightsViewState extends State<_InsightsView> {
         .where((item) =>
             _selectedSubject == 'Overall' || item.subject == _selectedSubject)
         .toList()
-        .reversed
-        .toList();
+      ..sort((a, b) {
+        if (a.testDate == null && b.testDate == null) return 0;
+        if (a.testDate == null) return -1;
+        if (b.testDate == null) return 1;
+        return a.testDate!.compareTo(b.testDate!);
+      });
     final chartValues = chartResults.map((item) => item.percentage).toList();
     final chartTrend =
         chartValues.length < 2 ? 0.0 : chartValues.last - chartValues.first;
@@ -1113,6 +1469,37 @@ class _InsightsViewState extends State<_InsightsView> {
       child: ListView(
         padding: const EdgeInsets.all(TmsSpace.md),
         children: [
+          Container(
+            padding: const EdgeInsets.all(TmsSpace.lg),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [StudentColors.primaryDark, StudentColors.primary],
+              ),
+              borderRadius: BorderRadius.circular(TmsRadius.card),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.insights_rounded,
+                    color: Colors.white, size: 30),
+                const SizedBox(height: TmsSpace.sm),
+                Text(
+                  'Track progress over time',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: Colors.white,
+                      ),
+                ),
+                const SizedBox(height: TmsSpace.xs),
+                Text(
+                  'Filter by subject and date to see where performance is improving.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: .84),
+                      ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: TmsSpace.md),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(TmsSpace.md),
@@ -1170,6 +1557,31 @@ class _InsightsViewState extends State<_InsightsView> {
                     },
                   ),
                   const SizedBox(height: TmsSpace.sm),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _selectDates,
+                          icon: const Icon(Icons.calendar_month_outlined),
+                          label: Text(
+                            _dateRange == null
+                                ? 'Choose date range'
+                                : '${_dateLabel(_dateRange!.start)} – ${_dateLabel(_dateRange!.end)}',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      if (_dateRange != null) ...[
+                        const SizedBox(width: TmsSpace.xs),
+                        IconButton(
+                          tooltip: 'Clear date range',
+                          onPressed: () => setState(() => _dateRange = null),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: TmsSpace.sm),
                   Text(
                     trendStatus.label,
                     style: TextStyle(
@@ -1182,9 +1594,11 @@ class _InsightsViewState extends State<_InsightsView> {
                     height: 190,
                     width: double.infinity,
                     child: chartValues.length < 2
-                        ? const Center(
+                        ? Center(
                             child: Text(
-                              'At least two published evaluations are needed for a trend.',
+                              chartValues.isEmpty
+                                  ? 'No published evaluations match these filters.'
+                                  : 'At least two published evaluations are needed for a trend.',
                               textAlign: TextAlign.center,
                             ),
                           )
@@ -1196,6 +1610,21 @@ class _InsightsViewState extends State<_InsightsView> {
                           ),
                   ),
                   const SizedBox(height: TmsSpace.xs),
+                  if (chartResults.isNotEmpty)
+                    Wrap(
+                      spacing: TmsSpace.xs,
+                      runSpacing: TmsSpace.xs,
+                      children: [
+                        for (final result in chartResults.take(4))
+                          Chip(
+                            avatar: const Icon(Icons.event_outlined, size: 16),
+                            label: Text(
+                              '${result.testDate == null ? 'Date unavailable' : _dateLabel(result.testDate!)} · ${result.percentage.toStringAsFixed(0)}%',
+                            ),
+                          ),
+                      ],
+                    ),
+                  const SizedBox(height: TmsSpace.xs),
                   Text(
                     'Based only on teacher-published evaluations and marksheets.',
                     style: Theme.of(context).textTheme.bodySmall,
@@ -1205,29 +1634,30 @@ class _InsightsViewState extends State<_InsightsView> {
             ),
           ),
           const SizedBox(height: TmsSpace.md),
-          Row(
-            children: [
-              Expanded(
-                child: _InsightSummary(
-                  label: 'Strongest',
-                  subject: strongest.first.subject,
-                  value: strongest.first.average,
-                  color: StudentColors.success,
-                  icon: Icons.workspace_premium_outlined,
+          if (periodAverages.isNotEmpty)
+            Row(
+              children: [
+                Expanded(
+                  child: _InsightSummary(
+                    label: 'Strongest',
+                    subject: strongest.first.subject,
+                    value: strongest.first.average,
+                    color: StudentColors.success,
+                    icon: Icons.workspace_premium_outlined,
+                  ),
                 ),
-              ),
-              const SizedBox(width: TmsSpace.sm),
-              Expanded(
-                child: _InsightSummary(
-                  label: 'Needs focus',
-                  subject: weakest.first.subject,
-                  value: weakest.first.average,
-                  color: StudentColors.warning,
-                  icon: Icons.track_changes_rounded,
+                const SizedBox(width: TmsSpace.sm),
+                Expanded(
+                  child: _InsightSummary(
+                    label: 'Needs focus',
+                    subject: weakest.first.subject,
+                    value: weakest.first.average,
+                    color: StudentColors.warning,
+                    icon: Icons.track_changes_rounded,
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
           const SizedBox(height: TmsSpace.lg),
           Text('Subject trends', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: TmsSpace.sm),

@@ -7,6 +7,7 @@ import 'package:tms_mobile/features/parent/widgets/child_switcher_bar.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_navigation.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_portal_state_view.dart';
 import 'package:tms_mobile/features/student/widgets/nepal_date_time.dart';
+import 'package:tms_mobile/shared/widgets/academic_calendar.dart';
 
 class ParentHomeScreen extends ConsumerWidget {
   const ParentHomeScreen({super.key});
@@ -36,6 +37,10 @@ class ParentHomeScreen extends ConsumerWidget {
                   _DayHero(child: child),
                   const SizedBox(height: TmsSpace.md),
                   _SummaryGrid(portal: portal, child: child),
+                  const SizedBox(height: TmsSpace.lg),
+                  _DashboardContent(portal: portal, child: child),
+                  const SizedBox(height: TmsSpace.lg),
+                  _HomeworkDue(homework: portal.homework),
                   if (portal.events.isNotEmpty) ...[
                     const SizedBox(height: TmsSpace.lg),
                     _UpcomingEvents(events: portal.events),
@@ -192,81 +197,48 @@ class _DayHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(TmsSpace.lg),
+        padding: const EdgeInsets.symmetric(
+          horizontal: TmsSpace.lg,
+          vertical: TmsSpace.md,
+        ),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
             colors: [Color(0xFF0B3969), kColorPrimaryLight],
           ),
           borderRadius: BorderRadius.circular(TmsRadius.cardLg),
         ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final compact = constraints.maxWidth < 560;
-            final copy = Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('TODAY',
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: Colors.white70,
-                          letterSpacing: 1.2,
-                        )),
-                const SizedBox(height: TmsSpace.xs),
-                Text('${child.name}’s day at a glance',
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineSmall
-                        ?.copyWith(color: Colors.white)),
-                const SizedBox(height: TmsSpace.xs),
-                const Text(
-                  'Timetable, attendance, fees, remarks, and events stay separate for every child.',
-                  style: TextStyle(color: Colors.white70),
-                ),
-              ],
-            );
-            final attendance = Column(
-              crossAxisAlignment:
-                  compact ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+        child: Row(
+          children: [
+            const Icon(Icons.auto_stories_rounded,
+                color: Colors.white, size: 28),
+            const SizedBox(width: TmsSpace.sm),
+            Expanded(
+              child: Text(
+                'Welcome! Your child has learned a lot today.',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: Colors.white,
+                    ),
+              ),
+            ),
+            const SizedBox(width: TmsSpace.sm),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 const Text('ATTENDANCE',
-                    style: TextStyle(color: Colors.white70, fontSize: 12)),
+                    style: TextStyle(color: Colors.white70, fontSize: 10)),
                 Text('${child.attendanceRate}%',
                     style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 34,
-                        fontWeight: FontWeight.w800)),
-                Text(
-                  child.blocked
-                      ? '${_money(child.outstanding)} due'
-                      : 'Fees up to date',
-                  style: const TextStyle(color: Colors.white70),
-                ),
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                    )),
               ],
-            );
-            if (compact) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  copy,
-                  const SizedBox(height: TmsSpace.lg),
-                  attendance
-                ],
-              );
-            }
-            return Row(
-              children: [
-                Expanded(child: copy),
-                const SizedBox(width: 24),
-                attendance
-              ],
-            );
-          },
+            ),
+          ],
         ),
       );
 }
 
-// ignore: unused_element
 class _DashboardContent extends StatelessWidget {
   const _DashboardContent({required this.portal, required this.child});
 
@@ -490,12 +462,15 @@ class _SummaryGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = [
       _SummaryItem(Icons.fact_check_outlined, 'Attendance',
-          '${child.attendanceRate}%',
-          () => context.push('/parent/attendance')),
-      _SummaryItem(Icons.calendar_view_week_outlined, 'Timetable',
+          '${child.attendanceRate}%', () => context.push('/parent/attendance')),
+      _SummaryItem(
+          Icons.calendar_view_week_outlined,
+          'Timetable',
           '${portal.timetableSessions.length} weekly classes',
           () => context.push('/parent/timetable')),
-      _SummaryItem(Icons.event_available_outlined, 'Meetings',
+      _SummaryItem(
+          Icons.event_available_outlined,
+          'Meetings',
           '${portal.appointments.length}',
           () => context.push('/parent/appointments')),
       _SummaryItem(Icons.forum_outlined, 'Messages',
@@ -560,38 +535,97 @@ class _SummaryCard extends StatelessWidget {
       );
 }
 
+class _HomeworkDue extends StatelessWidget {
+  const _HomeworkDue({required this.homework});
+
+  final List<ParentHomeworkItem> homework;
+
+  @override
+  Widget build(BuildContext context) {
+    final pending = homework.where((item) => !item.completed).toList();
+    return _SectionCard(
+      title: 'Homework due',
+      subtitle: pending.isEmpty
+          ? 'Your child has already completed their work.'
+          : '${pending.length} assignment${pending.length == 1 ? '' : 's'} remaining',
+      action: 'View all',
+      onAction: () => context.push('/parent/academics?tab=homework'),
+      child: pending.isEmpty
+          ? const _EmptySection(
+              icon: Icons.task_alt_rounded,
+              text: 'Your child has already completed their work.',
+            )
+          : Column(
+              children: [
+                for (final item in pending.take(3))
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.assignment_outlined,
+                        color: kColorPrimary),
+                    title: Text(item.title),
+                    subtitle: Text('${item.subject} · Due ${item.dueDate}'),
+                  ),
+              ],
+            ),
+    );
+  }
+}
+
 class _UpcomingEvents extends StatelessWidget {
   const _UpcomingEvents({required this.events});
   final List<ParentEventItem> events;
 
   @override
-  Widget build(BuildContext context) => InkWell(
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final upcoming = events.where((event) {
+      final date = parsePortalEventDate(event.date);
+      return date != null && !date.isBefore(today);
+    }).toList()
+      ..sort((a, b) => parsePortalEventDate(a.date)!
+          .compareTo(parsePortalEventDate(b.date)!));
+    return InkWell(
         borderRadius: BorderRadius.circular(TmsRadius.card),
         onTap: () => context.push('/parent/calendar'),
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Upcoming calendar',
-              style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: TmsSpace.sm),
-          for (final event in events.take(3))
-            Card(
-              margin: const EdgeInsets.only(bottom: TmsSpace.sm),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: kColorPrimary.withValues(alpha: .1),
-                  foregroundColor: kColorPrimary,
-                  child: Text(event.day,
-                      style: const TextStyle(fontWeight: FontWeight.w800)),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text('Upcoming events',
+                      style: Theme.of(context).textTheme.titleLarge),
                 ),
-                title: Text(event.title),
-                subtitle: Text('${event.month} · ${event.kind}'),
-                trailing: const Icon(Icons.event_outlined),
-              ),
+                TextButton(
+                  onPressed: () => context.push('/parent/calendar'),
+                  child: const Text('View all'),
+                ),
+              ],
             ),
-        ],
+            const SizedBox(height: TmsSpace.sm),
+            if (upcoming.isEmpty)
+              const Text('No upcoming events.')
+            else
+              for (final event in upcoming.take(3))
+              Card(
+                margin: const EdgeInsets.only(bottom: TmsSpace.sm),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: kColorPrimary.withValues(alpha: .1),
+                    foregroundColor: kColorPrimary,
+                    child: Text(event.day,
+                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                  ),
+                  title: Text(event.title),
+                  subtitle: Text('${event.month} · ${event.kind}'),
+                  trailing: const Icon(Icons.event_outlined),
+                ),
+              ),
+          ],
         ),
       );
+  }
 }
 
 String _money(double amount) {

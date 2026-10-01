@@ -9,6 +9,19 @@ import '../student_design.dart';
 import '../viewmodels/student_home_viewmodel.dart';
 import '../widgets/student_scaffold.dart';
 import '../widgets/nepal_date_time.dart';
+import '../../../shared/widgets/academic_calendar.dart';
+
+List<PortalEvent> _upcomingEvents(StudentPortal portal) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final events = portal.events.where((event) {
+    final date = parsePortalEventDate(event.dateLabel);
+    return date != null && !date.isBefore(today);
+  }).toList();
+  events.sort((a, b) => parsePortalEventDate(a.dateLabel)!
+      .compareTo(parsePortalEventDate(b.dateLabel)!));
+  return events;
+}
 
 /// Student home screen backed by the authenticated student portal.
 ///
@@ -381,9 +394,10 @@ class StudentHomeScreen extends ConsumerWidget {
     final latestScore = portal.results.isEmpty
         ? '—'
         : '${portal.results.first.percentage.toStringAsFixed(0)}%';
-    final nextEvent = portal.events.isEmpty
+    final upcomingEvents = _upcomingEvents(portal);
+    final nextEvent = upcomingEvents.isEmpty
         ? '—'
-        : '${portal.events.first.day} ${portal.events.first.month}';
+        : '${upcomingEvents.first.day} ${upcomingEvents.first.month}';
     final attendance = profile.attendanceRate == null
         ? '—'
         : '${profile.attendanceRate!.toStringAsFixed(0)}%';
@@ -457,6 +471,7 @@ class StudentHomeScreen extends ConsumerWidget {
   }
 
   Widget _buildNextEventCard(BuildContext context, StudentPortal portal) {
+    final upcomingEvents = _upcomingEvents(portal);
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(TmsRadius.card),
@@ -478,13 +493,13 @@ class StudentHomeScreen extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: TmsSpace.md),
-              if (portal.events.isEmpty)
+              if (upcomingEvents.isEmpty)
                 Text(
                   'No upcoming events.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 )
               else
-                ...portal.events.take(3).map((e) => Padding(
+                ...upcomingEvents.take(3).map((e) => Padding(
                       padding: const EdgeInsets.only(bottom: TmsSpace.sm),
                       child: Row(
                         children: [

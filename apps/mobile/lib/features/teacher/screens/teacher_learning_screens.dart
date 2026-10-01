@@ -121,6 +121,128 @@ class _TeacherHomeworkScreenState extends ConsumerState<TeacherHomeworkScreen> {
     }
   }
 
+  Future<void> _editHomework(TeacherHomework homework) async {
+    final title = TextEditingController(text: homework.title);
+    final instructions = TextEditingController(text: homework.description ?? '');
+    var due = homework.deadline;
+    var attachment = homework.contentUrl;
+    final save = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit homework'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                TextField(
+                  controller: title,
+                  maxLength: 200,
+                  decoration: const InputDecoration(
+                    labelText: 'Title',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: instructions,
+                  minLines: 3,
+                  maxLines: 7,
+                  decoration: const InputDecoration(
+                    labelText: 'Instructions',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.event_outlined),
+                  title: const Text('Due date'),
+                  subtitle: Text(_date(due)),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: due,
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 730)),
+                    );
+                    if (picked != null) setDialogState(() => due = picked);
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(attachment == null
+                      ? Icons.attach_file
+                      : Icons.check_circle_outline),
+                  title: Text(attachment == null
+                      ? 'Add reference image'
+                      : 'Replace reference image'),
+                  trailing: attachment == null
+                      ? null
+                      : IconButton(
+                          tooltip: 'Remove attachment',
+                          onPressed: () =>
+                              setDialogState(() => attachment = null),
+                          icon: const Icon(Icons.close),
+                        ),
+                  onTap: () async {
+                    final picked = await _pickImageData();
+                    if (picked != null) {
+                      setDialogState(() => attachment = picked);
+                    }
+                  },
+                ),
+              ]),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (title.text.trim().isEmpty) return;
+                Navigator.pop(dialogContext, true);
+              },
+              child: const Text('Save changes'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (save != true || !mounted) {
+      title.dispose();
+      instructions.dispose();
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await TeacherPortalRepository().updateHomework(
+        homeworkId: homework.id,
+        title: title.text,
+        description: instructions.text,
+        contentUrl: attachment,
+        deadline: due,
+      );
+      await ref.read(teacherPortalViewModelProvider.notifier).refresh();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Homework updated.')),
+        );
+      }
+    } on ApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } finally {
+      title.dispose();
+      instructions.dispose();
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final workspace = ref.watch(teacherPortalViewModelProvider).workspace;
@@ -232,9 +354,28 @@ class _TeacherHomeworkScreenState extends ConsumerState<TeacherHomeworkScreen> {
                       subtitle: Text(
                           '${entry.$1.name} · ${entry.$2.subject}\nDue ${_date(entry.$2.deadline)}'),
                       isThreeLine: true,
-                      trailing: entry.$2.contentUrl?.isNotEmpty == true
-                          ? const Icon(Icons.attachment)
-                          : null)),
+                      trailing: PopupMenuButton<String>(
+                        tooltip: 'Homework actions',
+                        onSelected: (value) {
+                          if (value == 'edit') _editHomework(entry.$2);
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(
+                            value: 'edit',
+                            child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.edit_outlined),
+                              title: Text('Edit assignment'),
+                            ),
+                          ),
+                        ],
+                        icon: Badge(
+                          isLabelVisible:
+                              entry.$2.contentUrl?.isNotEmpty == true,
+                          smallSize: 7,
+                          child: const Icon(Icons.more_vert),
+                        ),
+                      ))),
         ]));
   }
 }

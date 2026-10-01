@@ -78,6 +78,11 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
       Icons.notifications_outlined,
       '/student/notifications',
     ),
+    _StudentDrawerItem(
+      'Notice board',
+      Icons.campaign_outlined,
+      '/student/notices',
+    ),
   ];
 
   bool get _isHome => widget.selectedIndex == 0;
@@ -228,104 +233,136 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
 
   Widget _buildDrawer(BuildContext context) {
     final user = ref.watch(authProvider).user;
-    return NavigationDrawer(
-      selectedIndex: widget.selectedIndex,
-      onDestinationSelected: (index) => _open(_navigationItems[index].route),
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(28, 24, 28, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              FutureBuilder<PersonalAccount?>(
-                future: _drawerAccount,
-                builder: (context, snapshot) {
-                  final account = snapshot.data;
-                  return CircleAvatar(
-                    radius: 38,
-                    backgroundColor: StudentColors.primary,
-                    foregroundImage: account?.photoUrl?.isNotEmpty == true
-                        ? NetworkImage(account!.photoUrl!)
-                        : null,
-                    child: account?.photoUrl?.isNotEmpty == true
-                        ? null
-                        : Text(
-                            account?.initials.isNotEmpty == true
-                                ? account!.initials
-                                : (user?.name.isNotEmpty == true
-                                    ? user!.name[0].toUpperCase()
-                                    : 'S'),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
+    final baseTheme = Theme.of(context);
+    return Theme(
+      data: baseTheme.copyWith(
+        navigationDrawerTheme: NavigationDrawerThemeData(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          indicatorColor: StudentColors.primary.withValues(alpha: .10),
+          iconTheme: const WidgetStatePropertyAll(IconThemeData(
+            color: StudentColors.primary,
+          )),
+          labelTextStyle: WidgetStateProperty.resolveWith(
+            (states) => baseTheme.textTheme.bodyMedium?.copyWith(
+              color: StudentColors.text,
+              fontWeight: states.contains(WidgetState.selected)
+                  ? FontWeight.w700
+                  : FontWeight.w500,
+            ),
+          ),
+        ),
+        listTileTheme: const ListTileThemeData(
+          iconColor: StudentColors.primary,
+          textColor: StudentColors.text,
+          minLeadingWidth: 24,
+          horizontalTitleGap: 16,
+        ),
+        dividerColor: StudentColors.border,
+        textTheme: baseTheme.textTheme.apply(
+          bodyColor: StudentColors.text,
+          displayColor: StudentColors.text,
+        ),
+      ),
+      child: NavigationDrawer(
+        selectedIndex: widget.selectedIndex,
+        onDestinationSelected: (index) => _open(_navigationItems[index].route),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(28, 24, 28, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                FutureBuilder<PersonalAccount?>(
+                  future: _drawerAccount,
+                  builder: (context, snapshot) {
+                    final account = snapshot.data;
+                    return CircleAvatar(
+                      radius: 38,
+                      backgroundColor: Colors.white,
+                      foregroundImage: account?.photoUrl?.isNotEmpty == true
+                          ? NetworkImage(account!.photoUrl!)
+                          : null,
+                      child: account?.photoUrl?.isNotEmpty == true
+                          ? null
+                          : Text(
+                              account?.initials.isNotEmpty == true
+                                  ? account!.initials
+                                  : (user?.name.isNotEmpty == true
+                                      ? user!.name[0].toUpperCase()
+                                      : 'S'),
+                              style: const TextStyle(
+                                color: StudentColors.primary,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
-                          ),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              Text(
-                user?.name ?? 'Student',
-                style: Theme.of(context).textTheme.titleMedium,
-                textAlign: TextAlign.center,
-              ),
-              if (user?.email.isNotEmpty == true)
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
                 Text(
-                  user!.email,
-                  style: Theme.of(context).textTheme.bodySmall,
+                  user?.name ?? 'Student',
+                  style: Theme.of(context).textTheme.titleMedium,
                   textAlign: TextAlign.center,
                 ),
-            ],
+                if (user?.email.isNotEmpty == true)
+                  Text(
+                    user!.email,
+                    style: Theme.of(context).textTheme.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+              ],
+            ),
           ),
-        ),
-        ..._navigationItems.map(
-          (item) => NavigationDrawerDestination(
-            icon: Icon(item.icon),
-            selectedIcon: Icon(item.icon, color: StudentColors.primary),
-            label: Text(item.label),
+          ..._navigationItems.map(
+            (item) => NavigationDrawerDestination(
+              icon: Icon(item.icon),
+              selectedIcon: Icon(item.icon),
+              label: Text(item.label),
+            ),
           ),
-        ),
-        const Divider(indent: 28, endIndent: 28),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(28, 8, 28, 4),
-          child: Text('ACCOUNT'),
-        ),
-        ListTile(
-          leading: const Icon(Icons.manage_accounts_outlined),
-          title: const Text('Profile settings'),
-          onTap: () => _open('/student/account'),
-        ),
-        ListTile(
-          leading: const Icon(Icons.key_rounded),
-          title: const Text('Change password'),
-          onTap: () => _open('/student/change-password'),
-        ),
-        ListTile(
-          leading: const Icon(Icons.pin_outlined),
-          title: const Text('Set or change MPIN'),
-          onTap: () => _open('/student/mpin'),
-        ),
-        ListTile(
-          leading: const Icon(Icons.switch_account_rounded),
-          title: const Text('Switch account'),
-          onTap: _switchAccount,
-        ),
-        ListTile(
-          leading: Icon(
-            Icons.logout_rounded,
-            color: Theme.of(context).colorScheme.error,
+          const Divider(indent: 28, endIndent: 28),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(28, 8, 28, 4),
+            child: Text('ACCOUNT'),
           ),
-          title: Text(
-            'Log out',
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ListTile(
+            leading: const Icon(Icons.manage_accounts_outlined),
+            title: const Text('Profile settings'),
+            onTap: () => _open('/student/account'),
           ),
-          onTap: () {
-            Navigator.of(context).pop();
-            ref.read(authProvider.notifier).logout();
-          },
-        ),
-        const SizedBox(height: 16),
-      ],
+          ListTile(
+            leading: const Icon(Icons.key_rounded),
+            title: const Text('Change password'),
+            onTap: () => _open('/student/change-password'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.pin_outlined),
+            title: const Text('Set or change MPIN'),
+            onTap: () => _open('/student/mpin'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.switch_account_rounded),
+            title: const Text('Switch account'),
+            onTap: _switchAccount,
+          ),
+          ListTile(
+            leading: const Icon(
+              Icons.logout_rounded,
+              color: StudentColors.error,
+            ),
+            title: const Text(
+              'Log out',
+              style: TextStyle(color: StudentColors.error),
+            ),
+            onTap: () {
+              Navigator.of(context).pop();
+              ref.read(authProvider.notifier).logout();
+            },
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
     );
   }
 }
@@ -368,12 +405,16 @@ class StudentStatusPill extends StatelessWidget {
           children: [
             Icon(icon, size: 16, color: color),
             const SizedBox(width: TmsSpace.xxs),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w700,
-                  ),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
             ),
           ],
         ),

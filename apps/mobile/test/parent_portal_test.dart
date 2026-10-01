@@ -820,16 +820,17 @@ void main() {
     await _pumpPortalScreen(tester, const ParentHomeScreen(), repository);
 
     expect(find.text('API Child One'), findsWidgets);
-    expect(find.text('80%'), findsOneWidget);
-    expect(find.textContaining('4,250'), findsWidgets);
+    expect(find.text('80%'), findsWidgets);
     expect(find.text('Aarav'), findsNothing);
 
-    await tester.tap(find.text('API Child Two').first);
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('API Child Two').last);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(repository.selectedIds.last, 'student-2');
-    expect(find.text('100%'), findsOneWidget);
+    expect(find.text('100%'), findsWidgets);
   });
 
   testWidgets('attendance renders API records without demo dates',

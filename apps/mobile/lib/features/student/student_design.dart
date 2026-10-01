@@ -82,11 +82,24 @@ ThemeData buildStudentTheme(ThemeData base) {
       centerTitle: false,
       backgroundColor: StudentColors.background,
       foregroundColor: StudentColors.text,
+      iconTheme: const IconThemeData(color: StudentColors.primary),
       surfaceTintColor: Colors.transparent,
       titleTextStyle: GoogleFonts.fraunces(
         fontSize: 21,
         fontWeight: FontWeight.w700,
         color: StudentColors.primaryDark,
+      ),
+    ),
+    navigationDrawerTheme: NavigationDrawerThemeData(
+      backgroundColor: StudentColors.background,
+      surfaceTintColor: Colors.transparent,
+      indicatorColor: StudentColors.primary.withValues(alpha: .08),
+      iconTheme: WidgetStateProperty.resolveWith(
+        (states) => IconThemeData(
+          color: states.contains(WidgetState.selected)
+              ? StudentColors.primary
+              : StudentColors.mutedText,
+        ),
       ),
     ),
     cardTheme: CardThemeData(

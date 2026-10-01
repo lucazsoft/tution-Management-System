@@ -33,13 +33,14 @@ class _TeacherTimetableScreenState extends ConsumerState<TeacherTimetableScreen>
   @override
   void initState() {
     super.initState();
-    final todayIndex = DateTime.now().weekday % 7;
     _tabController = TabController(
       length: _days.length + 1,
       vsync: this,
+      // Always open the live Today view. Weekday tabs remain available for
+      // planning, but stale tab state must never make Classes default to a
+      // Thursday or Friday schedule.
       initialIndex: 0,
     );
-    _tabController.index = todayIndex < _days.length ? todayIndex + 1 : 0;
   }
 
   @override

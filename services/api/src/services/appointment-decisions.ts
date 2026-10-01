@@ -34,7 +34,7 @@ export async function decideAppointment(actor: UserPayload, id: string, input: a
     const branches = appointment.student.enrollments.map(entry => entry.class.branchId);
     const staffAccess = isTenantAdmin(actor) || managedBranchIds(actor).some(branch => branches.includes(branch));
     if (!participants.includes(actor.id) && !staffAccess) throw new AppointmentDecisionError(403, 'You are not an invited appointment participant.');
-    if (!['REQUESTED', 'APPROVED'].includes(appointment.status)) {
+    if (!['REQUESTED', 'APPROVED', 'ALTERNATIVE_PROPOSED'].includes(appointment.status)) {
       throw new AppointmentDecisionError(409, 'This appointment is already closed for decisions.');
     }
     const responseRemarks = remarks?.trim() || null;
@@ -44,22 +44,41 @@ export async function decideAppointment(actor: UserPayload, id: string, input: a
       if (!alternativeSlot || !Number.isFinite(date.getTime()) || date.getTime() <= Date.now()) {
         throw new AppointmentDecisionError(422, 'A valid future alternative time is required.');
       }
-      await tx.appointment.update({ where: { id }, data: { status: 'ALTERNATIVE_PROPOSED', alternativeTime: date, responseRemarks } });
-      updated = await tx.appointment.create({ data: {
-        tenantId: actor.tenantId, studentId: appointment.studentId, requestedById: appointment.requestedById,
-        teacherId: appointment.teacherId, scheduledTime: date, status: 'REQUESTED', isGroup: appointment.isGroup,
-        participantIds: participants, participantApprovals: Object.fromEntries(participants.map(person => [person, 'PENDING'])),
-        remarks: appointment.remarks, responseRemarks, originalAppointmentId: id,
+      if (appointment.proposedById === actor.id && appointment.status === 'ALTERNATIVE_PROPOSED') {
+        throw new AppointmentDecisionError(409, 'Wait for the parent to respond before proposing another time.');
+      }
+      if (appointment.status === 'ALTERNATIVE_PROPOSED' && appointment.proposedById !== appointment.requestedById) {
+        throw new AppointmentDecisionError(409, 'The parent must respond to the proposed time before it can be changed again.');
+      }
+      updated = await tx.appointment.update({ where: { id }, data: {
+        status: 'ALTERNATIVE_PROPOSED', alternativeTime: date, proposedById: actor.id,
+        responseRemarks, participantApprovals: Object.fromEntries(participants.map(person => [person, 'PENDING'])),
       } });
     } else if (action === 'REJECT') {
-      updated = await tx.appointment.update({ where: { id }, data: { status: 'REJECTED', responseRemarks } });
+      updated = await tx.appointment.update({ where: { id }, data: {
+        status: 'REJECTED', responseRemarks, alternativeTime: null, proposedById: null,
+      } });
     } else {
+      if (appointment.status === 'ALTERNATIVE_PROPOSED') {
+        if (appointment.proposedById === actor.id) {
+          throw new AppointmentDecisionError(409, 'The parent must respond to your proposed time.');
+        }
+        if (!appointment.alternativeTime) {
+          throw new AppointmentDecisionError(409, 'The proposed meeting time is unavailable.');
+        }
+        updated = await tx.appointment.update({ where: { id }, data: {
+          scheduledTime: appointment.alternativeTime, status: 'CONFIRMED',
+          alternativeTime: null, proposedById: null, responseRemarks,
+          participantApprovals: Object.fromEntries(participants.map(person => [person, 'APPROVED'])),
+        } });
+        return { appointment: updated, notify: true, requestedById: appointment.requestedById };
+      }
       const branchRecipient = appointment.teacher.userRoles.some(role => role.role.name === 'Branch Admin' && branches.includes(role.branchId || ''));
       if (branchRecipient) {
         if (appointment.teacherId !== actor.id && !isTenantAdmin(actor)) throw new AppointmentDecisionError(403, 'Only the assigned Branch Admin may confirm this appointment.');
         const date = new Date(scheduledTime || alternativeSlot || appointment.scheduledTime);
         if (!Number.isFinite(date.getTime()) || date.getTime() <= Date.now()) throw new AppointmentDecisionError(422, 'Choose a valid future appointment date and time.');
-        updated = await tx.appointment.update({ where: { id }, data: { scheduledTime: date, status: 'CONFIRMED', responseRemarks, participantApprovals: { [appointment.teacherId]: 'APPROVED' } } });
+        updated = await tx.appointment.update({ where: { id }, data: { scheduledTime: date, status: 'CONFIRMED', responseRemarks, alternativeTime: null, proposedById: null, participantApprovals: { [appointment.teacherId]: 'APPROVED' } } });
       } else {
         if (!participants.includes(actor.id)) throw new AppointmentDecisionError(403, 'Only invited teachers may approve their participation.');
         const approvals = { ...((appointment.participantApprovals as Record<string, string> | null) ?? {}) };

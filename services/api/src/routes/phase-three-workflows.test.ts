@@ -44,7 +44,7 @@ function appointment() {
 }
 db.appointment.findFirst = async ({ where }: any) => matches(state.appointment, where) ? structuredClone(state.appointment) : null;
 db.appointment.findUniqueOrThrow = async () => ({ id: state.appointment.id, status: state.appointment.status, participantApprovals: state.appointment.participantApprovals });
-db.appointment.update = async ({ data }: any) => { Object.assign(state.appointment, data); return db.appointment.findUniqueOrThrow(); };
+db.appointment.update = async ({ data }: any) => { if (failAlternative && data.status === 'ALTERNATIVE_PROPOSED') throw new Error('injected proposal failure'); Object.assign(state.appointment, data); return { ...state.appointment }; };
 db.appointment.create = async ({ data }: any) => { if (failAlternative) throw new Error('injected create failure'); state.alternatives.push(data); return data; };
 
 db.branch.findFirst = async () => ({ id: 'branch' });
@@ -121,8 +121,9 @@ async function main() {
   const alternative = { action: 'PROPOSE_ALTERNATIVE', alternativeSlot: '2099-01-01' };
   const proposals = await Promise.allSettled([decideAppointment(teacher('one'), 'appointment', alternative), decideAppointment(teacher('two'), 'appointment', alternative)]);
   assert.equal(proposals.filter(item => item.status === 'fulfilled').length, 1);
-  assert.equal(state.alternatives.length, 1);
-  assert.deepEqual(state.alternatives[0].participantApprovals, { one: 'PENDING', two: 'PENDING' });
+  assert.equal(state.appointment.status, 'ALTERNATIVE_PROPOSED');
+  assert.equal(state.appointment.proposedById, 'one');
+  assert.deepEqual(state.appointment.participantApprovals, { one: 'PENDING', two: 'PENDING' });
   state.appointment = appointment(); failAlternative = true;
   await assert.rejects(decideAppointment(teacher('one'), 'appointment', alternative));
   assert.equal(state.appointment.status, 'REQUESTED'); failAlternative = false;

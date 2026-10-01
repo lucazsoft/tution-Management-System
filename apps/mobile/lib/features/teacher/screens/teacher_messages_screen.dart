@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
@@ -22,15 +24,21 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
   TeacherMessageContact? _selected;
   String? _error;
   bool _sending = false;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadContacts();
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _loadContacts(),
+    );
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -39,18 +47,29 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
     try {
       final contacts = await _repository.fetchMessageContacts();
       if (!mounted) return;
+      final selectedId = _selected == null
+          ? null
+          : '${_selected!.studentId}:${_selected!.parentId}';
       setState(() {
         _contacts = contacts;
         _error = null;
-        _selected = contacts.isEmpty ? null : contacts.first;
+        _selected = contacts.isEmpty
+            ? null
+            : contacts.firstWhere(
+                (item) => '${item.studentId}:${item.parentId}' == selectedId,
+                orElse: () => contacts.first,
+              );
       });
-      if (_selected != null) await _select(_selected!);
+      if (_selected != null) {
+        await _select(_selected!);
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _contacts = const [];
           _error = '$error';
         });
+      }
     }
   }
 
@@ -62,13 +81,16 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
     });
     try {
       final messages = await _repository.fetchMessageThread(contact);
-      if (mounted && _selected == contact) setState(() => _messages = messages);
+      if (mounted && _selected == contact) {
+        setState(() => _messages = messages);
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _messages = const [];
           _error = '$error';
         });
+      }
     }
   }
 
@@ -82,11 +104,14 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
       _controller.clear();
       await _select(contact);
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Could not send message: $error')));
+      }
     } finally {
-      if (mounted) setState(() => _sending = false);
+      if (mounted) {
+        setState(() => _sending = false);
+      }
     }
   }
 

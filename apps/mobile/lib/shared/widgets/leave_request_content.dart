@@ -40,23 +40,37 @@ class _LeaveRequestContentState extends State<LeaveRequestContent> {
   }
 
   Future<void> _pick(bool start) async {
-    final initial = (start ? _start : _end) ?? _start ?? DateTime.now();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final firstAllowed = start ? today : (_start ?? today);
+    final candidate = (start ? _start : _end) ?? _start ?? today;
+    final initial = candidate.isBefore(firstAllowed) ? firstAllowed : candidate;
     final value = await showDatePicker(
       context: context,
       initialDate: initial,
-      firstDate: DateTime.now().subtract(const Duration(days: 1)),
-      lastDate: DateTime.now().add(const Duration(days: 730)),
+      firstDate: firstAllowed,
+      lastDate: today.add(const Duration(days: 730)),
     );
-    if (value != null) setState(() => start ? _start = value : _end = value);
+    if (value != null) {
+      setState(() {
+        if (start) {
+          _start = value;
+          if (_end != null && _end!.isBefore(value)) _end = null;
+        } else {
+          _end = value;
+        }
+      });
+    }
   }
 
   Future<void> _submit() async {
     if (_start == null ||
         _end == null ||
         _reason == null ||
-        _details.text.trim().isEmpty) {
+        _details.text.trim().length < 10) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Select both dates, a reason, and add details.')));
+          content: Text(
+              'Select both dates and a reason, then provide at least 10 characters of details.')));
       return;
     }
     if (_end!.isBefore(_start!)) {
@@ -66,8 +80,8 @@ class _LeaveRequestContentState extends State<LeaveRequestContent> {
     }
     setState(() => _submitting = true);
     try {
-      await widget.onSubmit(_reason == 'Medical' ? 'SICK' : 'CASUAL', _start!,
-          _end!, '${_reason!}: ${_details.text.trim()}');
+      await widget.onSubmit(_reason == 'Sick leave' ? 'SICK' : 'CASUAL',
+          _start!, _end!, '${_reason!}: ${_details.text.trim()}');
       if (!mounted) return;
       setState(() {
         _start = null;
@@ -78,9 +92,10 @@ class _LeaveRequestContentState extends State<LeaveRequestContent> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Leave request submitted for approval.')));
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('$error')));
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -151,12 +166,12 @@ class _LeaveRequestContentState extends State<LeaveRequestContent> {
                     }),
                     const SizedBox(height: 14),
                     DropdownButtonFormField<String>(
-                      value: _reason,
+                      initialValue: _reason,
                       decoration: const InputDecoration(
                           labelText: 'Reason', border: OutlineInputBorder()),
                       hint: const Text('Choose a reason'),
                       items: const [
-                        'Medical',
+                        'Sick leave',
                         'Family event',
                         'Travel',
                         'Other'
@@ -173,6 +188,8 @@ class _LeaveRequestContentState extends State<LeaveRequestContent> {
                         maxLength: 1900,
                         decoration: InputDecoration(
                             labelText: 'Details',
+                            helperText:
+                                'Required: clearly explain why leave is needed.',
                             hintText:
                                 'For example: ${widget.subjectName} has a medical appointment',
                             alignLabelWithHint: true,

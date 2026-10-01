@@ -139,6 +139,7 @@ class AttendanceEntry {
     required this.subject,
     required this.session,
     required this.state,
+    this.leaveReason,
   });
 
   factory AttendanceEntry.fromJson(Map<String, dynamic> json) {
@@ -148,6 +149,7 @@ class AttendanceEntry {
       subject: '${json['subject'] ?? ''}',
       session: '${json['session'] ?? ''}',
       state: '${json['state'] ?? ''}',
+      leaveReason: json['leaveReason'] as String?,
     );
   }
 
@@ -156,6 +158,7 @@ class AttendanceEntry {
   final String subject;
   final String session;
   final String state;
+  final String? leaveReason;
 
   /// Approved leave is reflected server-side as `Absent (Excused)`.
   bool get isExcused => state == 'Absent (Excused)';

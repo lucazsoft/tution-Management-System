@@ -10,12 +10,42 @@ const router = Router();
 
 router.get('/messages/contacts', authMiddleware, async (req: TenantRequest, res: Response) => {
   try {
-    const links = await prisma.studentParent.findMany({
-      where: { student: { user: { tenantId: req.tenantId! }, enrollments: { some: { status: { in: ['ACTIVE', 'BLOCKED'] }, class: { teacherId: req.user!.id } } } } },
-      include: { parent: { include: { user: { select: { id: true, firstName: true, lastName: true } } } }, student: { include: { user: { select: { firstName: true, lastName: true } }, grade: { select: { name: true } } } } },
-      orderBy: { student: { user: { firstName: 'asc' } } },
-    });
-    return res.json({ contacts: links.map((link) => ({ studentId: link.studentId, studentName: `${link.student.user.firstName} ${link.student.user.lastName}`.trim(), gradeName: link.student.grade?.name ?? 'Class not assigned', parentId: link.parent.user.id, parentName: `${link.parent.user.firstName} ${link.parent.user.lastName}`.trim() })) });
+    const [links, conversationRows] = await Promise.all([
+      prisma.studentParent.findMany({
+        where: { student: { user: { tenantId: req.tenantId! }, enrollments: { some: { status: { in: ['ACTIVE', 'BLOCKED'] }, class: { teacherId: req.user!.id } } } } },
+        include: { parent: { include: { user: { select: { id: true, firstName: true, lastName: true } } } }, student: { include: { user: { select: { firstName: true, lastName: true } }, grade: { select: { name: true } } } } },
+        orderBy: { student: { user: { firstName: 'asc' } } },
+      }),
+      prisma.parentMessage.findMany({
+        where: { tenantId: req.tenantId!, OR: [{ senderId: req.user!.id }, { receiverId: req.user!.id }] },
+        include: {
+          student: {
+            include: {
+              user: { select: { firstName: true, lastName: true } },
+              grade: { select: { name: true } },
+              studentParents: { include: { parent: { include: { user: { select: { id: true, firstName: true, lastName: true } } } } } },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+    const contacts = [
+      ...links.map((link) => ({ studentId: link.studentId, studentName: `${link.student.user.firstName} ${link.student.user.lastName}`.trim(), gradeName: link.student.grade?.name ?? 'Class not assigned', parentId: link.parent.user.id, parentName: `${link.parent.user.firstName} ${link.parent.user.lastName}`.trim() })),
+      ...conversationRows.flatMap((message) => message.student.studentParents
+        .filter((link) => link.parent.user.id === message.senderId || link.parent.user.id === message.receiverId)
+        .map((link) => ({
+          studentId: message.studentId,
+          studentName: `${message.student.user.firstName} ${message.student.user.lastName}`.trim(),
+          gradeName: message.student.grade?.name ?? 'Class not assigned',
+          parentId: link.parent.user.id,
+          parentName: `${link.parent.user.firstName} ${link.parent.user.lastName}`.trim(),
+        }))),
+    ];
+    // A student may have overlapping active enrollments taught by the same
+    // teacher. Keep one stable parent/student conversation instead of showing
+    // duplicate contacts that can select the wrong-looking thread.
+    return res.json({ contacts: [...new Map(contacts.map((contact) => [`${contact.studentId}:${contact.parentId}`, contact])).values()] });
   } catch (error: any) { return res.status(500).json({ error: 'Failed to load message contacts.', details: error.message }); }
 });
 
@@ -35,7 +65,19 @@ async function canUseThread(userId: string, tenantId: string, studentId: string,
   const userIsParent = parentUserIds.includes(userId);
   const userIsTeacher = teacherIds.includes(userId);
   const userIsAdmin = adminIds.includes(userId);
-  if (!userIsParent && !userIsTeacher && !userIsAdmin) return null;
+  const hasExistingPair = otherUserId ? Boolean(await prisma.parentMessage.findFirst({
+    where: {
+      tenantId,
+      studentId,
+      OR: [
+        { senderId: userId, receiverId: otherUserId },
+        { senderId: otherUserId, receiverId: userId },
+      ],
+    },
+    select: { id: true },
+  })) : false;
+  if (!userIsParent && !userIsTeacher && !userIsAdmin && !hasExistingPair) return null;
+  if (hasExistingPair) return { student, parentUserIds, teacherIds, adminIds, userIsParent };
   if (otherUserId && userIsParent && !teacherIds.includes(otherUserId) && !adminIds.includes(otherUserId)) return null;
   if (otherUserId && userIsTeacher && !parentUserIds.includes(otherUserId)) return null;
   if (otherUserId && userIsAdmin && !parentUserIds.includes(otherUserId)) return null;
@@ -69,6 +111,21 @@ router.post('/messages', authMiddleware, async (req: TenantRequest, res: Respons
     const message = await prisma.parentMessage.create({
       data: { tenantId: req.tenantId!, studentId, senderId: req.user!.id, receiverId, messageText: text },
     });
+    try {
+      await prisma.notification.create({
+        data: {
+          tenantId: req.tenantId!,
+          userId: receiverId,
+          category: 'MESSAGE',
+          title: 'New school message',
+          body: 'You received a new message about a linked student.',
+          destination: access.userIsParent ? '/teacher/messages' : '/parent/messages',
+          entityId: message.id,
+        },
+      });
+    } catch (notificationError) {
+      console.warn('Message saved but inbox notification persistence failed.', notificationError);
+    }
     await PushNotificationService.sendPush(req.tenantId!, receiverId, 'New school message', `New message regarding ${access.student.id}.`);
     return res.status(201).json({ message: 'Message sent.', record: message });
   } catch (error: any) {
@@ -77,16 +134,21 @@ router.post('/messages', authMiddleware, async (req: TenantRequest, res: Respons
 });
 
 router.get('/messages/thread/:studentId', authMiddleware, async (req: TenantRequest, res: Response) => {
-  const teacherId = typeof req.query.teacherId === 'string' ? req.query.teacherId : undefined;
+  // `participantId` is the other person in the conversation. Keep the old
+  // `teacherId` parameter temporarily so older parent-app builds continue to
+  // work while teacher builds migrate away from calling a parent a teacher.
+  const participantId = typeof req.query.participantId === 'string'
+    ? req.query.participantId
+    : typeof req.query.teacherId === 'string' ? req.query.teacherId : undefined;
   try {
-    const access = await canUseThread(req.user!.id, req.tenantId!, req.params.studentId, teacherId);
+    const access = await canUseThread(req.user!.id, req.tenantId!, req.params.studentId, participantId);
     if (!access) return res.status(404).json({ error: 'Conversation not found.' });
-    const participantIds = teacherId ? [req.user!.id, teacherId] : [req.user!.id];
+    const participantIds = participantId ? [req.user!.id, participantId] : [req.user!.id];
     const messages = await prisma.parentMessage.findMany({
       where: {
         tenantId: req.tenantId!,
         studentId: req.params.studentId,
-        ...(teacherId ? {
+        ...(participantId ? {
           OR: [
             { senderId: participantIds[0], receiverId: participantIds[1] },
             { senderId: participantIds[1], receiverId: participantIds[0] },
@@ -131,9 +193,74 @@ router.post('/broadcast', authMiddleware, async (req: TenantRequest, res: Respon
         audienceRoles: normalizedAudienceRoles,
       },
     });
+    const recipients = await prisma.user.findMany({
+      where: {
+        tenantId: req.tenantId!,
+        status: 'ACTIVE',
+        ...(normalizedAudienceRoles?.length ? {
+          userRoles: { some: { role: { name: { in: normalizedAudienceRoles } } } },
+        } : {}),
+      },
+      select: {
+        id: true,
+        userRoles: { select: { role: { select: { name: true } } } },
+      },
+    });
+    const destinationFor = (recipient: typeof recipients[number]) => {
+      const roles = recipient.userRoles.map((membership) => membership.role.name);
+      return roles.includes('Parent')
+        ? '/parent/notices'
+        : roles.includes('Teacher')
+          ? '/teacher/notices'
+          : roles.includes('Student')
+            ? '/student/notices'
+            : undefined;
+    };
+    const noticeRows = recipients.map((recipient) => {
+      const destination = destinationFor(recipient);
+      return {
+        tenantId: req.tenantId!,
+        userId: recipient.id,
+        category: 'NOTICE',
+        title: title.data,
+        body: message.data,
+        destination,
+        entityId: record.id,
+      };
+    });
+    if (noticeRows.length) await prisma.notification.createMany({ data: noticeRows });
+    await Promise.allSettled(recipients.map((recipient) => PushNotificationService.sendPush(
+      req.tenantId!,
+      recipient.id,
+      title.data,
+      message.data,
+      {
+        type: 'NOTICE',
+        noticeId: record.id,
+        ...(destinationFor(recipient) ? { deepLink: destinationFor(recipient)! } : {}),
+      },
+    )));
     return res.status(201).json({ message: 'Broadcast published.', broadcast: record });
   } catch {
     return res.status(500).json({ error: 'Failed to publish broadcast.' });
+  }
+});
+
+router.delete('/broadcast/:id', authMiddleware, async (req: TenantRequest, res: Response) => {
+  if (!isTenantAdmin(req.user!)) return res.status(403).json({ error: 'Only the Tenant Admin may delete notices.' });
+  try {
+    const record = await prisma.broadcast.findFirst({
+      where: { id: req.params.id, tenantId: req.tenantId! },
+      select: { id: true },
+    });
+    if (!record) return res.status(404).json({ error: 'Notice not found.' });
+    await prisma.$transaction([
+      prisma.notification.deleteMany({ where: { tenantId: req.tenantId!, entityId: record.id, category: 'NOTICE' } }),
+      prisma.broadcast.delete({ where: { id: record.id } }),
+    ]);
+    return res.json({ message: 'Notice deleted.' });
+  } catch {
+    return res.status(500).json({ error: 'Failed to delete notice.' });
   }
 });
 

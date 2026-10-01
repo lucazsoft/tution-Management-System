@@ -135,6 +135,7 @@ class ParentAppointmentItem {
       required this.requestedTime,
       required this.state,
       this.alternativeTime,
+      this.proposalFrom,
       this.responseMessage,
       this.participants = const [],
       this.isGroup = false});
@@ -147,6 +148,7 @@ class ParentAppointmentItem {
           requestedTime: _str(json['requestedTime']),
           state: _str(json['state']),
           alternativeTime: json['alternativeTime']?.toString(),
+          proposalFrom: json['proposalFrom']?.toString(),
           responseMessage: json['responseMessage']?.toString(),
           isGroup: json['group'] == true,
           participants: [
@@ -161,6 +163,7 @@ class ParentAppointmentItem {
   final String requestedTime;
   final String state;
   final String? alternativeTime;
+  final String? proposalFrom;
   final String? responseMessage;
   final List<ParentAppointmentParticipant> participants;
   final bool isGroup;
@@ -386,6 +389,34 @@ class ParentEventItem {
       );
 }
 
+class ParentHomeworkItem {
+  const ParentHomeworkItem({
+    required this.id,
+    required this.subject,
+    required this.title,
+    required this.teacher,
+    required this.dueDate,
+    required this.completed,
+  });
+
+  factory ParentHomeworkItem.fromJson(Map<String, dynamic> json) =>
+      ParentHomeworkItem(
+        id: _str(json['id']),
+        subject: _str(json['subject'], 'Subject'),
+        title: _str(json['title'], 'Homework'),
+        teacher: _str(json['teacher'], 'Teacher'),
+        dueDate: _str(json['dueDate']),
+        completed: json['completed'] == true,
+      );
+
+  final String id;
+  final String subject;
+  final String title;
+  final String teacher;
+  final String dueDate;
+  final bool completed;
+}
+
 /// One parent notification (fee, attendance, appointment, certificate).
 class ParentNotification {
   const ParentNotification({
@@ -430,6 +461,7 @@ class ParentPortal {
     required this.leaves,
     required this.invoices,
     required this.events,
+    required this.homework,
     required this.notifications,
     required this.contacts,
     required this.messages,
@@ -446,6 +478,7 @@ class ParentPortal {
   final List<ParentLeaveRecord> leaves;
   final List<ParentInvoice> invoices;
   final List<ParentEventItem> events;
+  final List<ParentHomeworkItem> homework;
   final List<ParentNotification> notifications;
   final List<ParentContact> contacts;
   final List<ParentMessageItem> messages;
@@ -476,6 +509,7 @@ class ParentPortal {
         leaves: _list(json['leaves'], ParentLeaveRecord.fromJson),
         invoices: _list(json['invoices'], ParentInvoice.fromJson),
         events: _list(json['events'], ParentEventItem.fromJson),
+        homework: _list(json['homework'], ParentHomeworkItem.fromJson),
         notifications:
             _list(json['notifications'], ParentNotification.fromJson),
         contacts: _list(json['teachers'], ParentContact.fromJson),

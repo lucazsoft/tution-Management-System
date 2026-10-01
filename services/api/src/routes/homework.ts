@@ -46,6 +46,47 @@ router.post(
   }
 );
 
+// Correct an assignment after publishing. The class and subject stay fixed
+// so an edit cannot silently move student work to another class.
+router.patch('/:homeworkId', authMiddleware, async (req: TenantRequest, res: Response) => {
+  const { homeworkId } = req.params;
+  const { title, description, contentUrl, deadline } = req.body ?? {};
+  const cleanTitle = typeof title === 'string' ? title.trim() : '';
+  const cleanDescription = typeof description === 'string' ? description.trim() : '';
+  const dueAt = typeof deadline === 'string' ? new Date(deadline) : null;
+  if (!cleanTitle || cleanTitle.length > 200 || !dueAt || Number.isNaN(dueAt.getTime())) {
+    return res.status(400).json({ error: 'A valid title (maximum 200 characters) and deadline are required.' });
+  }
+  if (cleanDescription.length > 10_000) {
+    return res.status(422).json({ error: 'Homework instructions must be 10,000 characters or fewer.' });
+  }
+  if (contentUrl !== null && contentUrl !== undefined && typeof contentUrl !== 'string') {
+    return res.status(400).json({ error: 'Attachment must be a URL or image data value.' });
+  }
+  try {
+    const existing = await prisma.homework.findFirst({
+      where: {
+        id: homeworkId,
+        createdBy: req.user!.id,
+        class: { teacherId: req.user!.id, course: { tenantId: req.tenantId! } },
+      },
+    });
+    if (!existing) return res.status(404).json({ error: 'Homework was not found or is no longer editable.' });
+    const homework = await prisma.homework.update({
+      where: { id: existing.id },
+      data: {
+        title: cleanTitle,
+        description: cleanDescription || null,
+        contentUrl: typeof contentUrl === 'string' && contentUrl.trim() ? contentUrl : null,
+        deadline: dueAt,
+      },
+    });
+    return res.json({ message: 'Homework updated successfully.', homework });
+  } catch {
+    return res.status(500).json({ error: 'Failed to update homework.' });
+  }
+});
+
 // 2. Submit a solution to a homework assignment (Student only)
 router.post(
   '/submit',

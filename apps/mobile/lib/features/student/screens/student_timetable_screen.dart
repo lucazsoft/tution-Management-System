@@ -63,8 +63,23 @@ class _StudentTimetableScreenState
   ) {
     final key = _dayKeys[date.weekday - 1];
     final matching = state.days.where((day) => day.key == key);
-    if (matching.isNotEmpty) return matching.first.sessions;
-    return _dayOffset == 0 ? state.todaySessions : const [];
+    final weekly =
+        matching.isEmpty ? const <PortalSession>[] : matching.first.sessions;
+    if (_dayOffset != 0) return weekly;
+
+    final merged = <String, PortalSession>{};
+    for (final session in [...weekly, ...state.todaySessions]) {
+      final identity = [
+        session.time,
+        session.endTime,
+        session.subject,
+        session.teacher,
+      ].join('|');
+      merged[identity] = session;
+    }
+    final sessions = merged.values.toList()
+      ..sort((a, b) => a.time.compareTo(b.time));
+    return sessions;
   }
 
   List<PortalEvent> _eventsFor(

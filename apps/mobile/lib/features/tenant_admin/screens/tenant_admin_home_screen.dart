@@ -4,6 +4,7 @@ import 'package:tms_mobile/features/tenant_admin/models/tenant_admin_dashboard.d
 import 'package:tms_mobile/features/tenant_admin/widgets/tenant_admin_state_view.dart';
 import 'package:tms_mobile/features/auth/widgets/account_actions.dart';
 import 'package:tms_mobile/features/student/widgets/nepal_date_time.dart';
+import 'package:go_router/go_router.dart';
 
 /// Tenant-wide operational dashboard backed by
 /// `GET /api/tenant-admin/dashboard`.
@@ -28,6 +29,13 @@ class TenantAdminHomeScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Tenant operations'),
+        actions: [
+          IconButton(
+            tooltip: 'Manage notice board',
+            onPressed: () => context.push('/tenant/notices'),
+            icon: const Icon(Icons.campaign_outlined),
+          ),
+        ],
       ),
       body: SafeArea(
         child: LayoutBuilder(

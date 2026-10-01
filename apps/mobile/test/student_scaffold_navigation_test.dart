@@ -72,7 +72,6 @@ void main() {
       'Attendance',
       'Certificates',
       'Fees & payments',
-      'Notifications',
     ]) {
       expect(
         find.descendant(
@@ -87,6 +86,12 @@ void main() {
       of: find.byType(NavigationDrawer),
       matching: find.byType(Scrollable),
     );
+    await tester.scrollUntilVisible(
+      find.text('Notifications'),
+      200,
+      scrollable: drawerScroll,
+    );
+    expect(find.text('Notifications'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Log out'),
       300,

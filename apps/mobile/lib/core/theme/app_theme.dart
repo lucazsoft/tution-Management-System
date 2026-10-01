@@ -58,11 +58,24 @@ ThemeData buildTmsTheme() {
       centerTitle: false,
       backgroundColor: kColorBg,
       foregroundColor: kColorText,
+      iconTheme: const IconThemeData(color: kColorPrimary),
       surfaceTintColor: Colors.transparent,
       titleTextStyle: GoogleFonts.fraunces(
         fontSize: 21,
         fontWeight: FontWeight.w700,
         color: kColorPrimaryDark,
+      ),
+    ),
+    navigationDrawerTheme: NavigationDrawerThemeData(
+      backgroundColor: kColorBg,
+      surfaceTintColor: Colors.transparent,
+      indicatorColor: kColorPrimary.withValues(alpha: 0.08),
+      iconTheme: WidgetStateProperty.resolveWith(
+        (states) => IconThemeData(
+          color: states.contains(WidgetState.selected)
+              ? kColorPrimary
+              : kColorMutedText,
+        ),
       ),
     ),
     cardTheme: CardThemeData(

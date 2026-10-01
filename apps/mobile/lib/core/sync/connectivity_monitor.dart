@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../network/api_client.dart';
 import 'connectivity_check.dart';
 import 'sync_models.dart';
 
@@ -25,8 +26,7 @@ class ConnectivityMonitor extends StateNotifier<ConnectivityState> {
   /// Default check: TCP connect to the API host on native platforms, 3s timeout.
   static Future<bool> _defaultCheck() async {
     if (kIsWeb) return true;
-    const host = String.fromEnvironment('API_BASE_URL',
-        defaultValue: 'http://127.0.0.1:3001');
+    final host = ApiClient.baseUrl;
     final uri = Uri.tryParse(host);
     final target = (uri != null && uri.hasAuthority) ? uri.host : host;
     final port = (uri != null && uri.hasAuthority)
@@ -42,8 +42,9 @@ class ConnectivityMonitor extends StateNotifier<ConnectivityState> {
   /// Run one check now and publish the result.
   Future<ConnectivityState> refresh() async {
     final ok = await _check();
-    if (!_disposed)
+    if (!_disposed) {
       state = ok ? ConnectivityState.online : ConnectivityState.offline;
+    }
     return state;
   }
 

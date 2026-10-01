@@ -225,6 +225,7 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: Text('Switch to ${account.name}'),
+          scrollable: true,
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             Text(account.email),
             const SizedBox(height: 16),

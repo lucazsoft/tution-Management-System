@@ -20,6 +20,26 @@ export async function calendarAccessWhere(actor: UserPayload, tenantId: string, 
     if (!['Teacher', 'Student', 'Parent', 'Accountant'].includes(options.viewerRole) || !hasRole(actor, options.viewerRole)) throw new CalendarAccessError('Calendar role access denied.');
     actor = { ...actor, roles: actor.roles.filter((role) => role.roleName === options.viewerRole) };
   }
+  // Academic events are institution-managed shared records. Mobile parent,
+  // teacher and student calendars must present one canonical timeline; event
+  // audience metadata remains useful to administrators but must not make the
+  // same institution date disagree between portals.
+  if (hasRole(actor, 'Teacher') || hasRole(actor, 'Student') || hasRole(actor, 'Parent')) {
+    if (options.studentId && hasRole(actor, 'Parent')) {
+      const linked = await prisma.student.findFirst({ where: {
+        id: options.studentId,
+        user: { tenantId },
+        studentParents: { some: { parent: { userId: actor.id, user: { tenantId } } } },
+      }, select: { id: true } });
+      if (!linked) throw new CalendarAccessError('Linked student not found.');
+    }
+    if (options.studentId && hasRole(actor, 'Student')) {
+      // Student identity is always derived from the session; accepting a
+      // selector here would let a client probe another student's id.
+      throw new CalendarAccessError('Student calendar access denied.');
+    }
+    return { tenantId };
+  }
   if (options.studentId || hasRole(actor, 'Parent')) {
     if (!hasRole(actor, 'Parent')) throw new CalendarAccessError('A linked parent account is required.');
     const student = await prisma.student.findFirst({ where: {

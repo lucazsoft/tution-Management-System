@@ -208,11 +208,17 @@ class ParentPortalRepository {
     }
   }
 
-  Future<void> respondToAppointment(String appointmentId, String action) async {
+  Future<void> respondToAppointment(String appointmentId, String action,
+      {DateTime? alternativeTime, String? remarks}) async {
     try {
       await _dio.post(
         '$appointmentsPath/parent-respond/${Uri.encodeComponent(appointmentId)}',
-        data: {'action': action},
+        data: {
+          'action': action,
+          if (alternativeTime != null)
+            'alternativeSlot': alternativeTime.toUtc().toIso8601String(),
+          if (remarks?.trim().isNotEmpty == true) 'remarks': remarks!.trim(),
+        },
       );
     } on DioException catch (error) {
       throw ApiException.from(error);

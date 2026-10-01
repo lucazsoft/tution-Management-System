@@ -69,9 +69,9 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                   onPressed: () => context.push('/teacher/timetable'),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.event_note_outlined),
-                  tooltip: 'Leave requests',
-                  onPressed: () => context.push('/teacher/leave'),
+                  icon: const Icon(Icons.notifications_outlined),
+                  tooltip: 'Notifications',
+                  onPressed: () => context.push('/teacher/notifications'),
                 ),
               ]
             : null,
@@ -89,6 +89,8 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
         onDestinationSelected: (i) {
           if (i == 2) {
             context.go('/teacher/messages');
+          } else if (i == 3) {
+            context.go('/teacher/timetable');
           } else {
             setState(() => _tab = i < 2 ? i : i - 1);
           }

@@ -91,7 +91,7 @@ class StudentAcademicsState extends ViewModelState {
 class StudentAcademicsViewModel extends BaseViewModel<StudentAcademicsState> {
   StudentAcademicsViewModel({StudentAcademicsRepository? repository})
       : _repository = repository ?? StudentAcademicsRepository(),
-        super(const StudentAcademicsState());
+        super(const StudentAcademicsState(isLoading: true));
 
   final StudentAcademicsRepository _repository;
 

@@ -49,15 +49,19 @@ class TeacherPortalRepository {
       final rows = response.data is Map<String, dynamic>
           ? response.data['contacts']
           : null;
-      if (rows is! List)
+      if (rows is! List) {
         throw const ApiException(
             kind: ApiErrorKind.unknown,
             message: 'Message contacts returned an unexpected response.');
+      }
       return [
         for (final row in rows)
           if (row is Map<String, dynamic>) TeacherMessageContact.fromJson(row)
       ];
     } on DioException catch (error) {
+      // Older API containers did not expose the contacts endpoint. Avoid
+      // leaking a raw route-level 404 while the API deployment catches up.
+      if (error.response?.statusCode == 404) return const [];
       throw _typed(error);
     }
   }
@@ -67,19 +71,24 @@ class TeacherPortalRepository {
     try {
       final response = await _dio.get<dynamic>(
           '/api/communication/messages/thread/${Uri.encodeComponent(contact.studentId)}',
-          queryParameters: {'teacherId': contact.parentId});
+          queryParameters: {'participantId': contact.parentId});
       final rows = response.data is Map<String, dynamic>
           ? response.data['messages']
           : null;
-      if (rows is! List)
+      if (rows is! List) {
         throw const ApiException(
             kind: ApiErrorKind.unknown,
             message: 'Conversation returned an unexpected response.');
+      }
       return [
         for (final row in rows)
           if (row is Map<String, dynamic>) TeacherMessageItem.fromJson(row)
       ];
     } on DioException catch (error) {
+      // A newly linked parent/student pair has no conversation record yet.
+      // Treat that as an empty thread so the teacher can send the first
+      // message instead of exposing a transport-level 404 in the UI.
+      if (error.response?.statusCode == 404) return const [];
       throw _typed(error);
     }
   }
@@ -103,10 +112,11 @@ class TeacherPortalRepository {
       final events = response.data is Map<String, dynamic>
           ? response.data['events']
           : null;
-      if (events is! List)
+      if (events is! List) {
         throw const ApiException(
             kind: ApiErrorKind.unknown,
             message: 'The academic calendar returned an unexpected response.');
+      }
       return [
         for (final item in events)
           if (item is Map<String, dynamic>) TeacherAcademicEvent.fromJson(item)
@@ -132,6 +142,28 @@ class TeacherPortalRepository {
         'contentUrl': contentUrl,
         'deadline': deadline.toIso8601String()
       });
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
+  Future<void> updateHomework({
+    required String homeworkId,
+    required String title,
+    required String description,
+    required String? contentUrl,
+    required DateTime deadline,
+  }) async {
+    try {
+      await _dio.patch<dynamic>(
+        '/api/homework/${Uri.encodeComponent(homeworkId)}',
+        data: {
+          'title': title.trim(),
+          'description': description.trim(),
+          'contentUrl': contentUrl,
+          'deadline': deadline.toIso8601String(),
+        },
+      );
     } on DioException catch (error) {
       throw _typed(error);
     }
@@ -211,10 +243,11 @@ class TeacherPortalRepository {
       final ids = response.data is Map<String, dynamic>
           ? response.data['resultIds']
           : null;
-      if (ids is! List)
+      if (ids is! List) {
         throw const ApiException(
             kind: ApiErrorKind.unknown,
             message: 'The result draft returned an unexpected response.');
+      }
       return ids.map((id) => id.toString()).toList();
     } on DioException catch (error) {
       throw _typed(error);

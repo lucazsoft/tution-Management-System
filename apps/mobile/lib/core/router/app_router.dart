@@ -21,6 +21,8 @@ import 'package:tms_mobile/features/teacher/screens/teacher_leave_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_calendar_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_learning_screens.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_messages_screen.dart';
+import 'package:tms_mobile/features/teacher/screens/teacher_meetings_screen.dart';
+import 'package:tms_mobile/features/teacher/screens/teacher_notifications_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/geo_attendance_screen.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_models.dart';
 import 'package:tms_mobile/features/parent/screens/parent_home_screen.dart';
@@ -45,6 +47,7 @@ import 'package:tms_mobile/features/student/screens/student_leave_screen.dart';
 import 'package:tms_mobile/features/branch_manager/screens/branch_home_screen.dart';
 import 'package:tms_mobile/features/janitor/screens/janitor_home_screen.dart';
 import 'package:tms_mobile/features/tenant_admin/screens/tenant_admin_home_screen.dart';
+import 'package:tms_mobile/features/notice_board/screens/notice_board_screen.dart';
 
 @visibleForTesting
 String? mobileRoleBoundaryRedirect({
@@ -224,6 +227,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           builder: (_, __) => TenantAdminHomeScreen(
               key: ValueKey(navigationSessionIdentity(authRefresh.value)))),
       GoRoute(
+          path: '/tenant/notices',
+          builder: (_, __) =>
+              const NoticeBoardScreen(portal: NoticeBoardPortal.tenantAdmin)),
+      GoRoute(
           path: '/tenant/account',
           builder: (_, __) =>
               const AccountScreen(passwordRoute: '/tenant/change-password')),
@@ -334,6 +341,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           path: '/teacher/messages',
           builder: (_, __) => const TeacherMessagesScreen()),
       GoRoute(
+          path: '/teacher/meetings',
+          builder: (_, __) => const TeacherMeetingsScreen()),
+      GoRoute(
+          path: '/teacher/notifications',
+          builder: (_, __) => const TeacherNotificationsScreen()),
+      GoRoute(
+          path: '/teacher/notices',
+          builder: (_, __) =>
+              const NoticeBoardScreen(portal: NoticeBoardPortal.teacher)),
+      GoRoute(
         path: '/teacher/attendance',
         builder: (BuildContext context, GoRouterState state) {
           final session = state.extra as TeacherClassSession?;
@@ -400,7 +417,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/parent/academics',
         builder: (BuildContext context, GoRouterState state) =>
-            const ParentAcademicsScreen(),
+            ParentAcademicsScreen(
+          initialTab: state.uri.queryParameters['tab'] == 'homework' ? 1 : 0,
+        ),
       ),
       GoRoute(
         path: '/parent/calendar',
@@ -415,6 +434,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/parent/appointments',
         builder: (_, __) => const ParentAppointmentsScreen(),
       ),
+      GoRoute(
+          path: '/parent/notices',
+          builder: (_, __) =>
+              const NoticeBoardScreen(portal: NoticeBoardPortal.parent)),
 
       // ── Student routes ──
       GoRoute(
@@ -487,6 +510,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (BuildContext context, GoRouterState state) =>
             const StudentAttendanceScreen(),
       ),
+      GoRoute(
+          path: '/student/notices',
+          builder: (_, __) =>
+              const NoticeBoardScreen(portal: NoticeBoardPortal.student)),
       GoRoute(
           path: '/student/leave',
           builder: (_, __) => const StudentLeaveScreen()),

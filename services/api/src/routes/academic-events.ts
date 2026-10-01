@@ -15,7 +15,10 @@ router.post(
   hasPermission('manage_branch_calendar'),
   async (req: TenantRequest, res: Response) => {
     const { title, description, eventType, startDate, endDate, branchId, classId } = req.body;
-    const audience = req.body.audience ?? 'STAFF';
+    // Institution calendar entries are shared by default. Administrators may
+    // still record a narrower audience for reporting, but mobile calendars use
+    // one canonical institution timeline.
+    const audience = req.body.audience ?? 'ALL';
     if (!CALENDAR_AUDIENCES.includes(audience) || !['HOLIDAY', 'EXAM', 'EVENT', 'FEE_DUE'].includes(eventType)) return res.status(400).json({ error: 'Invalid event type or audience.' });
     if (!Number.isFinite(Date.parse(startDate)) || !Number.isFinite(Date.parse(endDate)) || Date.parse(endDate) < Date.parse(startDate)) return res.status(400).json({ error: 'Choose valid start and end dates.' });
 
