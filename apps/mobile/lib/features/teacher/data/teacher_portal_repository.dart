@@ -187,6 +187,24 @@ class TeacherPortalRepository {
     }
   }
 
+  Future<void> updateChapterProgress({
+    required String syllabusId,
+    required String chapterId,
+    required String status,
+    String? notes,
+  }) async {
+    try {
+      await _dio.post<dynamic>('/api/teacher/syllabus/$syllabusId/log', data: {
+        'chapterId': chapterId,
+        'status': status,
+        'notes': notes,
+        'logDate': _dateOnly(DateTime.now()),
+      });
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
   Future<void> createSyllabus(
       {required String classId,
       required String subject,

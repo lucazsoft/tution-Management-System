@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'dart:async';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tms_mobile/core/network/api_exception.dart';
 import 'package:tms_mobile/features/teacher/data/teacher_portal_repository.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_portal_dto.dart';
@@ -12,11 +15,55 @@ String _date(DateTime value) =>
     '${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
 Future<String?> _pickImageData() async {
   final file = await ImagePicker()
-      .pickImage(source: ImageSource.gallery, imageQuality: 88);
+      .pickImage(source: ImageSource.gallery, imageQuality: 75, maxWidth: 1800);
   if (file == null) return null;
   final bytes = await file.readAsBytes();
   final extension = file.name.toLowerCase();
   final mime = extension.endsWith('.png') ? 'image/png' : 'image/jpeg';
+  return 'data:$mime;base64,${base64Encode(bytes)}';
+}
+
+Future<String?> _pickAnswerSheet(BuildContext context) async {
+  final source = await showModalBottomSheet<String>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => SafeArea(
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        ListTile(
+          leading: const Icon(Icons.photo_library_outlined),
+          title: const Text('Choose from gallery'),
+          subtitle: const Text('JPG, PNG or WebP image'),
+          onTap: () => Navigator.pop(context, 'gallery'),
+        ),
+        ListTile(
+          leading: const Icon(Icons.folder_open_outlined),
+          title: const Text('Choose from file manager'),
+          subtitle: const Text('PDF, JPG, PNG or WebP'),
+          onTap: () => Navigator.pop(context, 'file'),
+        ),
+      ]),
+    ),
+  );
+  if (source == 'gallery') return _pickImageData();
+  if (source != 'file') return null;
+  final selection = await FilePicker.platform.pickFiles(
+    type: FileType.custom,
+    allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
+    withData: true,
+  );
+  final file = selection?.files.single;
+  final bytes = file?.bytes;
+  if (file == null || bytes == null) return null;
+  if (bytes.length > 8 * 1024 * 1024) {
+    throw const FormatException('Answer sheets must be 8 MB or smaller.');
+  }
+  final extension = file.extension?.toLowerCase();
+  final mime = switch (extension) {
+    'pdf' => 'application/pdf',
+    'png' => 'image/png',
+    'webp' => 'image/webp',
+    _ => 'image/jpeg',
+  };
   return 'data:$mime;base64,${base64Encode(bytes)}';
 }
 
@@ -123,7 +170,8 @@ class _TeacherHomeworkScreenState extends ConsumerState<TeacherHomeworkScreen> {
 
   Future<void> _editHomework(TeacherHomework homework) async {
     final title = TextEditingController(text: homework.title);
-    final instructions = TextEditingController(text: homework.description ?? '');
+    final instructions =
+        TextEditingController(text: homework.description ?? '');
     var due = homework.deadline;
     var attachment = homework.contentUrl;
     final save = await showDialog<bool>(
@@ -247,8 +295,9 @@ class _TeacherHomeworkScreenState extends ConsumerState<TeacherHomeworkScreen> {
   Widget build(BuildContext context) {
     final workspace = ref.watch(teacherPortalViewModelProvider).workspace;
     final classes = workspace?.classes ?? const <TeacherClassInfo>[];
-    if (classes.isNotEmpty && !classes.any((item) => item.id == _classId))
+    if (classes.isNotEmpty && !classes.any((item) => item.id == _classId)) {
       _classId = classes.first.id;
+    }
     final selected = classes.where((item) => item.id == _classId).firstOrNull;
     final recent = [
       for (final klass in classes)
@@ -316,8 +365,9 @@ class _TeacherHomeworkScreenState extends ConsumerState<TeacherHomeworkScreen> {
                 child: OutlinedButton.icon(
                     onPressed: () async {
                       final value = await _pickImageData();
-                      if (value != null && mounted)
+                      if (value != null && mounted) {
                         setState(() => _attachment = value);
+                      }
                     },
                     icon: Icon(_attachment == null
                         ? Icons.attach_file
@@ -390,6 +440,7 @@ class TeacherSyllabusScreen extends ConsumerStatefulWidget {
 class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
   String? _classId;
   String? _busyTopic;
+  String? _busyChapter;
   bool _editing = false;
   bool _savingPlan = false;
   String _subject = '';
@@ -437,9 +488,10 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
       await ref.read(teacherPortalViewModelProvider.notifier).refresh();
       if (mounted) setState(() => _editing = false);
     } on ApiException catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.message)));
+      }
     }
     if (mounted) setState(() => _savingPlan = false);
   }
@@ -473,9 +525,10 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
           syllabusId: syllabus.id, chapterId: chapter.id, title: title);
       await ref.read(teacherPortalViewModelProvider.notifier).refresh();
     } on ApiException catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.message)));
+      }
     }
   }
 
@@ -487,11 +540,31 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
           syllabusId: syllabus.id, topicId: topic.id, status: status);
       await ref.read(teacherPortalViewModelProvider.notifier).refresh();
     } on ApiException catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.message)));
+      }
     }
     if (mounted) setState(() => _busyTopic = null);
+  }
+
+  Future<void> _updateChapter(TeacherSyllabus syllabus,
+      TeacherSyllabusChapter chapter, String status) async {
+    setState(() => _busyChapter = chapter.id);
+    try {
+      await TeacherPortalRepository().updateChapterProgress(
+        syllabusId: syllabus.id,
+        chapterId: chapter.id,
+        status: status,
+      );
+      await ref.read(teacherPortalViewModelProvider.notifier).refresh();
+    } on ApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    }
+    if (mounted) setState(() => _busyChapter = null);
   }
 
   @override
@@ -514,6 +587,16 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
             0;
     final total = syllabus?.chapters.length ?? 0;
     final progress = total == 0 ? 0.0 : completed / total;
+    final inProgress = syllabus?.chapters
+            .where((item) => item.status == 'IN_PROGRESS')
+            .length ??
+        0;
+    final remaining = total - completed - inProgress;
+    final topics =
+        syllabus?.chapters.expand((chapter) => chapter.topics).toList() ??
+            const <TeacherSyllabusTopic>[];
+    final completedTopics =
+        topics.where((topic) => topic.status == 'COMPLETED').length;
     return TeacherPortalScaffold(
         title: 'Update syllabus',
         body: ListView(padding: const EdgeInsets.all(16), children: [
@@ -581,6 +664,15 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
                               style: Theme.of(context).textTheme.labelMedium),
                         ]))),
             const SizedBox(height: 16),
+            _TeacherSyllabusMetrics(
+              totalChapters: total,
+              totalTopics: topics.length,
+              completedChapters: completed,
+              completedTopics: completedTopics,
+              inProgressChapters: inProgress,
+              remainingChapters: remaining,
+            ),
+            const SizedBox(height: 16),
             Text('Chapters and topics',
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
@@ -591,6 +683,25 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
                     child: Text('${syllabus.chapters.indexOf(chapter) + 1}')),
                 title: Text(chapter.title),
                 subtitle: Text(chapter.status.replaceAll('_', ' ')),
+                trailing: _busyChapter == chapter.id
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : PopupMenuButton<String>(
+                        tooltip: 'Update chapter progress',
+                        onSelected: (status) =>
+                            _updateChapter(syllabus, chapter, status),
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(
+                              value: 'LEFT', child: Text('Not started')),
+                          PopupMenuItem(
+                              value: 'IN_PROGRESS', child: Text('In progress')),
+                          PopupMenuItem(
+                              value: 'COMPLETED', child: Text('Completed')),
+                        ],
+                      ),
                 children: [
                   for (final topic in chapter.topics)
                     ListTile(
@@ -679,8 +790,9 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
                                       labelText: 'Chapter name',
                                       border: OutlineInputBorder()),
                                   onChanged: (value) {
-                                    if (index < _chapters.length)
+                                    if (index < _chapters.length) {
                                       _chapters[index].title = value;
+                                    }
                                   })),
                           IconButton(
                               onPressed: _chapters.length <= 1
@@ -718,6 +830,134 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
       );
 }
 
+class _TeacherSyllabusMetrics extends StatelessWidget {
+  const _TeacherSyllabusMetrics({
+    required this.totalChapters,
+    required this.totalTopics,
+    required this.completedChapters,
+    required this.completedTopics,
+    required this.inProgressChapters,
+    required this.remainingChapters,
+  });
+
+  final int totalChapters;
+  final int totalTopics;
+  final int completedChapters;
+  final int completedTopics;
+  final int inProgressChapters;
+  final int remainingChapters;
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = [
+      _TeacherSyllabusMetric(
+        label: 'Total Chapters',
+        value: totalChapters,
+        detail: '$totalTopics ${totalTopics == 1 ? 'topic' : 'topics'} overall',
+        icon: Icons.menu_book_outlined,
+        color: const Color(0xFF1560BD),
+      ),
+      _TeacherSyllabusMetric(
+        label: 'Completed',
+        value: completedChapters,
+        detail:
+            '$completedTopics ${completedTopics == 1 ? 'topic' : 'topics'} done',
+        icon: Icons.check_circle_outline_rounded,
+        color: const Color(0xFF00A67E),
+      ),
+      _TeacherSyllabusMetric(
+        label: 'In Progress',
+        value: inProgressChapters,
+        detail: 'Actively being taught',
+        icon: Icons.pending_outlined,
+        color: const Color(0xFFF4A024),
+      ),
+      _TeacherSyllabusMetric(
+        label: 'Remaining',
+        value: remainingChapters,
+        detail: 'Untouched chapters',
+        icon: Icons.schedule_outlined,
+        color: const Color(0xFF718096),
+      ),
+    ];
+    return LayoutBuilder(builder: (context, constraints) {
+      final columns = constraints.maxWidth >= 640 ? 2 : 1;
+      const gap = 10.0;
+      final width = columns == 1
+          ? constraints.maxWidth
+          : (constraints.maxWidth - gap) / columns;
+      return Wrap(
+        spacing: gap,
+        runSpacing: gap,
+        children: [
+          for (final metric in metrics)
+            SizedBox(
+              width: width,
+              child: _TeacherSyllabusMetricCard(metric: metric),
+            ),
+        ],
+      );
+    });
+  }
+}
+
+class _TeacherSyllabusMetric {
+  const _TeacherSyllabusMetric({
+    required this.label,
+    required this.value,
+    required this.detail,
+    required this.icon,
+    required this.color,
+  });
+  final String label;
+  final int value;
+  final String detail;
+  final IconData icon;
+  final Color color;
+}
+
+class _TeacherSyllabusMetricCard extends StatelessWidget {
+  const _TeacherSyllabusMetricCard({required this.metric});
+  final _TeacherSyllabusMetric metric;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: metric.color.withValues(alpha: .10),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(metric.icon, color: metric.color),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(metric.label,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF667895))),
+                  Text('${metric.value}',
+                      style: Theme.of(context)
+                          .textTheme
+                          .headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w800)),
+                  Text(metric.detail,
+                      style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ),
+          ]),
+        ),
+      );
+}
+
 class _ChapterDraft {
   _ChapterDraft(this.id, this.title);
   final String? id;
@@ -737,9 +977,95 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
   final _pass = TextEditingController(text: '40');
   final Map<String, TextEditingController> _scores = {};
   final Map<String, String> _papers = {};
+  Timer? _draftSaveTimer;
+  String? _loadedDraftId;
+  bool _restoringDraft = false;
   bool _saving = false;
+
+  String _draftKey(String definitionId) =>
+      'teacher_result_draft_v1_$definitionId';
+
+  TextEditingController _scoreController(String studentId) {
+    return _scores.putIfAbsent(studentId, () {
+      final controller = TextEditingController();
+      controller.addListener(_scheduleDraftSave);
+      return controller;
+    });
+  }
+
+  void _scheduleDraftSave() {
+    if (_restoringDraft || _definitionId == null) return;
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = Timer(
+      const Duration(milliseconds: 250),
+      () => unawaited(_saveDraftNow()),
+    );
+  }
+
+  Future<void> _saveDraftNow() async {
+    final definitionId = _definitionId;
+    if (definitionId == null || _restoringDraft) return;
+    final payload = jsonEncode({
+      'maximum': _maximum.text,
+      'passMarks': _pass.text,
+      'scores': {
+        for (final entry in _scores.entries) entry.key: entry.value.text,
+      },
+      'papers': _papers,
+      'savedAt': DateTime.now().toIso8601String(),
+    });
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_draftKey(definitionId), payload);
+  }
+
+  Future<void> _restoreDraft(String definitionId) async {
+    if (_loadedDraftId == definitionId) return;
+    _draftSaveTimer?.cancel();
+    _restoringDraft = true;
+    final preferences = await SharedPreferences.getInstance();
+    final encoded = preferences.getString(_draftKey(definitionId));
+    final decoded = encoded == null ? null : jsonDecode(encoded);
+    if (!mounted || _definitionId != definitionId) {
+      _restoringDraft = false;
+      return;
+    }
+    if (decoded is Map<String, dynamic>) {
+      _maximum.text = decoded['maximum']?.toString() ?? '100';
+      _pass.text = decoded['passMarks']?.toString() ?? '40';
+      final scores = decoded['scores'];
+      if (scores is Map<String, dynamic>) {
+        for (final entry in scores.entries) {
+          _scoreController(entry.key).text = entry.value?.toString() ?? '';
+        }
+      }
+      final papers = decoded['papers'];
+      if (papers is Map<String, dynamic>) {
+        _papers
+          ..clear()
+          ..addAll(papers.map((key, value) => MapEntry(key, '$value')));
+      }
+    } else {
+      _maximum.text = '100';
+      _pass.text = '40';
+      for (final controller in _scores.values) {
+        controller.clear();
+      }
+      _papers.clear();
+    }
+    _loadedDraftId = definitionId;
+    _restoringDraft = false;
+    setState(() {});
+  }
+
+  Future<void> _clearDraft(String definitionId) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.remove(_draftKey(definitionId));
+  }
+
   @override
   void dispose() {
+    _draftSaveTimer?.cancel();
+    unawaited(_saveDraftNow());
     _maximum.dispose();
     _pass.dispose();
     for (final value in _scores.values) {
@@ -754,8 +1080,13 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
     final definitions =
         workspace?.resultDefinitions ?? const <TeacherResultDefinition>[];
     if (definitions.isNotEmpty &&
-        !definitions.any((item) => item.id == _definitionId))
+        !definitions.any((item) => item.id == _definitionId)) {
       _definitionId = definitions.first.id;
+    }
+    if (_definitionId != null && _loadedDraftId != _definitionId) {
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _restoreDraft(_definitionId!));
+    }
     final definition =
         definitions.where((item) => item.id == _definitionId).firstOrNull;
     final classes = workspace?.classes ?? const <TeacherClassInfo>[];
@@ -763,7 +1094,7 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
         ? null
         : classes.where((item) => item.id == definition.classId).firstOrNull;
     for (final student in klass?.students ?? const <TeacherStudent>[]) {
-      _scores.putIfAbsent(student.id, TextEditingController.new);
+      _scoreController(student.id);
     }
     Future<void> publish() async {
       final maximum = double.tryParse(_maximum.text);
@@ -771,7 +1102,9 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
       if (definition == null ||
           klass == null ||
           maximum == null ||
-          pass == null) return;
+          pass == null) {
+        return;
+      }
       final marks = <Map<String, dynamic>>[];
       for (final student in klass.students) {
         final score = double.tryParse(_scores[student.id]?.text ?? '');
@@ -780,6 +1113,12 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content:
                   Text('Enter marks and attach a paper for ${student.name}.')));
+          return;
+        }
+        if (score < 0 || score > maximum) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(
+                  '${student.name}’s marks must be between 0 and ${maximum.toStringAsFixed(0)}.')));
           return;
         }
         marks.add(
@@ -794,6 +1133,8 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
             passMarks: pass,
             marks: marks);
         await TeacherPortalRepository().publishResults(ids);
+        await _clearDraft(definition.id);
+        _loadedDraftId = null;
         await ref.read(teacherPortalViewModelProvider.notifier).refresh();
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -820,6 +1161,17 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
           const SizedBox(height: 20),
           const Text(
               'Choose an open assessment, enter every student’s marks, and attach their checked paper as evidence.'),
+          const SizedBox(height: 12),
+          Card(
+            color: const Color(0xFF1560BD).withValues(alpha: .06),
+            child: const ListTile(
+              leading:
+                  Icon(Icons.cloud_done_outlined, color: Color(0xFF1560BD)),
+              title: Text('Draft autosave is on'),
+              subtitle: Text(
+                  'Marks and answer sheets are restored after going back or reopening the app. Drafts remain private until you publish.'),
+            ),
+          ),
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
               initialValue: _definitionId,
@@ -833,12 +1185,24 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
                       child: Text('${item.title} · ${item.subject}',
                           maxLines: 1, overflow: TextOverflow.ellipsis))
               ],
-              onChanged: (value) => setState(() => _definitionId = value)),
+              onChanged: (value) {
+                if (value == null || value == _definitionId) return;
+                unawaited(_saveDraftNow());
+                setState(() {
+                  _definitionId = value;
+                  _loadedDraftId = null;
+                  _papers.clear();
+                  for (final controller in _scores.values) {
+                    controller.clear();
+                  }
+                });
+              }),
           const SizedBox(height: 12),
           Row(children: [
             Expanded(
                 child: TextField(
                     controller: _maximum,
+                    onChanged: (_) => _scheduleDraftSave(),
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
                         labelText: 'Full marks',
@@ -847,6 +1211,7 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
             Expanded(
                 child: TextField(
                     controller: _pass,
+                    onChanged: (_) => _scheduleDraftSave(),
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
                         labelText: 'Pass marks', border: OutlineInputBorder())))
@@ -876,7 +1241,7 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
                             Row(children: [
                               Expanded(
                                   child: TextField(
-                                      controller: _scores[student.id],
+                                      controller: _scoreController(student.id),
                                       keyboardType: TextInputType.number,
                                       decoration: const InputDecoration(
                                           labelText: 'Marks',
@@ -884,29 +1249,71 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
                               const SizedBox(width: 8),
                               OutlinedButton.icon(
                                   onPressed: () async {
-                                    final paper = await _pickImageData();
-                                    if (paper != null && mounted)
-                                      setState(
-                                          () => _papers[student.id] = paper);
+                                    try {
+                                      final paper =
+                                          await _pickAnswerSheet(context);
+                                      if (paper != null && context.mounted) {
+                                        setState(
+                                            () => _papers[student.id] = paper);
+                                        _scheduleDraftSave();
+                                      }
+                                    } on FormatException catch (error) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(SnackBar(
+                                                content: Text(error.message)));
+                                      }
+                                    }
                                   },
                                   icon: Icon(_papers.containsKey(student.id)
                                       ? Icons.check_circle
                                       : Icons.upload_file),
                                   label: Text(_papers.containsKey(student.id)
                                       ? 'Paper added'
-                                      : 'Add paper'))
+                                      : 'Add paper')),
+                              if (_papers.containsKey(student.id))
+                                IconButton(
+                                  tooltip: 'Remove answer sheet',
+                                  onPressed: () {
+                                    setState(() => _papers.remove(student.id));
+                                    _scheduleDraftSave();
+                                  },
+                                  icon: const Icon(Icons.close_rounded),
+                                ),
                             ])
                           ]))),
             const SizedBox(height: 12),
-            FilledButton.icon(
-                onPressed: _saving ? null : publish,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.publish_outlined),
-                label: const Text('Publish results'))
+            Row(children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _saving
+                      ? null
+                      : () async {
+                          await _saveDraftNow();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content:
+                                        Text('Draft saved on this device.')));
+                          }
+                        },
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Text('Save draft'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.icon(
+                    onPressed: _saving ? null : publish,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.publish_outlined),
+                    label: const Text('Publish results')),
+              ),
+            ])
           ]
         ]));
   }

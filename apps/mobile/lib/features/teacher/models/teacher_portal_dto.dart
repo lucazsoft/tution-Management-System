@@ -47,12 +47,14 @@ class TeacherScheduleSlot {
     required this.start,
     required this.end,
     this.subject,
+    this.room,
   });
 
   final String day;
   final String start;
   final String end;
   final String? subject;
+  final String? room;
 
   String get label {
     final time = start.isEmpty || end.isEmpty ? '' : ' $start-$end';
@@ -70,6 +72,7 @@ class TeacherScheduleSlot {
       start: _str(json['startTime'] ?? json['start']),
       end: _str(json['endTime'] ?? json['end']),
       subject: json['subject'] as String?,
+      room: json['room'] as String?,
     );
   }
 }

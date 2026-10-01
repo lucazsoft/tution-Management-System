@@ -305,44 +305,143 @@ class _TodayTab extends StatelessWidget {
             message: 'Enjoy the day - nothing scheduled.',
           )
         else
-          for (final item in items)
-            _ClassCard(item: item, onTap: () => onAttendClass(item)),
+          _TodayTimetableTable(
+            items: items,
+            onAttendClass: onAttendClass,
+          ),
       ],
     );
   }
 }
 
-class _ClassCard extends StatelessWidget {
-  const _ClassCard({required this.item, required this.onTap});
+class _TodayTimetableTable extends StatelessWidget {
+  const _TodayTimetableTable({
+    required this.items,
+    required this.onAttendClass,
+  });
 
-  final TeacherTodayClass item;
-  final VoidCallback onTap;
+  final List<TeacherTodayClass> items;
+  final ValueChanged<TeacherTodayClass> onAttendClass;
+
+  String get _todayKey => const [
+        'Mon',
+        'Tue',
+        'Wed',
+        'Thu',
+        'Fri',
+        'Sat',
+        'Sun'
+      ][DateTime.now().weekday - 1];
+
+  List<({TeacherTodayClass item, TeacherScheduleSlot? slot})> get _rows {
+    final rows = <({TeacherTodayClass item, TeacherScheduleSlot? slot})>[];
+    for (final item in items) {
+      final todaySlots = item.slots
+          .where((slot) => slot.matchesDay(_todayKey))
+          .toList()
+        ..sort((a, b) => a.start.compareTo(b.start));
+      if (todaySlots.isEmpty) {
+        rows.add((item: item, slot: null));
+      } else {
+        rows.addAll(todaySlots.map((slot) => (item: item, slot: slot)));
+      }
+    }
+    rows.sort((a, b) =>
+        (a.slot?.start ?? '99:99').compareTo(b.slot?.start ?? '99:99'));
+    return rows;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final rows = _rows;
     return Card(
-      child: ListTile(
-        title: Text(item.courseName,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(
-          '${item.className}${item.branchName == null ? '' : ' - ${item.branchName}'}${item.scheduleLabel == null ? '' : '\n${item.scheduleLabel}'}',
+      clipBehavior: Clip.antiAlias,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: .07),
+          child: Row(children: [
+            Icon(Icons.table_chart_outlined,
+                color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 10),
+            Text(
+                '${rows.length} scheduled ${rows.length == 1 ? 'period' : 'periods'}',
+                style: Theme.of(context).textTheme.titleSmall),
+            const Spacer(),
+            const Text('Managed by Branch Admin',
+                style: TextStyle(fontSize: 11)),
+          ]),
         ),
-        isThreeLine: item.scheduleLabel != null,
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (item.dailyUpdateSubmitted)
-              const Icon(Icons.check_circle, color: Colors.green, size: 20)
-            else
-              const Icon(Icons.pending_outlined, size: 20),
-            const SizedBox(width: 8),
-            FilledButton.tonal(
-              onPressed: onTap,
-              child: const Text('Attend'),
+        LayoutBuilder(builder: (context, constraints) {
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: constraints.maxWidth),
+              child: DataTable(
+                headingRowColor: WidgetStatePropertyAll(
+                  Theme.of(context).colorScheme.surfaceContainerLow,
+                ),
+                horizontalMargin: 16,
+                columnSpacing: 24,
+                columns: const [
+                  DataColumn(label: Text('Time')),
+                  DataColumn(label: Text('Subject')),
+                  DataColumn(label: Text('Class')),
+                  DataColumn(label: Text('Room')),
+                  DataColumn(label: Text('Update')),
+                  DataColumn(label: Text('Action')),
+                ],
+                rows: [
+                  for (final row in rows)
+                    DataRow(cells: [
+                      DataCell(Text(
+                        row.slot?.timeLabel.isNotEmpty == true
+                            ? row.slot!.timeLabel
+                            : 'Time not set',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      )),
+                      DataCell(SizedBox(
+                        width: 120,
+                        child: Text(row.item.courseName,
+                            maxLines: 2, overflow: TextOverflow.ellipsis),
+                      )),
+                      DataCell(SizedBox(
+                        width: 120,
+                        child: Text(row.item.className,
+                            maxLines: 2, overflow: TextOverflow.ellipsis),
+                      )),
+                      DataCell(Text(
+                        row.slot?.room?.trim().isNotEmpty == true
+                            ? row.slot!.room!
+                            : 'Not assigned',
+                      )),
+                      DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(
+                          row.item.dailyUpdateSubmitted
+                              ? Icons.check_circle
+                              : Icons.pending_outlined,
+                          color: row.item.dailyUpdateSubmitted
+                              ? Colors.green
+                              : Colors.orange,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(row.item.dailyUpdateSubmitted
+                            ? 'Submitted'
+                            : 'Pending'),
+                      ])),
+                      DataCell(FilledButton.tonal(
+                        onPressed: () => onAttendClass(row.item),
+                        child: const Text('Attend'),
+                      )),
+                    ]),
+                ],
+              ),
             ),
-          ],
-        ),
-      ),
+          );
+        }),
+      ]),
     );
   }
 }
@@ -495,11 +594,10 @@ class _AttendanceTabState extends ConsumerState<_AttendanceTab> {
             message: 'Nothing to mark attendance for.',
           )
         else
-          for (final item in workspace.todayClasses)
-            _ClassCard(
-              item: item,
-              onTap: () => widget.onMarkAttendance(item),
-            ),
+          _TodayTimetableTable(
+            items: workspace.todayClasses,
+            onAttendClass: widget.onMarkAttendance,
+          ),
         const SizedBox(height: 24),
         Text('Class attendance',
             style: Theme.of(context).textTheme.titleMedium),

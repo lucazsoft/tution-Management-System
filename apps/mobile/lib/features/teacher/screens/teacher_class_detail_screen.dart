@@ -130,7 +130,11 @@ class TeacherClassDetailScreen extends StatelessWidget {
                   child: ListTile(
                     leading: const Icon(Icons.schedule_outlined),
                     title: Text(slot.label),
-                    subtitle: slot.subject == null ? null : Text(slot.subject!),
+                    subtitle: slot.room?.trim().isNotEmpty == true
+                        ? Text('Room ${slot.room}')
+                        : slot.subject == null
+                            ? null
+                            : Text(slot.subject!),
                   ),
                 ),
             const SizedBox(height: 16),
