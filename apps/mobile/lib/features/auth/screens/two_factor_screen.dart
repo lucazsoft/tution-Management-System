@@ -8,6 +8,7 @@ import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/core/utils/formatters.dart';
 import 'package:tms_mobile/features/auth/data/auth_service.dart';
+import 'package:tms_mobile/features/auth/data/device_account_vault.dart';
 import 'package:tms_mobile/features/auth/widgets/auth_card.dart';
 import 'package:tms_mobile/features/auth/widgets/otp_input_field.dart';
 
@@ -66,7 +67,11 @@ class _TwoFactorScreenState extends ConsumerState<TwoFactorScreen> {
           .verify2FA(_code, trustDevice: _trustDevice);
       if (!mounted) return;
       final auth = ref.read(authProvider);
-      if (auth.isAuthenticated) context.go(auth.roleRedirectPath);
+      if (auth.isAuthenticated) {
+        await DeviceAccountVault().completePendingEnrollment(auth.user!);
+        if (!mounted) return;
+        context.go(auth.roleRedirectPath);
+      }
     } on AuthFailure catch (error) {
       if (!mounted) return;
       setState(() => _failedAttempts++);

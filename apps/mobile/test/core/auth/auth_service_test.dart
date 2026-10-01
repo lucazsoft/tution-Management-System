@@ -96,12 +96,12 @@ void main() {
         },
       })));
 
-      final user = await AuthService.signIn(
+      final result = await AuthService.signIn(
         email: 'Teacher@TMS.edu.np',
         password: 'Teacher@123',
       );
 
-      expect(user.role, 'TEACHER');
+      expect(result.user!.role, 'TEACHER');
       expect(
         seen,
         ['POST /api/auth/sign-in/email', 'GET /api/auth/get-session'],
@@ -122,13 +122,13 @@ void main() {
             _json(_sessionUser('STUDENT'), 200),
       })));
 
-      final user = await AuthService.signIn(
+      final result = await AuthService.signIn(
         email: 'student@tms.edu.np',
         password: 'Student@123',
       );
 
       expect(signInPosts, 1);
-      expect(user.role, 'STUDENT');
+      expect(result.user!.role, 'STUDENT');
     });
 
     test('server rejection surfaces AuthFailure', () async {
@@ -219,10 +219,10 @@ void main() {
         },
       })));
 
-      await AuthService.sendTwoFactorCode('teacher@tms.edu.np');
+      await AuthService.sendTwoFactorCode();
       await AuthService.verifyTwoFactorCode(
-        email: 'teacher@tms.edu.np',
         code: '246810',
+        trustDevice: false,
       );
       expect(seen, ['send-otp', 'verify-otp']);
     });
@@ -234,7 +234,7 @@ void main() {
       })));
 
       expect(
-        AuthService.verifyTwoFactorCode(email: 'a@b.c', code: '000000'),
+        AuthService.verifyTwoFactorCode(code: '000000', trustDevice: false),
         throwsA(isA<AuthFailure>()),
       );
     });
@@ -326,43 +326,33 @@ void main() {
           isLoading: false,
         );
 
-    test('hands unsupported server roles to the web portal only', () {
-      for (final webOnlyRole in [
+    test('unsupported server roles are rejected, never defaulted', () {
+      for (final hostile in [
         'SUPER_ADMIN',
         'STAFF',
         'ADMIN',
+        '',
         'TEACHER,ADMIN'
       ]) {
-        final user = AuthUser.fromJson({
-          'user': {
-            'id': 'x',
-            'email': 'x@y.z',
-            'firstName': 'X',
-            'lastName': 'Y',
-            'role': webOnlyRole,
-          },
-        });
         expect(
-          user.role,
-          'WEB_PORTAL_ONLY',
-          reason: 'role: $webOnlyRole',
+          () => AuthUser.fromJson({
+            'user': {
+              'id': 'x',
+              'email': 'x@y.z',
+              'firstName': 'X',
+              'lastName': 'Y',
+              'role': hostile,
+            },
+          }),
+          throwsA(isA<AuthFailure>()),
+          reason: 'role: $hostile',
         );
       }
-      expect(
-        () => AuthUser.fromJson({
-          'user': {
-            'id': 'x',
-            'email': 'x@y.z',
-            'role': '',
-          },
-        }),
-        throwsA(isA<AuthFailure>()),
-      );
     });
 
-    test('unknown roles never reach a privileged mobile home', () {
+    test('unknown roles land on login, never a privileged home', () {
       for (final hostile in ['UNKNOWN', 'SUPER_ADMIN', 'ADMIN', '']) {
-        expect(stateFor(hostile).roleRedirectPath, '/unsupported-role',
+        expect(stateFor(hostile).roleRedirectPath, '/login',
             reason: 'role: $hostile');
       }
       expect(stateFor('TEACHER').roleRedirectPath, '/teacher/home');

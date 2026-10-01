@@ -9,7 +9,11 @@ import 'package:tms_mobile/features/student/models/student_portal_dto.dart';
 import 'package:tms_mobile/features/student/screens/student_home_screen.dart';
 import 'package:tms_mobile/features/student/viewmodels/student_home_viewmodel.dart';
 
-Map<String, dynamic> _portalJson({bool emptyToday = false}) => {
+Map<String, dynamic> _portalJson({
+  bool emptyToday = false,
+  bool fullDay = false,
+}) =>
+    {
       'studentProfile': {
         'name': 'Aarav Sharma',
         'initials': 'AS',
@@ -35,6 +39,26 @@ Map<String, dynamic> _portalJson({bool emptyToday = false}) => {
                 'room': 'Room 2A',
                 'type': 'Regular',
               },
+              if (fullDay)
+                {
+                  'id': 'c1-1',
+                  'time': '08:00',
+                  'endTime': '09:00',
+                  'subject': 'Science',
+                  'teacher': 'Mr. Shyam Adhikari',
+                  'room': 'Science Lab',
+                  'type': 'Regular',
+                },
+              if (fullDay)
+                {
+                  'id': 'c1-2',
+                  'time': '09:00',
+                  'endTime': '10:00',
+                  'subject': 'English',
+                  'teacher': 'Ms. Tara Shrestha',
+                  'room': 'Room 2A',
+                  'type': 'Regular',
+                },
             ],
       'weeklySessions': const [],
       'homework': [
@@ -156,6 +180,24 @@ void main() {
       expect(find.text('Complete algebra worksheet 4'), findsOneWidget);
     });
 
+    testWidgets('keeps Nepal date above the blue greeting without overflow',
+        (tester) async {
+      tester.view.physicalSize = const Size(320, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      final fake = _FakePortalRepository()
+        ..portalToReturn = StudentPortal.fromJson(_portalJson());
+
+      await _pumpHome(tester, fake);
+
+      final date = find.byKey(const ValueKey('student-home-nepali-date'));
+      final greeting = find.text('Namaste, Aarav');
+      expect(date, findsOneWidget);
+      expect(
+          tester.getTopLeft(date).dy, lessThan(tester.getTopLeft(greeting).dy));
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('shows empty timetable message when nothing is scheduled',
         (tester) async {
       final fake = _FakePortalRepository()
@@ -167,6 +209,22 @@ void main() {
         find.text('No sessions scheduled for today.'),
         findsOneWidget,
       );
+    });
+
+    testWidgets('limits the dashboard timetable preview to two sessions',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      final fake = _FakePortalRepository()
+        ..portalToReturn = StudentPortal.fromJson(_portalJson(fullDay: true));
+
+      await _pumpHome(tester, fake);
+
+      expect(find.text('Mathematics'), findsOneWidget);
+      expect(find.text('Science'), findsOneWidget);
+      expect(find.text('English'), findsNothing);
+      expect(find.text('Full timetable'), findsOneWidget);
     });
 
     testWidgets('shows denied state and retries on tap', (tester) async {

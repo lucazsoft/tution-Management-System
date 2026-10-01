@@ -80,6 +80,7 @@ class PortalProfile {
     required this.institution,
     required this.grade,
     required this.branch,
+    required this.branchId,
     required this.rollNumber,
     required this.enrollmentId,
     required this.academicYear,
@@ -94,6 +95,7 @@ class PortalProfile {
         institution: _str(json['institution'], ''),
         grade: _str(json['grade'], 'Grade not assigned'),
         branch: _str(json['branch'], 'Branch not assigned'),
+        branchId: _str(json['branchId'], ''),
         rollNumber: _str(json['rollNumber'], ''),
         enrollmentId: _str(json['enrollmentId'], ''),
         academicYear: _str(json['academicYear'], ''),
@@ -109,6 +111,7 @@ class PortalProfile {
   final String institution;
   final String grade;
   final String branch;
+  final String branchId;
   final String rollNumber;
   final String enrollmentId;
   final String academicYear;
@@ -375,6 +378,30 @@ class PortalNotification {
 }
 
 /// Full portal payload backing the student home and timetable screens.
+class PortalLeaveRecord {
+  const PortalLeaveRecord(
+      {required this.id,
+      required this.dates,
+      required this.reason,
+      required this.state,
+      required this.detail});
+
+  factory PortalLeaveRecord.fromJson(Map<String, dynamic> json) =>
+      PortalLeaveRecord(
+        id: _str(json['id'], ''),
+        dates: _str(json['dates']),
+        reason: _str(json['reason']),
+        state: _str(json['state'], 'Pending'),
+        detail: _str(json['detail']),
+      );
+
+  final String id;
+  final String dates;
+  final String reason;
+  final String state;
+  final String detail;
+}
+
 class StudentPortal {
   const StudentPortal({
     required this.profile,
@@ -386,6 +413,7 @@ class StudentPortal {
     required this.invoices,
     required this.events,
     required this.certificates,
+    required this.leaves,
     required this.notifications,
   });
 
@@ -412,6 +440,7 @@ class StudentPortal {
               institution: '',
               grade: 'Grade not assigned',
               branch: 'Branch not assigned',
+              branchId: '',
               rollNumber: '',
               enrollmentId: '',
               academicYear: '',
@@ -427,6 +456,7 @@ class StudentPortal {
       invoices: list('invoices', PortalInvoice.fromJson),
       events: list('events', PortalEvent.fromJson),
       certificates: list('certificates', PortalCertificate.fromJson),
+      leaves: list('leaves', PortalLeaveRecord.fromJson),
       notifications: list('notifications', PortalNotification.fromJson),
     );
   }
@@ -440,6 +470,7 @@ class StudentPortal {
   final List<PortalInvoice> invoices;
   final List<PortalEvent> events;
   final List<PortalCertificate> certificates;
+  final List<PortalLeaveRecord> leaves;
   final List<PortalNotification> notifications;
 
   /// Weekly sessions grouped by day, ordered Monday → Sunday.
@@ -447,6 +478,15 @@ class StudentPortal {
     final groups = <String, List<PortalSession>>{};
     for (final session in weeklySessions) {
       groups.putIfAbsent(session.dayGroupKey, () => []).add(session);
+    }
+    for (final sessions in groups.values) {
+      sessions.sort((a, b) {
+        final byStart = a.time.compareTo(b.time);
+        if (byStart != 0) return byStart;
+        final byEnd = a.endTime.compareTo(b.endTime);
+        if (byEnd != 0) return byEnd;
+        return a.subject.compareTo(b.subject);
+      });
     }
     final days = groups.entries
         .map((entry) => PortalDaySchedule(

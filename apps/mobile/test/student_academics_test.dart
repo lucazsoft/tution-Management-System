@@ -25,7 +25,10 @@ Map<String, dynamic> portalJson({int homeworkCount = 12}) {
         'assessment': 'Algebra Unit Test',
         'score': 44,
         'maximum': 50,
+        'testDate': '2026-08-28T00:00:00.000Z',
+        'academicYear': 2026,
         'publishedLabel': 'Shared 01 Sep 2026',
+        'resultSheetUrl': '/demo/results/algebra.pdf',
       },
       {
         'id': 'r2',
@@ -45,6 +48,10 @@ Map<String, dynamic> portalJson({int homeworkCount = 12}) {
           'dueLabel': '02 Sep 2026',
           'urgency': i == 0 ? 'overdue' : 'normal',
           'completed': i == 1,
+          'description': 'Complete every question and show your working.',
+          'contentUrl': '/demo/homework/task.pdf',
+          'submissionUrl': i == 1 ? '/demo/homework/submission.pdf' : null,
+          'teacherRemarks': i == 1 ? 'Accurate work.' : null,
         },
     ],
     'insights': [
@@ -216,6 +223,42 @@ Dio stubFailure(int statusCode, [dynamic data]) {
 
 void main() {
   group('StudentAcademicsRepository', () {
+    test('marks homework done through the shared submission endpoint',
+        () async {
+      String? requestedPath;
+      dynamic submittedData;
+      final dio = ApiClient.buildDio(
+        baseUrl: 'https://test.invalid',
+        extraInterceptors: [
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              requestedPath = options.path;
+              submittedData = options.data;
+              handler.resolve(
+                Response<dynamic>(
+                  requestOptions: options,
+                  statusCode: 201,
+                  data: {'id': 'submission-1'},
+                ),
+              );
+            },
+          ),
+        ],
+      );
+
+      await StudentAcademicsRepository(dio: dio).markHomeworkDone(
+        homeworkId: 'homework-1',
+        studentId: 'student-1',
+      );
+
+      expect(requestedPath, endsWith('/api/homework/submit'));
+      expect(submittedData, {
+        'homeworkId': 'homework-1',
+        'studentId': 'student-1',
+        'remarks': 'Marked done by the student.',
+      });
+    });
+
     test('parses the portal snapshot for the signed-in student', () async {
       final repo = StudentAcademicsRepository(dio: stubPortal());
       final snapshot = await repo.fetchPortal();
@@ -223,8 +266,16 @@ void main() {
       expect(snapshot.enrollmentId, 'stu-1');
       expect(snapshot.results, hasLength(2));
       expect(snapshot.results.first.percentage, 88);
+      expect(snapshot.results.first.academicYear, 2026);
+      expect(snapshot.results.first.testDate, DateTime.utc(2026, 8, 28));
+      expect(
+          snapshot.results.first.resultSheetUrl, '/demo/results/algebra.pdf');
       expect(snapshot.homework, hasLength(12));
       expect(snapshot.homework.first.isOverdue, isTrue);
+      expect(snapshot.homework.first.contentUrl, '/demo/homework/task.pdf');
+      expect(
+          snapshot.homework[1].submissionUrl, '/demo/homework/submission.pdf');
+      expect(snapshot.homework[1].teacherRemarks, 'Accurate work.');
       expect(snapshot.insights.single.trend, 'Improving');
       expect(snapshot.syllabi.single.topicCount, 2);
       expect(snapshot.attendance.last.isExcused, isTrue);

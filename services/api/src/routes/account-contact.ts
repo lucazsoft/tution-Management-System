@@ -14,6 +14,34 @@ const purpose = 'ACCOUNT_MOBILE_CHANGE';
 const binding = (tenant: string, user: string, oldPhone: string, newPhone: string, passwordHash: string) =>
   JSON.stringify({ tenant, user, oldPhone, newPhone, credential: hashCode(passwordHash) });
 
+router.post('/email', authMiddleware, async (req: TenantRequest, res) => {
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  if (!password || password.length > 128 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+    return res.status(400).json({ error: 'Enter your current password and a valid email address.' });
+  }
+  try {
+    const limit = await consumePersistentRateLimit(`email-change:${req.tenantId}:${req.user!.id}`, 15 * 60_000, 5);
+    if (!limit.allowed) return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
+    const user = await prisma.user.findFirst({ where: { id: req.user!.id, tenantId: req.tenantId! } });
+    const credential = await prisma.account.findFirst({ where: { userId: req.user!.id, providerId: 'credential' } });
+    if (!user || !credential?.password || !await bcrypt.compare(password, credential.password)) {
+      return res.status(403).json({ error: 'Your current password is incorrect.' });
+    }
+    if (email === user.email.toLowerCase()) return res.status(400).json({ error: 'Enter a different email address.' });
+    const duplicate = await prisma.user.findUnique({ where: { email } });
+    if (duplicate) return res.status(409).json({ error: 'That email address is already in use.' });
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: user.id }, data: { email, emailVerified: false } }),
+      prisma.account.update({ where: { id: credential.id }, data: { accountId: user.id } }),
+      prisma.session.deleteMany({ where: { userId: user.id } }),
+    ]);
+    return res.json({ success: true, signInRequired: true });
+  } catch {
+    return res.status(500).json({ error: 'Unable to change your login email. Please try again.' });
+  }
+});
+
 router.get('/mobile', authMiddleware, async (req: TenantRequest, res) => {
   try {
     const user = await prisma.user.findFirst({ where: { id: req.user!.id, tenantId: req.tenantId! } });

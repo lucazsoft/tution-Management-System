@@ -145,6 +145,14 @@ async function main() {
 
 const DEMO_TENANT_PAN = '111111111';
 
+const ADDITIONAL_DEMO_STUDENTS = [
+  { slug: 'aarav', firstName: 'Aarav', lastName: 'Sharma' },
+  { slug: 'saanvi', firstName: 'Saanvi', lastName: 'Gurung' },
+  { slug: 'rohan', firstName: 'Rohan', lastName: 'Thapa' },
+  { slug: 'priya', firstName: 'Priya', lastName: 'Rai' },
+  { slug: 'nischal', firstName: 'Nischal', lastName: 'Khadka' },
+] as const;
+
 interface DemoUserSpec {
   email: string;
   firstName: string;
@@ -326,6 +334,31 @@ async function seedDemoPortalData(tenantId: string, branchId: string): Promise<v
     update: { teacherId: teacher.id },
     create: { id: 'demo-class-8-a', courseId: course.id, branchId, teacherId: teacher.id, name: 'Grade 8 · Section A', schedule: [{ day: 'Sunday', start: '09:00', end: '10:00', subject: 'Mathematics' }, { day: 'Monday', start: '10:00', end: '11:00', subject: 'Science' }, { day: 'Wednesday', start: '11:00', end: '12:00', subject: 'English' }] },
   });
+  const demoSchedule = [
+    { day: 'Sun', startTime: '09:00', endTime: '10:00', room: 'Room 8A' },
+    { day: 'Mon', startTime: '10:00', endTime: '11:00', room: 'Science Lab' },
+    { day: 'Tue', startTime: '09:00', endTime: '10:00', room: 'Room 8A' },
+    { day: 'Wed', startTime: '11:00', endTime: '12:00', room: 'Room 8A' },
+    { day: 'Thu', startTime: '10:00', endTime: '11:00', room: 'Computer Lab' },
+    { day: 'Fri', startTime: '09:00', endTime: '10:00', room: 'Room 8A' },
+  ];
+  const scheduledClass = await prisma.class.update({
+    where: { id: demoClass.id },
+    data: { schedule: demoSchedule, academicYear: '2083' },
+  });
+  await prisma.timetableVersion.upsert({
+    where: { classId_version: { classId: demoClass.id, version: 1 } },
+    update: { teacherId: teacher.id, schedule: demoSchedule, changedBy: tenantAdmin.id },
+    create: {
+      classId: demoClass.id,
+      version: 1,
+      academicYear: '2083',
+      teacherId: teacher.id,
+      name: scheduledClass.name,
+      schedule: demoSchedule,
+      changedBy: tenantAdmin.id,
+    },
+  });
   await prisma.enrollment.upsert({
     where: { id: 'demo-enrollment-anisha' }, update: { status: 'ACTIVE' },
     create: { id: 'demo-enrollment-anisha', studentId: student.id, courseId: course.id, classId: demoClass.id, status: 'ACTIVE', admissionDate: daysFromNow(-180) },
@@ -360,6 +393,259 @@ async function seedDemoPortalData(tenantId: string, branchId: string): Promise<v
     where: { homeworkId_studentId: { homeworkId: homework.id, studentId: student.id } }, update: {},
     create: { homeworkId: homework.id, studentId: student.id, submissionUrl: '/demo/homework/linear-equations.pdf', grade: '18/20', remarks: 'Clear working and strong accuracy.', gradedBy: teacher.id },
   });
+  await prisma.homework.update({
+    where: { id: homework.id },
+    data: { contentUrl: '/demo/homework/linear-equations-assignment.pdf' },
+  });
+
+  const studentRole = await prisma.role.findFirst({
+    where: { tenantId, name: 'Student' },
+  });
+  const parent = await prisma.parent.findUnique({
+    where: { userId: parentUser.id },
+  });
+  if (!studentRole || !parent) {
+    throw new Error('Demo Student role and Parent record must exist before student fixtures are seeded.');
+  }
+
+  const additionalStudentRecords: Array<{
+    slug: string;
+    userId: string;
+    studentId: string;
+  }> = [];
+  const demoPasswordHash = await bcrypt.hash('Password123', 10);
+  for (const [index, spec] of ADDITIONAL_DEMO_STUDENTS.entries()) {
+    const email = `${spec.slug}@demo.tms.local`;
+    const extraUser = await prisma.user.upsert({
+      where: { email },
+      update: { passwordHash: demoPasswordHash, status: 'ACTIVE' },
+      create: {
+        tenantId,
+        email,
+        name: `${spec.firstName} ${spec.lastName}`,
+        firstName: spec.firstName,
+        lastName: spec.lastName,
+        phone: `98000001${String(index + 1).padStart(2, '0')}`,
+        passwordHash: demoPasswordHash,
+        status: 'ACTIVE',
+      },
+    });
+    await prisma.account.upsert({
+      where: {
+        providerId_accountId: {
+          providerId: 'credential',
+          accountId: extraUser.id,
+        },
+      },
+      update: { password: demoPasswordHash },
+      create: {
+        accountId: extraUser.id,
+        providerId: 'credential',
+        userId: extraUser.id,
+        password: demoPasswordHash,
+      },
+    });
+    const roleAssignment = await prisma.userRole.findFirst({
+      where: { userId: extraUser.id, roleId: studentRole.id, branchId },
+    });
+    if (!roleAssignment) {
+      await prisma.userRole.create({
+        data: { userId: extraUser.id, roleId: studentRole.id, branchId },
+      });
+    }
+    const extraStudent = await prisma.student.upsert({
+      where: { userId: extraUser.id },
+      update: {
+        gradeId: grade.id,
+        admissionStatus: 'ACTIVE',
+        admissionNumber: `DEMO-2083-${String(index + 2).padStart(3, '0')}`,
+      },
+      create: {
+        userId: extraUser.id,
+        gradeId: grade.id,
+        admissionDate: daysFromNow(-170 + index),
+        emergencyContact: `98100001${String(index + 1).padStart(2, '0')}`,
+        admissionNumber: `DEMO-2083-${String(index + 2).padStart(3, '0')}`,
+        admissionStatus: 'ACTIVE',
+      },
+    });
+    await prisma.studentParent.upsert({
+      where: {
+        studentId_parentId: {
+          studentId: extraStudent.id,
+          parentId: parent.id,
+        },
+      },
+      update: {},
+      create: { studentId: extraStudent.id, parentId: parent.id },
+    });
+    await prisma.enrollment.upsert({
+      where: { id: `demo-enrollment-${spec.slug}` },
+      update: { status: 'ACTIVE', classId: demoClass.id },
+      create: {
+        id: `demo-enrollment-${spec.slug}`,
+        studentId: extraStudent.id,
+        courseId: course.id,
+        classId: demoClass.id,
+        status: 'ACTIVE',
+        admissionDate: daysFromNow(-170 + index),
+      },
+    });
+    await prisma.studentAttendance.upsert({
+      where: { id: `demo-attendance-${spec.slug}` },
+      update: {},
+      create: {
+        id: `demo-attendance-${spec.slug}`,
+        studentId: extraStudent.id,
+        classId: demoClass.id,
+        sessionId: pastSession.id,
+        date: daysFromNow(-1),
+        status: index === 3 ? 'ABSENT' : index === 4 ? 'EXCUSED' : 'PRESENT',
+        markedBy: teacher.id,
+      },
+    });
+    await prisma.homeworkSubmission.upsert({
+      where: {
+        homeworkId_studentId: {
+          homeworkId: homework.id,
+          studentId: extraStudent.id,
+        },
+      },
+      update: {},
+      create: {
+        homeworkId: homework.id,
+        studentId: extraStudent.id,
+        submissionUrl: `/demo/homework/${spec.slug}-linear-equations.pdf`,
+        grade: `${15 + index}/20`,
+        remarks: 'Demo submission ready for portal verification.',
+        gradedBy: teacher.id,
+      },
+    });
+    await prisma.studentScore.upsert({
+      where: { id: `demo-score-${spec.slug}` },
+      update: {},
+      create: {
+        id: `demo-score-${spec.slug}`,
+        tenantId,
+        studentId: extraStudent.id,
+        recordedBy: teacher.id,
+        subject: 'Mathematics',
+        assessment: 'Monthly Test',
+        score: 36 + index * 2,
+        maximum: 50,
+        passMarks: 20,
+        percentile: 72 + index * 4,
+        publishedAt: daysFromNow(-5),
+        testDate: daysFromNow(-7),
+      },
+    });
+    await prisma.studentRemark.upsert({
+      where: { id: `demo-remark-${spec.slug}` },
+      update: {},
+      create: {
+        id: `demo-remark-${spec.slug}`,
+        tenantId,
+        studentId: extraStudent.id,
+        authorId: teacher.id,
+        subject: 'Monthly learning update',
+        message: `${spec.firstName} is making steady progress and participates well in class.`,
+        signal: index > 2 ? 'IMPROVING' : 'STABLE',
+        parentVisible: true,
+      },
+    });
+    await prisma.parentMessage.upsert({
+      where: { id: `demo-message-${spec.slug}` },
+      update: {},
+      create: {
+        id: `demo-message-${spec.slug}`,
+        tenantId,
+        studentId: extraStudent.id,
+        senderId: teacher.id,
+        receiverId: parentUser.id,
+        messageText: `${spec.firstName} participated well today. Please review the posted Mathematics practice at home.`,
+      },
+    });
+    await prisma.appointment.upsert({
+      where: { id: `demo-appointment-${spec.slug}` },
+      update: {},
+      create: {
+        id: `demo-appointment-${spec.slug}`,
+        tenantId,
+        studentId: extraStudent.id,
+        requestedById: parentUser.id,
+        teacherId: teacher.id,
+        scheduledTime: daysFromNow(5 + index, 14),
+        status: index % 2 === 0 ? 'CONFIRMED' : 'REQUESTED',
+        participantIds: [teacher.id],
+        participantApprovals: index % 2 === 0
+          ? { [teacher.id]: 'APPROVED' }
+          : {},
+        remarks: `Review ${spec.firstName}'s academic progress and attendance.`,
+      },
+    });
+    await prisma.leave.upsert({
+      where: { id: `demo-leave-${spec.slug}` },
+      update: {},
+      create: {
+        id: `demo-leave-${spec.slug}`,
+        tenantId,
+        branchId,
+        userId: extraUser.id,
+        leaveType: index % 2 === 0 ? 'SICK' : 'CASUAL',
+        startDate: daysFromNow(10 + index),
+        endDate: daysFromNow(10 + index),
+        reason: 'Demo leave request for workflow verification.',
+        status: index < 2 ? 'PENDING' : 'APPROVED_LEVEL2',
+        approvedBy: index < 2 ? null : branchAdmin.id,
+      },
+    });
+    await prisma.invoice.upsert({
+      where: { id: `demo-invoice-${spec.slug}` },
+      update: {},
+      create: {
+        id: `demo-invoice-${spec.slug}`,
+        tenantId,
+        branchId,
+        studentId: extraStudent.id,
+        amount: 6500,
+        discount: index === 0 ? 500 : 0,
+        fine: index === 3 ? 250 : 0,
+        netPayable: index === 0 ? 6000 : index === 3 ? 6750 : 6500,
+        billingCycleStart: daysFromNow(-10),
+        billingCycleEnd: daysFromNow(20),
+        dueDate: daysFromNow(7),
+        status: index === 1 ? 'PAID' : 'UNPAID',
+        invoiceType: 'TUITION',
+        panNumberSnapshot: DEMO_TENANT_PAN,
+        vatRateSnapshot: 0,
+        transactionId: index === 1 ? 'DEMO-TXN-SAANVI-001' : null,
+        paymentDate: index === 1 ? daysFromNow(-2) : null,
+      },
+    });
+    await prisma.receptionCheckIn.upsert({
+      where: {
+        branchId_studentId_checkInDate: {
+          branchId,
+          studentId: extraStudent.id,
+          checkInDate: daysFromNow(0),
+        },
+      },
+      update: {},
+      create: {
+        tenantId,
+        branchId,
+        studentId: extraStudent.id,
+        checkedInById: reception.id,
+        checkInDate: daysFromNow(0),
+        checkedInAt: daysFromNow(0, 8),
+      },
+    });
+    additionalStudentRecords.push({
+      slug: spec.slug,
+      userId: extraUser.id,
+      studentId: extraStudent.id,
+    });
+  }
 
   const syllabus = await prisma.syllabus.upsert({
     where: { classId_subject: { classId: demoClass.id, subject: 'Mathematics' } }, update: {},
@@ -373,6 +659,10 @@ async function seedDemoPortalData(tenantId: string, branchId: string): Promise<v
   });
 
   await prisma.studentScore.upsert({ where: { id: 'demo-score-maths' }, update: {}, create: { id: 'demo-score-maths', tenantId, studentId: student.id, recordedBy: teacher.id, subject: 'Mathematics', assessment: 'Monthly Test', score: 42, maximum: 50, passMarks: 20, percentile: 86, publishedAt: daysFromNow(-5), testDate: daysFromNow(-7) } });
+  await prisma.studentScore.update({
+    where: { id: 'demo-score-maths' },
+    data: { resultSheetUrl: '/demo/results/monthly-mathematics.pdf' },
+  });
   await prisma.studentScore.upsert({ where: { id: 'demo-score-science' }, update: {}, create: { id: 'demo-score-science', tenantId, studentId: student.id, recordedBy: teacher.id, subject: 'Science', assessment: 'Practical Assessment', score: 45, maximum: 50, passMarks: 20, percentile: 91, publishedAt: daysFromNow(-3), testDate: daysFromNow(-6) } });
   await prisma.studentRemark.upsert({ where: { id: 'demo-remark-progress' }, update: {}, create: { id: 'demo-remark-progress', tenantId, studentId: student.id, authorId: teacher.id, subject: 'Learning progress', message: 'Anisha is participating confidently and has improved her calculation accuracy.', signal: 'IMPROVING', parentVisible: true } });
 
@@ -400,6 +690,22 @@ async function seedDemoPortalData(tenantId: string, branchId: string): Promise<v
   await prisma.academicEvent.upsert({ where: { id: 'demo-event-parent' }, update: {}, create: { id: 'demo-event-parent', tenantId, title: 'Parent–Teacher Interaction Day', description: 'Scheduled meetings will be held branch-wise.', eventType: 'EVENT', startDate: daysFromNow(14, 9), endDate: daysFromNow(14, 16) } });
   const template = await prisma.certificateTemplate.upsert({ where: { id: 'demo-certificate-template' }, update: {}, create: { id: 'demo-certificate-template', tenantId, name: 'Academic Excellence', type: 'ACHIEVEMENT', layoutConfig: { theme: 'formal', accent: 'navy', signatory: 'Principal' } } });
   await prisma.certificate.upsert({ where: { certificateId: 'TMS-DEMO-2026-001' }, update: {}, create: { certificateId: 'TMS-DEMO-2026-001', studentId: student.id, templateId: template.id, branchId, issuerId: tenantAdmin.id, issuedDate: daysFromNow(-30), pdfUrl: '/demo/certificates/TMS-DEMO-2026-001.pdf' } });
+  for (const [index, extra] of additionalStudentRecords.entries()) {
+    const certificateId = `TMS-DEMO-2026-${String(index + 2).padStart(3, '0')}`;
+    await prisma.certificate.upsert({
+      where: { certificateId },
+      update: {},
+      create: {
+        certificateId,
+        studentId: extra.studentId,
+        templateId: template.id,
+        branchId,
+        issuerId: tenantAdmin.id,
+        issuedDate: daysFromNow(-25 + index),
+        pdfUrl: `/demo/certificates/${certificateId}.pdf`,
+      },
+    });
+  }
   await prisma.receptionCheckIn.upsert({ where: { branchId_studentId_checkInDate: { branchId, studentId: student.id, checkInDate: daysFromNow(0) } }, update: {}, create: { tenantId, branchId, studentId: student.id, checkedInById: reception.id, checkInDate: daysFromNow(0), checkedInAt: daysFromNow(0, 8) } });
 
   await prisma.tenantRequest.upsert({ where: { id: 'demo-tenant-request-pending' }, update: {}, create: { id: 'demo-tenant-request-pending', name: 'Himalayan Learning Centre', email: 'hello@himalayan-demo.edu.np', phone: '9812345678', panNumber: '222222222', remarks: 'Two branches with approximately 420 students.', status: 'PENDING' } });

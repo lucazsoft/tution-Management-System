@@ -165,6 +165,21 @@ class _StudentAttendanceScreenState
                             .titleMedium
                             ?.copyWith(color: Colors.white),
                       ),
+                      const SizedBox(height: TmsSpace.sm),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(color: Colors.white54),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: state.absentRecords.isEmpty
+                            ? null
+                            : () => _showAbsentDays(context, state),
+                        icon: const Icon(Icons.event_busy_outlined, size: 18),
+                        label: Text(
+                          '${state.absentDayCount} absent day${state.absentDayCount == 1 ? '' : 's'}',
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -199,6 +214,67 @@ class _StudentAttendanceScreenState
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
+      ),
+    );
+  }
+
+  void _showAbsentDays(
+    BuildContext context,
+    StudentAttendanceState state,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: .62,
+          maxChildSize: .9,
+          builder: (context, controller) => ListView(
+            controller: controller,
+            padding: const EdgeInsets.fromLTRB(
+              TmsSpace.lg,
+              0,
+              TmsSpace.lg,
+              TmsSpace.lg,
+            ),
+            children: [
+              Text('Absent days',
+                  style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: TmsSpace.xs),
+              Text(
+                '${state.absentDayCount} day${state.absentDayCount == 1 ? '' : 's'} with ${state.absentRecords.length} recorded session${state.absentRecords.length == 1 ? '' : 's'}.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: StudentColors.mutedText,
+                    ),
+              ),
+              const SizedBox(height: TmsSpace.md),
+              for (final record in state.absentRecords) ...[
+                Card(
+                  child: ListTile(
+                    leading: Icon(
+                      record.isExcused
+                          ? Icons.event_available_rounded
+                          : Icons.event_busy_rounded,
+                      color: record.isExcused
+                          ? StudentColors.warning
+                          : StudentColors.error,
+                    ),
+                    title: Text('${record.date} · ${record.subject}'),
+                    subtitle: Text(
+                      record.leaveReason?.trim().isNotEmpty == true
+                          ? 'Reason: ${record.leaveReason}'
+                          : 'Reason: No approved leave reason recorded.',
+                    ),
+                    trailing: Text(record.state),
+                  ),
+                ),
+                const SizedBox(height: TmsSpace.sm),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

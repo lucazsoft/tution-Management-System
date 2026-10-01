@@ -19,15 +19,15 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import 'package:tms_mobile/core/adaptive/capabilities.dart';
 import 'package:tms_mobile/core/adaptive/widgets/adaptive_layout.dart';
-import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/features/branch_manager/models/branch_portal_dto.dart';
 import 'package:tms_mobile/features/branch_manager/viewmodels/branch_portal_viewmodel.dart';
 import 'package:tms_mobile/features/branch_manager/widgets/branch_record_states.dart';
+import 'package:tms_mobile/features/auth/widgets/account_actions.dart';
+import 'package:tms_mobile/features/student/widgets/nepal_date_time.dart';
 
 /// Branch-scoped operational dashboard for the API role `BRANCH_ADMIN`.
 class BranchHomeScreen extends ConsumerWidget {
@@ -60,19 +60,33 @@ class BranchHomeScreen extends ConsumerWidget {
             icon: const Icon(Icons.refresh_rounded),
             onPressed: state.isRefreshing ? null : vm.refresh,
           ),
-          IconButton(
-            tooltip: 'Change password',
-            icon: const Icon(Icons.key_rounded),
-            onPressed: () => context.push('/branch/change-password'),
-          ),
-          IconButton(
-            tooltip: 'Log out',
-            icon: const Icon(Icons.logout_rounded),
-            onPressed: () => ref.read(authProvider.notifier).logout(),
-          ),
         ],
       ),
       body: SafeArea(child: _body(context, state, vm)),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: 0,
+        onDestinationSelected: (index) {
+          if (index == 1) {
+            showAccountActionsSheet(
+              context,
+              accountRoute: '/branch/account',
+              passwordRoute: '/branch/change-password',
+            );
+          }
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard_rounded),
+            label: 'Dashboard',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.more_horiz_rounded),
+            selectedIcon: Icon(Icons.more_rounded),
+            label: 'More',
+          ),
+        ],
+      ),
     );
   }
 
@@ -125,6 +139,8 @@ class BranchHomeScreen extends ConsumerWidget {
                   message: state.error!,
                   onRetry: vm.refresh,
                 ),
+              const NepalDateTimeHeader(),
+              const SizedBox(height: 20),
               _BranchHeader(
                 dashboard: dashboard,
                 onSelect: vm.selectBranch,

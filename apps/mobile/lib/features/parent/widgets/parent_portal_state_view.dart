@@ -9,6 +9,7 @@ class ParentPortalStateView extends ConsumerWidget {
     super.key,
     required this.builder,
     this.padding = const EdgeInsets.all(20),
+    this.wrapInScrollView = true,
   });
 
   final Widget Function(
@@ -17,6 +18,7 @@ class ParentPortalStateView extends ConsumerWidget {
     ParentChild child,
   ) builder;
   final EdgeInsetsGeometry padding;
+  final bool wrapInScrollView;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -52,21 +54,27 @@ class ParentPortalStateView extends ConsumerWidget {
       );
     }
 
+    final content = builder(context, portal, child);
+    final errorCard = state.error == null
+        ? null
+        : Card(
+            color: Theme.of(context).colorScheme.errorContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(state.error!),
+            ),
+          );
+    if (!wrapInScrollView) {
+      return Column(children: [
+        if (errorCard != null) errorCard,
+        Expanded(child: content),
+      ]);
+    }
     return RefreshIndicator(
       onRefresh: notifier.refresh,
       child: ListView(
         padding: padding,
-        children: [
-          if (state.error != null)
-            Card(
-              color: Theme.of(context).colorScheme.errorContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(state.error!),
-              ),
-            ),
-          builder(context, portal, child),
-        ],
+        children: [if (errorCard != null) errorCard, content],
       ),
     );
   }

@@ -43,17 +43,15 @@ class MockAuthService {
     String role = 'TEACHER';
     if (normalizedEmail.contains('student')) {
       role = 'STUDENT';
-    } else if (normalizedEmail.contains('parent')) {
+    } else if (normalizedEmail.contains('parent'))
       role = 'PARENT';
-    } else if (normalizedEmail.contains('branch')) {
+    else if (normalizedEmail.contains('branch'))
       role = 'BRANCH_ADMIN';
-    } else if (normalizedEmail.contains('tenant')) {
+    else if (normalizedEmail.contains('tenant'))
       role = 'TENANT_ADMIN';
-    } else if (normalizedEmail.contains('super')) {
+    else if (normalizedEmail.contains('super'))
       role = 'SUPER_ADMIN';
-    } else if (normalizedEmail.contains('staff')) {
-      role = 'STAFF';
-    }
+    else if (normalizedEmail.contains('staff')) role = 'STAFF';
 
     return AuthResult(
         email: normalizedEmail, role: role, requiresTwoFactor: true);

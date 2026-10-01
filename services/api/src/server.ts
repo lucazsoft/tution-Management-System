@@ -86,18 +86,22 @@ app.use((req, res, next) => {
 });
 
 // Enable CORS and parsing of JSON payloads
-// Native mobile apps (Flutter) do not send an Origin header; allow those
-// while still restricting browser traffic to the configured web origin.
+const isDevelopment = process.env.NODE_ENV !== 'production';
+
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || origin === runtimeConfig.webOrigin) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
+    if (!origin) return callback(null, true);
+    if (isDevelopment && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      return callback(null, true);
     }
+    if (origin === runtimeConfig.webOrigin) {
+      return callback(null, true);
+    }
+    return callback(null, false);
   },
   credentials: true,
 }));
+
 
 // Health check endpoint (no tenant required)
 app.get('/api/health', (req: TenantRequest, res: Response) => {

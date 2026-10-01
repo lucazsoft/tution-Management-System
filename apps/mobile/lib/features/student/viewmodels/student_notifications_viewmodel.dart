@@ -11,8 +11,8 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tms_mobile/core/network/api_client.dart';
 import 'package:tms_mobile/core/network/api_exception.dart';
+import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/network/request_cancellation.dart';
 import 'package:tms_mobile/core/viewmodel/base_viewmodel.dart';
 
@@ -75,15 +75,9 @@ class StudentNotificationsViewModel
     extends BaseViewModel<StudentNotificationsState> {
   StudentNotificationsViewModel({
     StudentIdCalendarNotificationsRepository? repository,
-  })  : _repository = repository ?? _defaultRepository(),
+  })  : _repository = repository ?? StudentIdCalendarNotificationsRepository(),
         super(const StudentNotificationsState(isLoading: true)) {
     load();
-  }
-
-  static StudentIdCalendarNotificationsRepository _defaultRepository() {
-    return StudentIdCalendarNotificationsRepository(
-      dio: ApiClient.instance.isInitialized ? ApiClient.instance.dio : null,
-    );
   }
 
   final StudentIdCalendarNotificationsRepository _repository;
@@ -206,5 +200,6 @@ class StudentNotificationsViewModel
 
 final studentNotificationsViewModelProvider = StateNotifierProvider<
     StudentNotificationsViewModel, StudentNotificationsState>((ref) {
+  ref.watch(authProvider.select((state) => state.user?.id));
   return StudentNotificationsViewModel();
 });

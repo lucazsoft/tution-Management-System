@@ -17,7 +17,6 @@ class PushMessage {
 abstract interface class PushMessagingGateway {
   Future<void> requestPermission();
   Future<String?> getToken();
-  Future<void> deleteToken();
   Stream<String> get onTokenRefresh;
   Stream<PushMessage> get onMessage;
   Stream<PushMessage> get onMessageOpenedApp;
@@ -119,27 +118,11 @@ class PushNotificationService {
 
   Future<void> unregisterForLogout() async {
     final token = _currentToken;
+    if (token == null || token.isEmpty) return;
     try {
-      if (token != null && token.isNotEmpty) {
-        await _api.unregister(token);
-      }
+      await _api.unregister(token);
     } finally {
-      await invalidateLocalSession();
-    }
-  }
-
-  /// Clears device-local push state when the server session is already gone.
-  /// No authenticated API call is attempted because a 401 interceptor may
-  /// have removed the session cookie before this cleanup runs.
-  Future<void> invalidateLocalSession() async {
-    _currentToken = null;
-    try {
-      // Invalidating the FCM registration prevents the OS from displaying
-      // notification payloads after logout, even when the Dart process is not
-      // running and the authenticated unregister request cannot be made.
-      await _messaging.deleteToken();
-    } finally {
-      await dispose();
+      _currentToken = null;
     }
   }
 
@@ -177,14 +160,6 @@ class PushNotifications {
       await _service?.initialize(authenticated: true);
     } catch (_) {
       // Push setup must never block an otherwise valid authenticated session.
-    }
-  }
-
-  static Future<void> invalidateLocalSession() async {
-    try {
-      await _service?.invalidateLocalSession();
-    } catch (_) {
-      // Forced logout must complete even if local listener cleanup fails.
     }
   }
 

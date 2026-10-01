@@ -624,6 +624,7 @@ model Appointment {
   teacher               User              @relation("AppointmentTeacher", fields: [teacherId], references: [id])
   scheduledTime         DateTime
   alternativeTime       DateTime?
+  proposedById          String?
   originalAppointmentId String?
   status                AppointmentStatus @default(REQUESTED)
   isGroup               Boolean           @default(false)

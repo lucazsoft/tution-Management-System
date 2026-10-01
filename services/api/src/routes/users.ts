@@ -216,14 +216,55 @@ router.get('/me/account', authMiddleware, async (req: TenantRequest, res: Respon
     securityMobile: true, securityMobileVerifiedAt: true, twoFactorEnabled: true, tenant: { select: { name: true } },
   } });
   if (!account) return res.status(404).json({ error: 'Account not found.' });
-  const { securityMobile, securityMobileVerifiedAt, userRoles, ...profile } = account;
+  const { securityMobile, securityMobileVerifiedAt, userRoles, image, ...profile } = account;
   const mobileVerified = Boolean(trustedSecurityMobile(account));
   const roles = userRoles.filter(assignment => !assignment.branch || assignment.branch.tenantId === req.tenantId)
     .map(assignment => ({ id: assignment.id, name: assignment.role.name, branchId: assignment.branchId, branchName: assignment.branch?.name ?? null }));
   const tenantAdmin = isTenantAdmin(req.user!);
-  return res.json({ ...profile, roles, mobileVerified, mobileVerifiedAt: mobileVerified ? securityMobileVerifiedAt : null,
+  return res.json({ ...profile, photoUrl: await privateImageUrl(image), roles, mobileVerified, mobileVerifiedAt: mobileVerified ? securityMobileVerifiedAt : null,
     capabilities: { manageInstitution: tenantAdmin, manageSecurityMobile: true } });
   } catch { return res.status(500).json({ error: 'Unable to load or save your account. Please try again.' }); }
+});
+
+// Authenticated users may update only their own portrait. Student portraits
+// remain attached to the official enrollment branch and use the same image
+// validation/private storage pipeline as administrator-uploaded portraits.
+router.put('/me/account/photo', authMiddleware, async (req: TenantRequest, res: Response) => {
+  const shape = parseStrictKeys(req.body, ['image']);
+  if (!shape.success) return res.status(400).json({ error: shape.error });
+  try {
+    const student = await prisma.student.findFirst({
+      where: { userId: req.user!.id, user: { tenantId: req.tenantId! } },
+      select: {
+        id: true,
+        userId: true,
+        enrollments: {
+          where: { status: { in: ['ACTIVE', 'BLOCKED'] } },
+          select: { class: { select: { branchId: true } } },
+          take: 1,
+        },
+      },
+    });
+    const branchId = student?.enrollments[0]?.class.branchId;
+    if (!student || !branchId) return res.status(404).json({ error: 'Active student enrollment not found.' });
+    const normalized = await normalizeStudentPhoto(shape.data.image);
+    const mediaId = crypto.randomUUID();
+    const reference = await storePrivateBytes(
+      { bytes: normalized.bytes, contentType: normalized.contentType },
+      { tenantId: req.tenantId!, branchId, category: 'student-photos', id: student.id },
+    );
+    const objectKey = reference.slice(3);
+    await prisma.$transaction([
+      prisma.mediaObject.updateMany({ where: { tenantId: req.tenantId!, category: 'STUDENT_PHOTO', ownerType: 'STUDENT', ownerId: student.id, status: 'ACTIVE' }, data: { status: 'REPLACED', replacedAt: new Date() } }),
+      prisma.mediaObject.create({ data: { id: mediaId, tenantId: req.tenantId!, branchId, category: 'STUDENT_PHOTO', ownerType: 'STUDENT', ownerId: student.id, objectKey, mimeType: normalized.contentType, byteSize: normalized.bytes.length, sha256: crypto.createHash('sha256').update(normalized.bytes).digest('hex'), width: normalized.width, height: normalized.height, createdBy: req.user!.id } }),
+      prisma.user.update({ where: { id: student.userId }, data: { image: reference } }),
+    ]);
+    return res.json({ message: 'Profile photo updated.', photoUrl: await privateImageUrl(reference) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Profile photo storage is unavailable.';
+    const invalidImage = /photo|image|buffer/i.test(message);
+    return res.status(invalidImage ? 400 : 503).json({ error: message });
+  }
 });
 router.patch('/me/account', authMiddleware, async (req: TenantRequest, res: Response) => {
   try {
@@ -668,7 +709,7 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
             class: {
               include: {
                 assignedTeacher: { select: { firstName: true, lastName: true } },
-                branch: { select: { name: true, address: true } },
+                branch: { select: { id: true, name: true, address: true } },
                 syllabi: { include: { chapters: { orderBy: { position: 'asc' }, include: { topics: { orderBy: { position: 'asc' }, include: { logs: { orderBy: { logDate: 'desc' }, take: 20 } } } } }, dailyLogs: { orderBy: { logDate: 'desc' }, take: 20 } } },
               },
             },
@@ -828,6 +869,8 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
         maximum: ownGrade.maximum,
         classAverage: Math.round((classPercentage / 100) * ownGrade.maximum * 10) / 10,
         publishedLabel: `Graded ${formatDate(ownSubmission.updatedAt)}`,
+        testDate: ownSubmission.updatedAt.toISOString(),
+        academicYear: ownSubmission.updatedAt.getFullYear(),
         teacherRemarks: ownSubmission.remarks ?? undefined,
       }];
     });
@@ -839,6 +882,7 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
         id: row.id, subject: row.subject, assessment: row.assessment, score: normalized.score, maximum: normalized.maximum,
         passMarks: row.passMarks == null ? undefined : Number(row.passMarks), percentile: row.percentile == null ? undefined : Number(row.percentile),
         resultSheetUrl: row.resultSheetUrl ?? undefined, classAverage: classAverageOnScale(normalized, classAverages), publishedLabel: `Shared ${formatDate(row.publishedAt!)}`,
+        testDate: row.testDate.toISOString(), academicYear: row.testDate.getFullYear(),
       }}),
       ...homeworkResults,
     ];
@@ -864,13 +908,21 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
       history,
     }));
 
-    const attendance = student.studentAttendance.map((record) => ({
-      id: record.id,
-      date: formatDate(record.date),
-      subject: record.class.course.name,
-      session: record.class.name,
-      state: attendanceLabel(record.status),
-    }));
+    const attendance = student.studentAttendance.map((record) => {
+      const approvedLeave = leaveRows.find((leave) =>
+        ['APPROVED_LEVEL1', 'APPROVED_LEVEL2'].includes(leave.status)
+        && leave.startDate <= record.date
+        && leave.endDate >= record.date
+      );
+      return {
+        id: record.id,
+        date: formatDate(record.date),
+        subject: record.class.course.name,
+        session: record.class.name,
+        state: attendanceLabel(record.status),
+        leaveReason: approvedLeave?.reason,
+      };
+    });
     const attendanceCounts = student.studentAttendance.reduce<Record<string, number>>((counts, record) => {
       counts[record.status] = (counts[record.status] ?? 0) + 1;
       return counts;
@@ -1025,6 +1077,7 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
         institution: student.user.tenant.name,
         grade: student.grade?.name ?? 'Grade not assigned',
         branch: assignedBranch?.name ?? 'Branch not assigned',
+        branchId: assignedBranch?.id ?? '',
         branchAddress: assignedBranch?.address,
         rollNumber: student.admissionNumber ?? student.id.slice(0, 6).toUpperCase(),
         enrollmentId: student.id,
@@ -1049,6 +1102,13 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
       invoices,
       events,
       certificates,
+      leaves: leaveRows.map((leave) => ({
+        id: leave.id,
+        dates: `${formatDate(leave.startDate)}${leave.startDate.getTime() === leave.endDate.getTime() ? '' : ` – ${formatDate(leave.endDate)}`}`,
+        reason: leave.reason.includes(':') ? leave.reason.split(':')[0].trim() : leave.reason,
+        state: leave.status === 'APPROVED_LEVEL2' ? 'Approved' : leave.status === 'REJECTED' ? 'Rejected' : 'Pending',
+        detail: leave.remarks || leave.reason,
+      })),
       notifications,
     });
   } catch (error: any) {

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/features/tenant_admin/models/tenant_admin_dashboard.dart';
 import 'package:tms_mobile/features/tenant_admin/widgets/tenant_admin_state_view.dart';
+import 'package:tms_mobile/features/auth/widgets/account_actions.dart';
+import 'package:tms_mobile/features/student/widgets/nepal_date_time.dart';
+import 'package:go_router/go_router.dart';
 
 /// Tenant-wide operational dashboard backed by
 /// `GET /api/tenant-admin/dashboard`.
@@ -30,14 +31,9 @@ class TenantAdminHomeScreen extends ConsumerWidget {
         title: const Text('Tenant operations'),
         actions: [
           IconButton(
-            tooltip: 'Change password',
-            onPressed: () => context.push('/tenant/change-password'),
-            icon: const Icon(Icons.key_rounded),
-          ),
-          IconButton(
-            tooltip: 'Log out',
-            onPressed: () => ref.read(authProvider.notifier).logout(),
-            icon: const Icon(Icons.logout_rounded),
+            tooltip: 'Manage notice board',
+            onPressed: () => context.push('/tenant/notices'),
+            icon: const Icon(Icons.campaign_outlined),
           ),
         ],
       ),
@@ -56,6 +52,8 @@ class TenantAdminHomeScreen extends ConsumerWidget {
                   builder: (context, dashboard) => Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      const NepalDateTimeHeader(),
+                      const SizedBox(height: _sectionSpacing),
                       Text(
                         'Tenant-wide overview',
                         style: Theme.of(context).textTheme.headlineSmall,
@@ -103,6 +101,26 @@ class TenantAdminHomeScreen extends ConsumerWidget {
             );
           },
         ),
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: 0,
+        onDestinationSelected: (index) {
+          if (index == 1) {
+            showAccountActionsSheet(context,
+                accountRoute: '/tenant/account',
+                passwordRoute: '/tenant/change-password');
+          }
+        },
+        destinations: const [
+          NavigationDestination(
+              icon: Icon(Icons.dashboard_outlined),
+              selectedIcon: Icon(Icons.dashboard_rounded),
+              label: 'Overview'),
+          NavigationDestination(
+              icon: Icon(Icons.more_horiz_rounded),
+              selectedIcon: Icon(Icons.more_rounded),
+              label: 'More'),
+        ],
       ),
     );
   }

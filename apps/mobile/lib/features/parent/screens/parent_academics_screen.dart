@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tms_mobile/core/providers/feature_flags_provider.dart';
 import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/features/parent/models/parent_portal.dart';
 import 'package:tms_mobile/features/parent/viewmodels/parent_portal_viewmodel.dart';
 import 'package:tms_mobile/features/parent/widgets/child_switcher_bar.dart';
+import 'package:tms_mobile/features/parent/widgets/parent_navigation.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_portal_state_view.dart';
 import 'package:tms_mobile/shared/models/app_models.dart';
 import 'package:tms_mobile/shared/widgets/status_chip.dart';
 
 class ParentAcademicsScreen extends ConsumerStatefulWidget {
-  const ParentAcademicsScreen({super.key});
+  const ParentAcademicsScreen({super.key, this.initialTab = 0});
+
+  final int initialTab;
 
   static const String routeName = '/parent/academics';
 
@@ -28,7 +30,14 @@ class _ParentAcademicsScreenState extends ConsumerState<ParentAcademicsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: 3,
+      initialIndex: widget.initialTab.clamp(0, 2),
+      vsync: this,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(parentPortalProvider.notifier).refresh();
+    });
   }
 
   @override
@@ -46,12 +55,8 @@ class _ParentAcademicsScreenState extends ConsumerState<ParentAcademicsScreen>
     if (!enabled) return _featureDisabled(context, childName);
 
     return Scaffold(
+      drawer: ParentNavigation.drawer(context),
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.pop(),
-          tooltip: 'Back',
-        ),
         title: Text(
           '$childName\'s Academics',
           style:
@@ -61,10 +66,12 @@ class _ParentAcademicsScreenState extends ConsumerState<ParentAcademicsScreen>
           controller: _tabController,
           tabs: const [
             Tab(icon: Icon(Icons.show_chart_rounded), text: 'Progress'),
+            Tab(icon: Icon(Icons.assignment_outlined), text: 'Homework'),
             Tab(icon: Icon(Icons.event_note_rounded), text: 'Events'),
           ],
         ),
       ),
+      bottomNavigationBar: const ParentNavigationBar(selectedIndex: 1),
       body: SafeArea(
         child: ParentPortalStateView(
           padding: EdgeInsets.zero,
@@ -77,6 +84,7 @@ class _ParentAcademicsScreenState extends ConsumerState<ParentAcademicsScreen>
               controller: _tabController,
               children: [
                 _ProgressTab(portal: portal, child: child),
+                _HomeworkTab(homework: portal.homework),
                 _EventsTab(portal: portal),
               ],
             ),
@@ -87,13 +95,11 @@ class _ParentAcademicsScreenState extends ConsumerState<ParentAcademicsScreen>
   }
 
   Widget _featureDisabled(BuildContext context, String childName) => Scaffold(
+        drawer: ParentNavigation.drawer(context),
         appBar: AppBar(
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_rounded),
-            onPressed: () => context.pop(),
-          ),
           title: const Text('Academics'),
         ),
+        bottomNavigationBar: const ParentNavigationBar(selectedIndex: 1),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
@@ -103,6 +109,48 @@ class _ParentAcademicsScreenState extends ConsumerState<ParentAcademicsScreen>
             ),
           ),
         ),
+      );
+}
+
+class _HomeworkTab extends StatelessWidget {
+  const _HomeworkTab({required this.homework});
+
+  final List<ParentHomeworkItem> homework;
+
+  @override
+  Widget build(BuildContext context) => ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const ChildSwitcherBar(),
+          const SizedBox(height: 16),
+          Text('Homework', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 12),
+          if (homework.isEmpty)
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text('No homework has been assigned.'),
+              ),
+            )
+          else
+            for (final item in homework)
+              Card(
+                child: ListTile(
+                  leading: Icon(
+                    item.completed
+                        ? Icons.task_alt_rounded
+                        : Icons.assignment_outlined,
+                    color: item.completed ? kColorSuccess : kColorPrimary,
+                  ),
+                  title: Text(item.title),
+                  subtitle: Text(
+                    '${item.subject} · ${item.teacher}\nDue ${item.dueDate}',
+                  ),
+                  isThreeLine: true,
+                  trailing: Text(item.completed ? 'Completed' : 'Due'),
+                ),
+              ),
+        ],
       );
 }
 

@@ -35,6 +35,29 @@ class StudentAcademicsRepository {
   static const String performancePath = '/api/performance/student';
   static const String homeworkPath = '/api/homework';
 
+  /// Persists a student's completion by creating the same submission record
+  /// teachers and linked parents already read. Identity and active enrollment
+  /// are revalidated by the server.
+  Future<void> markHomeworkDone({
+    required String homeworkId,
+    required String studentId,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      await _dio.post<dynamic>(
+        '$homeworkPath/submit',
+        data: {
+          'homeworkId': homeworkId,
+          'studentId': studentId,
+          'remarks': 'Marked done by the student.',
+        },
+        cancelToken: cancelToken,
+      );
+    } on DioException catch (e) {
+      throw ApiException.from(e);
+    }
+  }
+
   /// Loads the whole academics snapshot for the signed-in student.
   Future<StudentPortalSnapshot> fetchPortal({CancelToken? cancelToken}) async {
     try {

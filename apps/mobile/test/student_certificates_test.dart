@@ -117,9 +117,12 @@ void main() {
       final dir = await Directory.systemTemp.createTemp('cert-test');
       addTearDown(() => dir.delete(recursive: true));
       final repo =
-          StudentCertificatesRepository(dio: stubCertDio(), saveDir: dir);
+          StudentCertificatesRepository(
+            dio: stubCertDio(),
+            saveDirectoryPath: dir.path,
+          );
 
-      final file = await repo.downloadCertificate(
+      final result = await repo.downloadCertificate(
         const ApiStudentCertificate(
           id: 'CERT-2026-0192',
           title: 'Course Completion Certificate',
@@ -129,6 +132,7 @@ void main() {
         ),
       );
 
+      final file = File(result.path);
       expect(await file.exists(), isTrue);
       expect((await file.readAsBytes()).length, greaterThan(0));
     });
@@ -137,7 +141,10 @@ void main() {
       final dir = await Directory.systemTemp.createTemp('cert-test');
       addTearDown(() => dir.delete(recursive: true));
       final repo =
-          StudentCertificatesRepository(dio: stubCertDio(), saveDir: dir);
+          StudentCertificatesRepository(
+            dio: stubCertDio(),
+            saveDirectoryPath: dir.path,
+          );
       try {
         await repo.downloadCertificate(
           const ApiStudentCertificate(
@@ -158,9 +165,12 @@ void main() {
       final dir = await Directory.systemTemp.createTemp('cert-test');
       addTearDown(() => dir.delete(recursive: true));
       final repo =
-          StudentCertificatesRepository(dio: stubDownloadDio(), saveDir: dir);
+          StudentCertificatesRepository(
+            dio: stubDownloadDio(),
+            saveDirectoryPath: dir.path,
+          );
 
-      final file = await repo.downloadCertificate(
+      final result = await repo.downloadCertificate(
         const ApiStudentCertificate(
           id: 'CERT-2026-0192',
           title: 't',
@@ -170,21 +180,24 @@ void main() {
         ),
       );
 
-      expect(file.path.startsWith(dir.path), isTrue);
-      final name = file.path.split(Platform.pathSeparator).last;
+      expect(result.path.startsWith(dir.path), isTrue);
+      final name = result.path.split(Platform.pathSeparator).last;
       expect(name.contains('/'), isFalse);
       expect(name.contains('\\'), isFalse);
       expect(name.endsWith('.pdf'), isTrue);
-      expect(await file.exists(), isTrue);
+      expect(await File(result.path).exists(), isTrue);
     });
 
     test('non-pdf extension is coerced to pdf', () async {
       final dir = await Directory.systemTemp.createTemp('cert-test');
       addTearDown(() => dir.delete(recursive: true));
       final repo =
-          StudentCertificatesRepository(dio: stubDownloadDio(), saveDir: dir);
+          StudentCertificatesRepository(
+            dio: stubDownloadDio(),
+            saveDirectoryPath: dir.path,
+          );
 
-      final file = await repo.downloadCertificate(
+      final result = await repo.downloadCertificate(
         const ApiStudentCertificate(
           id: 'CERT-2026-0192',
           title: 't',
@@ -194,8 +207,8 @@ void main() {
         ),
       );
 
-      expect(file.path.endsWith('.pdf'), isTrue);
-      expect(file.path.contains('evil.exe'), isFalse);
+      expect(result.path.endsWith('.pdf'), isTrue);
+      expect(result.path.contains('evil.exe'), isFalse);
     });
 
     test('oversize download throws and writes nothing', () async {
@@ -205,7 +218,7 @@ void main() {
         dio: stubDownloadDio(
           bytes: List<int>.filled(kCertificateMaxBytes + 1, 0),
         ),
-        saveDir: dir,
+        saveDirectoryPath: dir.path,
       );
 
       await expectLater(
@@ -232,7 +245,7 @@ void main() {
             'content-type': ['text/html'],
           },
         ),
-        saveDir: dir,
+        saveDirectoryPath: dir.path,
       );
 
       await expectLater(
@@ -268,7 +281,10 @@ void main() {
       addTearDown(() => dir.delete(recursive: true));
       final vm = StudentCertificatesViewModel(
         repository:
-            StudentCertificatesRepository(dio: stubCertDio(), saveDir: dir),
+            StudentCertificatesRepository(
+              dio: stubCertDio(),
+              saveDirectoryPath: dir.path,
+            ),
       );
       addTearDown(vm.dispose);
       await waitFor(() => !vm.state.isLoading);
@@ -278,7 +294,7 @@ void main() {
 
       await vm.download(vm.state.certificates.first);
       expect(vm.state.downloadingId, isNull);
-      expect(vm.state.savedFile, isNotNull);
+      expect(vm.state.savedPath, isNotNull);
       expect(vm.state.savedForId, 'CERT-2026-0192');
     });
 

@@ -10,6 +10,7 @@ import 'package:tms_mobile/features/teacher/data/teacher_portal_repository.dart'
 import 'package:tms_mobile/features/teacher/models/teacher_portal_dto.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_leave_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_home_screen.dart';
+import 'package:tms_mobile/features/teacher/screens/teacher_learning_screens.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_timetable_screen.dart';
 import 'package:tms_mobile/features/teacher/viewmodels/geo_attendance_viewmodel.dart';
 import 'package:tms_mobile/features/teacher/viewmodels/teacher_leave_viewmodel.dart';
@@ -92,6 +93,45 @@ Map<String, dynamic> workspaceJson({
               'status': 'EXCUSED',
             },
           ],
+          'syllabi': [
+            {
+              'id': 'syllabus-1',
+              'subject': 'Mathematics',
+              'chapters': [
+                {
+                  'id': 'chapter-1',
+                  'title': 'Algebra',
+                  'status': 'IN_PROGRESS',
+                  'topics': [
+                    {
+                      'id': 'topic-1',
+                      'title': 'Linear equations',
+                      'status': 'IN_PROGRESS',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          'homework': [
+            {
+              'id': 'homework-1',
+              'subject': 'Mathematics',
+              'title': 'Exercise 4',
+              'description': 'Complete all questions.',
+              'deadline': '2026-09-12T00:00:00.000Z',
+              'createdAt': '2026-09-06T00:00:00.000Z',
+            },
+          ],
+        },
+      ],
+      'resultDefinitions': [
+        {
+          'id': 'result-definition-1',
+          'classId': 'class-1',
+          'title': 'First Term',
+          'subject': 'Mathematics',
+          'testDate': '2026-09-10T00:00:00.000Z',
         },
       ],
       'leaves': leaves ??
@@ -270,6 +310,12 @@ void main() {
       expect(workspace.pendingUpdates.single.sessionId, 'session-1');
       expect(workspace.pendingUpdates.single.courseName, 'Mathematics');
       expect(workspace.leaves.single.isPending, isTrue);
+      expect(workspace.classes.single.homework.single.title, 'Exercise 4');
+      expect(
+          workspace.classes.single.syllabi.single.chapters.single.topics.single
+              .title,
+          'Linear equations');
+      expect(workspace.resultDefinitions.single.title, 'First Term');
     });
 
     test('submits the exact leave request body and parses returned status',
@@ -492,6 +538,14 @@ void main() {
       expect(find.text('Bikash Lama'), findsOneWidget);
       expect(find.text('Excused leave recorded'), findsOneWidget);
       await tester.scrollUntilVisible(find.text('Save attendance'), 300);
+      expect(
+        tester.getTopLeft(find.text('Students')).dy,
+        lessThan(tester.getTopLeft(find.text('Save attendance')).dy),
+      );
+      expect(
+        tester.getTopLeft(find.text('Students')).dy,
+        greaterThan(tester.getTopLeft(find.text('Bikash Lama')).dy),
+      );
       await tester.tap(find.text('Save attendance'));
       await tester.pumpAndSettle();
 
@@ -516,7 +570,7 @@ void main() {
         repository,
       );
 
-      await tester.tap(find.byType(NavigationDestination).at(2));
+      await tester.tap(find.byType(NavigationDestination).at(3));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Grade 8 - A'));
       await tester.pumpAndSettle();
@@ -536,13 +590,11 @@ void main() {
       expect(find.text('EXCUSED'), findsOneWidget);
     });
 
-    testWidgets('submits a pending daily update and refreshes the workspace',
+    testWidgets('home focuses on clock, teaching actions, and today timetable',
         (tester) async {
-      final before = TeacherWorkspace.fromJson(workspaceJson());
-      final after = TeacherWorkspace.fromJson(
-        workspaceJson(pendingUpdates: []),
+      final repository = _FakeRepository(
+        workspaces: [TeacherWorkspace.fromJson(workspaceJson())],
       );
-      final repository = _FakeRepository(workspaces: [before, after]);
       await tester.binding.setSurfaceSize(const Size(900, 1000));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await _pumpWithRepository(
@@ -551,28 +603,61 @@ void main() {
         repository,
       );
 
-      expect(find.text('Mathematics - Grade 8 - A'), findsOneWidget);
-      await tester.tap(find.text('Submit daily update'));
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byType(TextField),
-        'Covered linear equations and assigned exercise 4.',
-      );
-      await tester.tap(find.text('Submit update'));
-      await tester.pumpAndSettle();
+      expect(find.text('Clocked in'), findsOneWidget);
+      expect(find.text('Attendance'), findsWidgets);
+      expect(find.text('Update syllabus'), findsOneWidget);
+      expect(find.text('Assign homework'), findsOneWidget);
+      expect(find.text('Enter results'), findsOneWidget);
+      expect(find.text('Today\'s timetable'), findsOneWidget);
+      expect(find.text('Full timetable'), findsOneWidget);
+      expect(find.text('Pending daily updates: 1'), findsNothing);
+    });
 
-      expect(repository.sessionUpdateRequest, {
-        'sessionId': 'session-1',
-        'updateContent': 'Covered linear equations and assigned exercise 4.',
-      });
-      expect(repository.fetchCount, 2);
-      expect(find.text('Pending daily updates: 0'), findsOneWidget);
+    testWidgets('learning workflows use workspace classes and records',
+        (tester) async {
+      final repository = _FakeRepository(
+        workspaces: [TeacherWorkspace.fromJson(workspaceJson())],
+      );
+      await tester.binding.setSurfaceSize(const Size(430, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await _pumpWithRepository(
+          tester, const TeacherHomeworkScreen(), repository);
+      expect(find.text('Assign homework'), findsWidgets);
+      expect(find.text('Recent homework'), findsOneWidget);
+      expect(find.text('Exercise 4'), findsOneWidget);
+
+      await _pumpWithRepository(
+          tester, const TeacherSyllabusScreen(), repository);
+      expect(find.text('Edit plan'), findsOneWidget);
+      expect(find.text('Algebra'), findsOneWidget);
+      await tester.tap(find.text('Algebra'));
+      await tester.pumpAndSettle();
+      expect(find.text('Linear equations'), findsOneWidget);
+      expect(find.text('Add topic'), findsOneWidget);
+
+      await _pumpWithRepository(
+          tester, const TeacherResultsScreen(), repository);
+      expect(find.textContaining('First Term'), findsOneWidget);
+      expect(find.text('Aarya Rai'), findsOneWidget);
+      expect(find.text('Add paper'), findsWidgets);
+      expect(find.text('Publish results'), findsOneWidget);
     });
 
     testWidgets('renders workspace daily and weekly timetable records',
         (tester) async {
+      final body = workspaceJson();
+      final classes = body['classes']! as List<dynamic>;
+      final classBody = classes.single as Map<String, dynamic>;
+      final schedule = classBody['schedule']! as List<dynamic>;
+      schedule.add({
+        'day': 'Sun',
+        'startTime': '13:00',
+        'endTime': '14:00',
+        'subject': 'Geometry workshop',
+      });
       final repository = _FakeRepository(
-        workspaces: [TeacherWorkspace.fromJson(workspaceJson())],
+        workspaces: [TeacherWorkspace.fromJson(body)],
       );
       await _pumpWithRepository(
         tester,
@@ -582,16 +667,15 @@ void main() {
 
       await tester.tap(find.text('Today'));
       await tester.pumpAndSettle();
-      expect(find.text('Mathematics'), findsOneWidget);
-      expect(find.text('Sunday 09:00-10:00'), findsOneWidget);
+      expect(find.text('Algebra'), findsOneWidget);
+      expect(find.text('09:00-10:00'), findsOneWidget);
 
       await tester.tap(find.text('Sun'));
       await tester.pumpAndSettle();
-      expect(find.text('Grade 8 - A • Baneshwor'), findsOneWidget);
-      expect(
-        find.text('Sun 09:00-10:00, Wednesday 11:00-12:00'),
-        findsOneWidget,
-      );
+      expect(find.text('Grade 8 - A • Baneshwor'), findsNWidgets(2));
+      expect(find.text('09:00-10:00'), findsOneWidget);
+      expect(find.text('13:00-14:00'), findsOneWidget);
+      expect(find.text('Geometry workshop'), findsOneWidget);
 
       await tester.tap(find.text('Mon'));
       await tester.pumpAndSettle();

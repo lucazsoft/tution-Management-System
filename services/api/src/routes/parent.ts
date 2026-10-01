@@ -14,6 +14,10 @@ const router = Router();
 const formatDate = (date: Date) => date.toLocaleDateString('en-GB', {
   day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kathmandu',
 });
+const formatDateTime = (date: Date) => date.toLocaleString('en-GB', {
+  day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
+  timeZone: 'Asia/Kathmandu',
+});
 const money = (value: number) => `NPR ${value.toLocaleString('en-NP')}`;
 const attendanceLabel = (status: string) => status === 'EXCUSED' ? 'Absent (Excused)' : status === 'PRESENT' ? 'Present' : 'Absent';
 const invoiceState = (status: string, dueDate: Date) => {
@@ -132,7 +136,11 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
     const student = link.student;
     const child = children.find((item) => item.id === student.id)!;
     const academicEnrollment = student.enrollments.find((enrollment) => !enrollment.course.isExtraActivity);
-    const currentEnrollments = student.enrollments.filter((enrollment) => !enrollment.validUntil || enrollment.validUntil.getTime() > Date.now());
+    // `student.enrollments` is already restricted to ACTIVE/BLOCKED records.
+    // Use the same class scope as the student portal so parents never lose
+    // homework merely because a legacy enrollment omitted or passed its
+    // optional validity date while remaining administratively active.
+    const currentEnrollments = student.enrollments;
     const billing = studentBillingSummary(student.grade, currentEnrollments);
     const enrollmentAccess = {
       status: !academicEnrollment?.validFrom || !academicEnrollment.validUntil
@@ -143,7 +151,7 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
     };
     const classIds = currentEnrollments.map((enrollment) => enrollment.classId);
     const branchIds = [...new Set(currentEnrollments.map((enrollment) => enrollment.class.branchId))];
-    const [events, leaves, appointments, messages, remarks, scores, tenant, branchAdmins] = await Promise.all([
+    const [events, leaves, appointments, messages, remarks, scores, tenant, branchAdmins, branchStaff, homeworkRows] = await Promise.all([
       prisma.academicEvent.findMany({
         where: await calendarAccessWhere(req.user!, req.tenantId!, { studentId: student.id, viewerRole: 'Parent' }),
         orderBy: { startDate: 'asc' },
@@ -167,6 +175,22 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
       prisma.studentScore.findMany({ where: { tenantId: req.tenantId!, studentId: student.id, publishedAt: { not: null } }, orderBy: { testDate: 'asc' } }),
       prisma.tenant.findUnique({ where: { id: req.tenantId! }, select: { appointmentWindowHours: true, name: true } }),
       prisma.user.findMany({ where: { tenantId: req.tenantId!, status: 'ACTIVE', userRoles: { some: { branchId: { in: branchIds }, role: { name: 'Branch Admin' } } } }, select: { id: true, firstName: true, lastName: true } }),
+      prisma.user.findMany({
+        where: {
+          tenantId: req.tenantId!,
+          status: 'ACTIVE',
+          userRoles: { some: { branchId: { in: branchIds }, role: { name: { in: ['Teacher', 'Accountant'] } } } },
+        },
+        select: { id: true, firstName: true, lastName: true, userRoles: { where: { branchId: { in: branchIds }, role: { name: { in: ['Teacher', 'Accountant'] } } }, include: { role: true } } },
+      }),
+      classIds.length ? prisma.homework.findMany({
+        where: { classId: { in: classIds } },
+        include: {
+          class: { include: { assignedTeacher: { select: { firstName: true, lastName: true } } } },
+          submissions: { where: { studentId: student.id }, select: { id: true } },
+        },
+        orderBy: { deadline: 'asc' },
+      }) : [],
     ]);
 
     const weekday = new Intl.DateTimeFormat('en', { weekday: 'long', timeZone: 'Asia/Kathmandu' }).format(new Date()).toLowerCase();
@@ -186,8 +210,31 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
         type: enrollment.course.type.split('_').map((part) => part[0] + part.slice(1).toLowerCase()).join('-'),
       }));
     }).sort((a, b) => a.time.localeCompare(b.time));
-    type ParentContact = { id: string; childId: string; name: string; subject: string; initials: string; role: 'TEACHER' | 'BRANCH_ADMIN' };
-    const contactEntries: Array<[string, ParentContact]> = [...currentEnrollments
+    const timetableSessions = currentEnrollments.flatMap((enrollment) => {
+      const schedule = normalizeSchedule(enrollment.class.schedule);
+      return schedule.map((slot, index) => ({
+        id: `${enrollment.classId}-${index}`,
+        childId: student.id,
+        day: String(slot.day || ''),
+        time: slot.startTime,
+        endTime: slot.endTime,
+        subject: enrollment.course.name,
+        teacher: enrollment.class.assignedTeacher ? `${enrollment.class.assignedTeacher.firstName} ${enrollment.class.assignedTeacher.lastName}` : 'Teacher not assigned',
+        room: slot.room || enrollment.class.name,
+        type: enrollment.course.type.split('_').map((part) => part[0] + part.slice(1).toLowerCase()).join('-'),
+      }));
+    });
+    type ParentContact = { id: string; childId: string; name: string; subject: string; initials: string; role: 'TEACHER' | 'BRANCH_ADMIN' | 'STAFF' };
+    const contactEntries: Array<[string, ParentContact]> = [
+      ...branchStaff.map((staff) => [staff.id, {
+        id: staff.id,
+        childId: student.id,
+        name: `${staff.firstName} ${staff.lastName}`,
+        subject: staff.userRoles.some((assignment) => assignment.role.name === 'Accountant') ? 'Accounts office' : 'Teaching staff',
+        initials: `${staff.firstName[0] ?? ''}${staff.lastName[0] ?? ''}`.toUpperCase(),
+        role: 'STAFF' as const,
+      }] as [string, ParentContact]),
+      ...currentEnrollments
       .filter((enrollment) => enrollment.class.assignedTeacher)
       .map((enrollment) => {
         const teacher = enrollment.class.assignedTeacher!;
@@ -203,7 +250,7 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
     const teachers = [...new Map<string, ParentContact>(contactEntries).values()];
     const attendance = student.studentAttendance.map((record) => ({
       id: record.id, childId: student.id, date: formatDate(record.date), subject: record.class.course.name,
-      session: record.class.name, state: attendanceLabel(record.status),
+      occurredAt: record.date.toISOString(), session: record.class.name, state: attendanceLabel(record.status),
     }));
     const invoices = student.invoices.map((invoice) => ({
       id: invoice.id, childId: student.id,
@@ -276,8 +323,9 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
       id: appointment.id, childId: student.id,
       teacher: isBranchAdminAppointment ? `Branch Admin · ${appointment.teacher.firstName} ${appointment.teacher.lastName}` : `${appointment.teacher.firstName} ${appointment.teacher.lastName}`,
       subject: appointment.remarks || 'Student meeting',
-      requestedTime: formatDate(appointment.scheduledTime),
-      alternativeTime: appointment.alternativeTime ? formatDate(appointment.alternativeTime) : undefined,
+      requestedTime: formatDateTime(appointment.scheduledTime),
+      alternativeTime: appointment.alternativeTime ? formatDateTime(appointment.alternativeTime) : undefined,
+      proposalFrom: appointment.proposedById === req.user!.id ? 'PARENT' : appointment.proposedById ? 'TEACHER' : undefined,
       responseMessage: appointment.responseRemarks || undefined,
       responseDescription: appointment.responseRemarks || undefined,
       state: appointmentState(appointment.status), group: appointment.isGroup,
@@ -300,6 +348,16 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
       id: event.id, childId: student.id, day: event.startDate.toLocaleDateString('en', { day: '2-digit', timeZone: 'Asia/Kathmandu' }),
       month: event.startDate.toLocaleDateString('en', { month: 'short', timeZone: 'Asia/Kathmandu' }).toUpperCase(),
       date: formatDate(event.startDate), title: event.title, kind: eventKind(event.eventType), details: event.description ?? '',
+    }));
+    const homework = homeworkRows.map((item) => ({
+      id: item.id,
+      subject: item.subject,
+      title: item.title,
+      teacher: item.class.assignedTeacher
+        ? `${item.class.assignedTeacher.firstName} ${item.class.assignedTeacher.lastName}`.trim()
+        : 'Teacher',
+      dueDate: formatDate(item.deadline),
+      completed: item.submissions.length > 0,
     }));
     const certificates = student.certificates.map((certificate) => {
       const snapshot = certificate.snapshot as { templateName?: string; gradeName?: string } | null;
@@ -401,6 +459,7 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
       billing,
       enrollmentAccess,
       sessions,
+      timetableSessions,
       attendance,
       remarks: visibleRemarks,
       teachers,
@@ -410,6 +469,7 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
       invoices,
       certificates,
       events: mappedEvents,
+      homework,
       notifications,
       syllabi,
     });

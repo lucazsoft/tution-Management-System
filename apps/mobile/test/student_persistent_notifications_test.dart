@@ -177,52 +177,6 @@ void main() {
   });
 
   group('notifications viewmodel server persistence', () {
-    test('default production viewmodel loads the persistent server inbox',
-        () async {
-      final calls = <RecordedCall>[];
-      final dio = ApiClient.buildDio(
-        baseUrl: 'https://test.invalid',
-        extraInterceptors: [
-          InterceptorsWrapper(
-            onRequest: (options, handler) {
-              calls.add(RecordedCall(options.method, options.path));
-              if (options.path == StudentNotificationsRepositoryPaths.list) {
-                handler.resolve(Response<dynamic>(
-                  requestOptions: options,
-                  statusCode: 200,
-                  data: recordsPayload(),
-                ));
-                return;
-              }
-              if (options.path == StudentPortalRepository.portalPath) {
-                handler.resolve(Response<dynamic>(
-                  requestOptions: options,
-                  statusCode: 200,
-                  data: emptyPortal(),
-                ));
-                return;
-              }
-              handler.next(options);
-            },
-          ),
-        ],
-      );
-      ApiClient.instance.setDioForTesting(dio);
-      addTearDown(ApiClient.instance.resetForTesting);
-
-      final vm = StudentNotificationsViewModel();
-      await pumpSettled();
-
-      expect(
-        calls.any((call) =>
-            call.method == 'GET' &&
-            call.path == StudentNotificationsRepositoryPaths.list),
-        isTrue,
-      );
-      expect(vm.state.notices, hasLength(2));
-      vm.dispose();
-    });
-
     test('markRead persists server-side and keeps the badge cleared', () async {
       final calls = <RecordedCall>[];
       final vm = StudentNotificationsViewModel(

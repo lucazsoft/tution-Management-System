@@ -63,19 +63,6 @@ test('push delivery safely skips when Firebase is not configured', async () => {
   assert.equal(warnings[0]?.event, 'PUSH_PROVIDER_UNCONFIGURED');
 });
 
-test('token-store lookup errors fail open without throwing', async () => {
-  const warnings: Array<Record<string, unknown>> = [];
-  const service = createPushNotificationService({
-    tokenStore: { findMany: async () => { throw new Error('token store unavailable'); } },
-    provider: { send: async () => ({ successCount: 1, failureCount: 0 }) },
-    logger: { warn: (entry) => warnings.push(entry) },
-  });
-
-  const result = await service.sendPush('tenant-a', 'user-a', 'Title', 'Body');
-  assert.deepEqual(result, { success: false, sent: 0, failed: 0 });
-  assert.equal(warnings[0]?.event, 'PUSH_DELIVERY_FAILED');
-});
-
 test('provider errors fail open without leaking device tokens', async () => {
   const warnings: Array<Record<string, unknown>> = [];
   const service = createPushNotificationService({

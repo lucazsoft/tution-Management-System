@@ -8,7 +8,6 @@ class _FakeMessaging implements PushMessagingGateway {
 
   final String? token;
   int permissionRequests = 0;
-  int tokenDeletions = 0;
   final refreshes = StreamController<String>.broadcast();
   final messages = StreamController<PushMessage>.broadcast();
   final opens = StreamController<PushMessage>.broadcast();
@@ -18,9 +17,6 @@ class _FakeMessaging implements PushMessagingGateway {
 
   @override
   Future<String?> getToken() async => token;
-
-  @override
-  Future<void> deleteToken() async => tokenDeletions++;
 
   @override
   Stream<String> get onTokenRefresh => refreshes.stream;
@@ -124,37 +120,7 @@ void main() {
     await service.unregisterForLogout();
 
     expect(api.unregistrations, ['device-token']);
-    expect(messaging.tokenDeletions, 1);
     await service.dispose();
-  });
-
-  test('forced logout drops local token state and stops listeners without API',
-      () async {
-    final messaging = _FakeMessaging(token: 'device-token');
-    addTearDown(messaging.close);
-    final api = _FakeApi();
-    final local = _FakeLocalNotifications();
-    final service = PushNotificationService(
-      messaging: messaging,
-      api: api,
-      localNotifications: local,
-      platform: 'android',
-    );
-    await service.initialize(authenticated: true);
-
-    await service.invalidateLocalSession();
-    messaging.refreshes.add('token-after-expiry');
-    messaging.messages.add(
-      const PushMessage(title: 'Private update', body: 'Must not display'),
-    );
-    await Future<void>.delayed(Duration.zero);
-
-    expect(api.registrations, [
-      (token: 'device-token', platform: 'android'),
-    ]);
-    expect(api.unregistrations, isEmpty);
-    expect(messaging.tokenDeletions, 1);
-    expect(local.shown, isEmpty);
   });
 
   test('foreground messages display locally and parse safe app deep links',

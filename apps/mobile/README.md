@@ -13,38 +13,20 @@ common fixes, see:
 
 ## Environment builds
 
-The API base URL and native Better Auth origin are compile-time config
-(`--dart-define=API_BASE_URL` and `--dart-define=AUTH_ORIGIN`). Native Android/iOS
-requests must send the same origin configured by the API's `WEB_ORIGIN`; browsers
-supply the Origin header automatically. Release builds refuse to run without an
-HTTPS API URL.
-
-Native push notifications also use explicit compile-time Firebase configuration;
-no Firebase project file or value is committed. Android/iOS release builds fail
-closed when any required value is missing:
-
-- `FIREBASE_API_KEY`
-- `FIREBASE_APP_ID` (use the platform-specific Android or iOS app ID)
-- `FIREBASE_MESSAGING_SENDER_ID`
-- `FIREBASE_PROJECT_ID`
-
-Optional values are `FIREBASE_AUTH_DOMAIN`, `FIREBASE_STORAGE_BUCKET`, and
-`FIREBASE_MEASUREMENT_ID`. Supply them alongside `API_BASE_URL` with
-`--dart-define` or a protected `--dart-define-from-file` CI artifact. Browser
-push is intentionally disabled until a messaging service worker deployment is
-part of the web release contract.
+The API base URL is compile-time config (`--dart-define=API_BASE_URL`).
+Release builds refuse to run without an HTTPS URL.
 
 | Target | Command |
 |---|---|
-| Local (Android emulator) | `flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3001 --dart-define=AUTH_ORIGIN=http://localhost:5173` |
-| Staging | `flutter build apk --dart-define=API_BASE_URL=https://api.staging.sanskardipshikshalaya.com.np --dart-define=AUTH_ORIGIN=https://staging.sanskardipshikshalaya.com.np` |
-| Production | `flutter build apk --dart-define=API_BASE_URL=https://api.tms.sanskardipshikshalaya.com.np --dart-define=AUTH_ORIGIN=https://tms.sanskardipshikshalaya.com.np` |
+| Local (Android emulator) | `flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3001` |
+| Staging | `flutter build apk --dart-define=API_BASE_URL=https://api.staging.sanskardipshikshalaya.com.np` |
+| Production | `flutter build apk --dart-define=API_BASE_URL=https://api.tms.sanskardipshikshalaya.com.np` |
 
 iOS simulator uses `http://localhost:3001`; physical devices need the machine LAN IP.
 
 ## Checks
 
-`flutter analyze` (0 issues enforced) and `flutter test` (full suite).
+`flutter analyze` (0 errors enforced), `flutter test` (26 tests).
 CI runs both on every push to main/develop/staging/mobile-app.
 
 ## Release identity & signing
@@ -59,12 +41,10 @@ locked once the app is published to a store):
 
 ### Android release signing
 
-The `release` build type is fail-closed: every release build requires a real
-keystore file, store password, key alias, and key password. Missing credentials
-stop the build before an artifact is produced. For a local-only release-mode
-probe, debug signing must be explicitly enabled with
-`-PtmsAllowDebugSigningForLocalRelease=true`; never use that opt-in for CI or a
-store artifact.
+The `release` build type signs with the `release` signing config when a
+keystore is configured, otherwise it falls back to debug keys (with a Gradle
+warning) so `flutter run --release` keeps working on dev machines. Store
+builds MUST have a keystore configured.
 
 1. Generate the release keystore once (custodian machine or CI secrets):
    `keytool -genkeypair -v -keystore release.keystore -alias tms-release -keyalg RSA -keysize 2048 -validity 10000`

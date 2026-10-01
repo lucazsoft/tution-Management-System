@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/features/parent/models/parent_portal.dart';
 import 'package:tms_mobile/features/parent/widgets/child_switcher_bar.dart';
+import 'package:tms_mobile/features/parent/widgets/parent_navigation.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_portal_state_view.dart';
 import 'package:tms_mobile/shared/models/app_models.dart';
 import 'package:tms_mobile/shared/widgets/progress_ring.dart';
 import 'package:tms_mobile/shared/widgets/status_chip.dart';
 
 enum _AttendanceView { list, compact }
+
+enum _AttendancePeriod { month, year, all }
 
 class ParentAttendanceScreen extends ConsumerStatefulWidget {
   const ParentAttendanceScreen({super.key});
@@ -23,16 +25,13 @@ class ParentAttendanceScreen extends ConsumerStatefulWidget {
 class _ParentAttendanceScreenState
     extends ConsumerState<ParentAttendanceScreen> {
   _AttendanceView _view = _AttendanceView.list;
+  _AttendancePeriod _period = _AttendancePeriod.month;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: ParentNavigation.drawer(context),
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.pop(),
-          tooltip: 'Back',
-        ),
         title: Text(
           'Child Attendance',
           style:
@@ -55,14 +54,56 @@ class _ParentAttendanceScreenState
           ),
         ],
       ),
+      bottomNavigationBar: const ParentNavigationBar(selectedIndex: 0),
       body: SafeArea(
         child: ParentPortalStateView(
           builder: (context, portal, child) {
-            final rate = (child.attendanceRate / 100).clamp(0.0, 1.0);
+            final now = DateTime.now();
+            final records = portal.attendance.where((record) {
+              final date = record.occurredAt?.toLocal();
+              return switch (_period) {
+                _AttendancePeriod.month => date != null &&
+                    date.year == now.year &&
+                    date.month == now.month,
+                _AttendancePeriod.year => date != null && date.year == now.year,
+                _AttendancePeriod.all => true,
+              };
+            }).toList();
+            final present = records.where((record) => record.isPresent).length;
+            final absent = records
+                .where((record) =>
+                    record.isAbsent &&
+                    !record.state.toLowerCase().contains('excused'))
+                .length;
+            final excused = records
+                .where(
+                    (record) => record.state.toLowerCase().contains('excused'))
+                .length;
+            final rateValue = records.isEmpty ? 0.0 : present / records.length;
+            final periodLabel = switch (_period) {
+              _AttendancePeriod.month =>
+                'This month · ${_monthName(now.month)} ${now.year}',
+              _AttendancePeriod.year => 'Academic record · ${now.year}',
+              _AttendancePeriod.all => 'All available records',
+            };
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const ChildSwitcherBar(),
+                const SizedBox(height: 12),
+                SegmentedButton<_AttendancePeriod>(
+                  segments: const [
+                    ButtonSegment(
+                        value: _AttendancePeriod.month, label: Text('Month')),
+                    ButtonSegment(
+                        value: _AttendancePeriod.year, label: Text('Year')),
+                    ButtonSegment(
+                        value: _AttendancePeriod.all, label: Text('All')),
+                  ],
+                  selected: {_period},
+                  onSelectionChanged: (selection) =>
+                      setState(() => _period = selection.first),
+                ),
                 const SizedBox(height: 20),
                 Card(
                   child: Padding(
@@ -78,7 +119,7 @@ class _ParentAttendanceScreenState
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '${portal.attendance.length} recent records',
+                              periodLabel,
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
                             const SizedBox(height: 12),
@@ -88,13 +129,18 @@ class _ParentAttendanceScreenState
                               children: [
                                 _StatBadge(
                                   label: 'Present',
-                                  count: '${portal.presentCount}',
+                                  count: '$present',
                                   color: kColorSuccess,
                                 ),
                                 _StatBadge(
                                   label: 'Absent',
-                                  count: '${portal.absentCount}',
+                                  count: '$absent',
                                   color: kColorError,
+                                ),
+                                _StatBadge(
+                                  label: 'Excused',
+                                  count: '$excused',
+                                  color: kColorWarning,
                                 ),
                               ],
                             ),
@@ -103,7 +149,7 @@ class _ParentAttendanceScreenState
                         if (constraints.maxWidth < 420) {
                           return Column(
                             children: [
-                              ProgressRing(percent: rate, size: 84),
+                              ProgressRing(percent: rateValue, size: 84),
                               const SizedBox(height: 16),
                               summary,
                             ],
@@ -112,10 +158,11 @@ class _ParentAttendanceScreenState
                         return Row(
                           children: [
                             ProgressRing(
-                              percent: rate,
+                              percent: rateValue,
                               size: 84,
-                              color:
-                                  rate >= 0.9 ? kColorSuccess : kColorWarning,
+                              color: rateValue >= 0.9
+                                  ? kColorSuccess
+                                  : kColorWarning,
                             ),
                             const SizedBox(width: 20),
                             Expanded(child: summary),
@@ -127,22 +174,23 @@ class _ParentAttendanceScreenState
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'Recent Activity Log',
+                  'Session record · $periodLabel',
                   style: GoogleFonts.fraunces(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 12),
-                if (portal.attendance.isEmpty)
+                if (records.isEmpty)
                   const Card(
                     child: Padding(
                       padding: EdgeInsets.all(20),
-                      child: Text('No attendance records are available.'),
+                      child: Text(
+                          'No teacher-marked attendance is available for this period.'),
                     ),
                   )
                 else if (_view == _AttendanceView.list)
-                  for (final record in portal.attendance) ...[
+                  for (final record in records) ...[
                     _AttendanceTile(record: record),
                     const SizedBox(height: 10),
                   ]
@@ -152,7 +200,7 @@ class _ParentAttendanceScreenState
                       spacing: 10,
                       runSpacing: 10,
                       children: [
-                        for (final record in portal.attendance)
+                        for (final record in records)
                           SizedBox(
                             width: constraints.maxWidth >= 600
                                 ? (constraints.maxWidth - 10) / 2
@@ -169,6 +217,21 @@ class _ParentAttendanceScreenState
       ),
     );
   }
+
+  String _monthName(int month) => const [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December'
+      ][month - 1];
 }
 
 class _AttendanceTile extends StatelessWidget {
@@ -214,7 +277,7 @@ class _StatBadge extends StatelessWidget {
         children: [
           Text(
             count,
-            style: GoogleFonts.outfit(
+            style: GoogleFonts.roboto(
               fontWeight: FontWeight.w700,
               fontSize: 15,
               color: color,

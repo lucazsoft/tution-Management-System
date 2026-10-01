@@ -42,6 +42,227 @@ class TeacherPortalRepository {
   static String classAttendancePath(String classId) =>
       '/api/teacher/class/$classId/attendance';
 
+  Future<List<TeacherMessageContact>> fetchMessageContacts() async {
+    try {
+      final response =
+          await _dio.get<dynamic>('/api/communication/messages/contacts');
+      final rows = response.data is Map<String, dynamic>
+          ? response.data['contacts']
+          : null;
+      if (rows is! List) {
+        throw const ApiException(
+            kind: ApiErrorKind.unknown,
+            message: 'Message contacts returned an unexpected response.');
+      }
+      return [
+        for (final row in rows)
+          if (row is Map<String, dynamic>) TeacherMessageContact.fromJson(row)
+      ];
+    } on DioException catch (error) {
+      // Older API containers did not expose the contacts endpoint. Avoid
+      // leaking a raw route-level 404 while the API deployment catches up.
+      if (error.response?.statusCode == 404) return const [];
+      throw _typed(error);
+    }
+  }
+
+  Future<List<TeacherMessageItem>> fetchMessageThread(
+      TeacherMessageContact contact) async {
+    try {
+      final response = await _dio.get<dynamic>(
+          '/api/communication/messages/thread/${Uri.encodeComponent(contact.studentId)}',
+          queryParameters: {'participantId': contact.parentId});
+      final rows = response.data is Map<String, dynamic>
+          ? response.data['messages']
+          : null;
+      if (rows is! List) {
+        throw const ApiException(
+            kind: ApiErrorKind.unknown,
+            message: 'Conversation returned an unexpected response.');
+      }
+      return [
+        for (final row in rows)
+          if (row is Map<String, dynamic>) TeacherMessageItem.fromJson(row)
+      ];
+    } on DioException catch (error) {
+      // A newly linked parent/student pair has no conversation record yet.
+      // Treat that as an empty thread so the teacher can send the first
+      // message instead of exposing a transport-level 404 in the UI.
+      if (error.response?.statusCode == 404) return const [];
+      throw _typed(error);
+    }
+  }
+
+  Future<void> sendMessage(TeacherMessageContact contact, String text) async {
+    try {
+      await _dio.post<dynamic>('/api/communication/messages', data: {
+        'studentId': contact.studentId,
+        'receiverId': contact.parentId,
+        'messageText': text.trim()
+      });
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
+  Future<List<TeacherAcademicEvent>> fetchCalendar() async {
+    try {
+      final response = await _dio.get<dynamic>('/api/academic-events',
+          queryParameters: {'viewerRole': 'Teacher'});
+      final events = response.data is Map<String, dynamic>
+          ? response.data['events']
+          : null;
+      if (events is! List) {
+        throw const ApiException(
+            kind: ApiErrorKind.unknown,
+            message: 'The academic calendar returned an unexpected response.');
+      }
+      return [
+        for (final item in events)
+          if (item is Map<String, dynamic>) TeacherAcademicEvent.fromJson(item)
+      ];
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
+  Future<void> createHomework(
+      {required String classId,
+      required String subject,
+      required String title,
+      required String description,
+      required String? contentUrl,
+      required DateTime deadline}) async {
+    try {
+      await _dio.post<dynamic>('/api/homework', data: {
+        'classId': classId,
+        'subject': subject,
+        'title': title,
+        'description': description,
+        'contentUrl': contentUrl,
+        'deadline': deadline.toIso8601String()
+      });
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
+  Future<void> updateHomework({
+    required String homeworkId,
+    required String title,
+    required String description,
+    required String? contentUrl,
+    required DateTime deadline,
+  }) async {
+    try {
+      await _dio.patch<dynamic>(
+        '/api/homework/${Uri.encodeComponent(homeworkId)}',
+        data: {
+          'title': title.trim(),
+          'description': description.trim(),
+          'contentUrl': contentUrl,
+          'deadline': deadline.toIso8601String(),
+        },
+      );
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
+  Future<void> updateTopicProgress(
+      {required String syllabusId,
+      required String topicId,
+      required String status,
+      String? notes}) async {
+    try {
+      await _dio
+          .post<dynamic>('/api/teacher/syllabus/$syllabusId/topic-log', data: {
+        'topicId': topicId,
+        'status': status,
+        'notes': notes,
+        'logDate': _dateOnly(DateTime.now())
+      });
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
+  Future<void> createSyllabus(
+      {required String classId,
+      required String subject,
+      required List<String> chapters}) async {
+    try {
+      await _dio.post<dynamic>('/api/teacher/syllabus',
+          data: {'classId': classId, 'subject': subject, 'chapters': chapters});
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
+  Future<void> updateSyllabus(
+      {required String syllabusId,
+      required String subject,
+      required List<Map<String, String?>> chapters}) async {
+    try {
+      await _dio.patch<dynamic>('/api/teacher/syllabus/$syllabusId',
+          data: {'subject': subject, 'chapters': chapters});
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
+  Future<void> createSyllabusTopic(
+      {required String syllabusId,
+      required String chapterId,
+      required String title}) async {
+    try {
+      await _dio.post<dynamic>('/api/teacher/syllabus/$syllabusId/topics',
+          data: {'chapterId': chapterId, 'title': title});
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
+  Future<List<String>> saveResultDraft(
+      {required TeacherResultDefinition definition,
+      required String classId,
+      required double maximum,
+      required double passMarks,
+      required List<Map<String, dynamic>> marks}) async {
+    try {
+      final response = await _dio.post<dynamic>('/api/teacher/results', data: {
+        'classId': classId,
+        'resultDefinitionId': definition.id,
+        'subject': definition.subject,
+        'assessment': definition.title,
+        'maximum': maximum,
+        'passMarks': passMarks,
+        'testDate': definition.testDate.toIso8601String(),
+        'marks': marks
+      });
+      final ids = response.data is Map<String, dynamic>
+          ? response.data['resultIds']
+          : null;
+      if (ids is! List) {
+        throw const ApiException(
+            kind: ApiErrorKind.unknown,
+            message: 'The result draft returned an unexpected response.');
+      }
+      return ids.map((id) => id.toString()).toList();
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
+  Future<void> publishResults(List<String> resultIds) async {
+    try {
+      await _dio.post<dynamic>('/api/teacher/results/share',
+          data: {'resultIds': resultIds});
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
   /// Consolidated workspace payload (home + timetable source + leaves).
   Future<TeacherWorkspace> fetchWorkspace({CancelToken? cancelToken}) async {
     try {

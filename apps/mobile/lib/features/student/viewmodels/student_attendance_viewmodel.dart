@@ -11,6 +11,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/core/network/api_exception.dart';
+import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/network/pagination.dart';
 import 'package:tms_mobile/core/viewmodel/base_viewmodel.dart';
 
@@ -44,6 +45,10 @@ class StudentAttendanceState extends ViewModelState {
   final bool sessionExpired;
 
   List<AttendanceEntry> get pagedRecords => records.take(visibleCount).toList();
+  List<AttendanceEntry> get absentRecords =>
+      records.where((record) => !record.isPresent).toList();
+  int get absentDayCount =>
+      absentRecords.map((record) => record.date).toSet().length;
 
   bool get hasMore => visibleCount < records.length;
   bool get hasData => records.isNotEmpty;
@@ -166,5 +171,6 @@ class StudentAttendanceViewModel extends BaseViewModel<StudentAttendanceState> {
 final studentAttendanceViewModelProvider =
     StateNotifierProvider<StudentAttendanceViewModel, StudentAttendanceState>(
         (ref) {
+  ref.watch(authProvider.select((state) => state.user?.id));
   return StudentAttendanceViewModel();
 });

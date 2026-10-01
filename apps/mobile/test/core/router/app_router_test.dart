@@ -67,14 +67,24 @@ void main() {
       );
     });
 
-    test('forces unsupported authenticated roles to the web/PWA handoff', () {
-      for (final role in [
-        'TENANT_ADMIN',
-        'BRANCH_ADMIN',
-        'ACCOUNTANT',
-        'JANITOR',
-        'WEB_PORTAL_ONLY',
-      ]) {
+    test('allows API-backed operational mobile roles in their own portal', () {
+      for (final entry in {
+        'TENANT_ADMIN': '/tenant/home',
+        'BRANCH_ADMIN': '/branch/home',
+        'JANITOR': '/janitor/home',
+      }.entries) {
+        expect(
+          mobileRoleBoundaryRedirect(
+            authState: _authStateForRole(entry.key),
+            location: entry.value,
+          ),
+          isNull,
+        );
+      }
+    });
+
+    test('forces roles without a mobile portal to the web/PWA handoff', () {
+      for (final role in ['ACCOUNTANT', 'WEB_PORTAL_ONLY']) {
         expect(
           mobileRoleBoundaryRedirect(
             authState: _authStateForRole(role),
@@ -99,6 +109,16 @@ void main() {
           location: '/teacher/home',
         ),
         '/login',
+      );
+    });
+
+    test('allows the saved-account picker before authentication', () {
+      expect(
+        mobileRoleBoundaryRedirect(
+          authState: const AuthState(isLoading: false),
+          location: '/saved-accounts',
+        ),
+        isNull,
       );
     });
   });

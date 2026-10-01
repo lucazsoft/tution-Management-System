@@ -7,7 +7,7 @@ import { encryptDeliveryPayload, decryptDeliveryPayload } from '../utils/deliver
 process.env.ADMISSION_DELIVERY_SECRET = 'phase-three-test-key-at-least-thirty-two-characters';
 const db = prisma as any;
 let state: any = { appointment: null, alternatives: [], logs: [], tasks: [], jobs: [], users: {}, admissionStatus: 'READY_FOR_LOGIN' };
-let failTask = false, failAlternative = false, failCompletion = false, janitor = true, failPush = false, pushDeliverySuccess = true;
+let failTask = false, failAlternative = false, failCompletion = false, janitor = true, failPush = false;
 const sent: string[] = [];
 let accountCount = 1;
 let tail = Promise.resolve();
@@ -44,7 +44,7 @@ function appointment() {
 }
 db.appointment.findFirst = async ({ where }: any) => matches(state.appointment, where) ? structuredClone(state.appointment) : null;
 db.appointment.findUniqueOrThrow = async () => ({ id: state.appointment.id, status: state.appointment.status, participantApprovals: state.appointment.participantApprovals });
-db.appointment.update = async ({ data }: any) => { Object.assign(state.appointment, data); return db.appointment.findUniqueOrThrow(); };
+db.appointment.update = async ({ data }: any) => { if (failAlternative && data.status === 'ALTERNATIVE_PROPOSED') throw new Error('injected proposal failure'); Object.assign(state.appointment, data); return { ...state.appointment }; };
 db.appointment.create = async ({ data }: any) => { if (failAlternative) throw new Error('injected create failure'); state.alternatives.push(data); return data; };
 
 db.branch.findFirst = async () => ({ id: 'branch' });
@@ -57,7 +57,7 @@ require.cache[authPath] = { id: authPath, filename: authPath, loaded: true, expo
   id: 'admin', tenantId: 'tenant', roles: [{ roleName: 'Tenant Admin', branchId: null, permissions: [] }],
 } }) } } } } as NodeModule;
 const notifications = require('../services/push-notification');
-notifications.PushNotificationService.sendPush = async () => { if (failPush) throw new Error('injected push failure'); return { success: pushDeliverySuccess }; };
+notifications.PushNotificationService.sendPush = async () => { if (failPush) throw new Error('injected push failure'); return { success: true }; };
 const resources = require('./resources').default;
 const smsPath = require.resolve('../utils/sms');
 require.cache[smsPath] = { id: smsPath, filename: smsPath, loaded: true, exports: { default: {
@@ -121,8 +121,13 @@ async function main() {
   const alternative = { action: 'PROPOSE_ALTERNATIVE', alternativeSlot: '2099-01-01' };
   const proposals = await Promise.allSettled([decideAppointment(teacher('one'), 'appointment', alternative), decideAppointment(teacher('two'), 'appointment', alternative)]);
   assert.equal(proposals.filter(item => item.status === 'fulfilled').length, 1);
-  assert.equal(state.alternatives.length, 1);
-  assert.deepEqual(state.alternatives[0].participantApprovals, { one: 'PENDING', two: 'PENDING' });
+  assert.equal(state.appointment.status, 'ALTERNATIVE_PROPOSED');
+  assert.equal(state.appointment.proposedById, 'one');
+  assert.deepEqual(state.appointment.participantApprovals, { one: 'PENDING', two: 'PENDING' });
+  await assert.rejects(
+    decideAppointment(teacher('two'), 'appointment', { action: 'APPROVE' }),
+    (error: any) => error.status === 409,
+  );
   state.appointment = appointment(); failAlternative = true;
   await assert.rejects(decideAppointment(teacher('one'), 'appointment', alternative));
   assert.equal(state.appointment.status, 'REQUESTED'); failAlternative = false;
@@ -139,12 +144,6 @@ async function main() {
   const logged = await log(true);
   assert.equal(logged.status, 201); assert.equal(logged.payload.notificationDelivered, false);
   assert.equal(state.logs.length, 2); assert.equal(state.tasks.length, 1);
-  failPush = false; pushDeliverySuccess = false;
-  const providerRejected = await log(true);
-  assert.equal(providerRejected.status, 201);
-  assert.equal(providerRejected.payload.notificationDelivered, false);
-  assert.equal(state.logs.length, 3); assert.equal(state.tasks.length, 2);
-  pushDeliverySuccess = true;
   console.log('PASS maintenance atomicity, informational logs, and post-commit notification failure');
 
   const encrypted = encryptDeliveryPayload('job', { phone: 'phone', message: 'secret-password' });

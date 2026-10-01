@@ -14,21 +14,36 @@ import 'package:tms_mobile/core/sync/sync.dart';
 import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_models.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_portal_dto.dart';
-import 'package:tms_mobile/features/teacher/screens/daily_update_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/geo_attendance_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_class_detail_screen.dart';
 import 'package:tms_mobile/features/teacher/viewmodels/teacher_portal_viewmodel.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_record_states.dart';
+import 'package:tms_mobile/features/teacher/widgets/teacher_navigation.dart';
+import 'package:tms_mobile/features/student/widgets/nepal_date_time.dart';
 
 class TeacherHomeScreen extends ConsumerStatefulWidget {
-  const TeacherHomeScreen({super.key});
+  const TeacherHomeScreen({super.key, this.initialTab = 0});
+
+  final int initialTab;
 
   @override
   ConsumerState<TeacherHomeScreen> createState() => _TeacherHomeScreenState();
 }
 
 class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
-  int _tab = 0;
+  late int _tab;
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = widget.initialTab;
+  }
+
+  @override
+  void didUpdateWidget(covariant TeacherHomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialTab != widget.initialTab) _tab = widget.initialTab;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +54,7 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
     final showAppBarActions = MediaQuery.sizeOf(context).width >= 360;
 
     return Scaffold(
+      drawer: TeacherNavigation.drawer(context),
       appBar: AppBar(
         title: Text(
           'Teacher Home',
@@ -53,9 +69,9 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                   onPressed: () => context.push('/teacher/timetable'),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.event_note_outlined),
-                  tooltip: 'Leave requests',
-                  onPressed: () => context.push('/teacher/leave'),
+                  icon: const Icon(Icons.notifications_outlined),
+                  tooltip: 'Notifications',
+                  onPressed: () => context.push('/teacher/notifications'),
                 ),
               ]
             : null,
@@ -68,27 +84,17 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
-        destinations: const [
-          NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home),
-              label: 'Today'),
-          NavigationDestination(
-              icon: Icon(Icons.check_circle_outline),
-              selectedIcon: Icon(Icons.check_circle),
-              label: 'Attendance'),
-          NavigationDestination(
-              icon: Icon(Icons.school_outlined),
-              selectedIcon: Icon(Icons.school),
-              label: 'Classes'),
-          NavigationDestination(
-              icon: Icon(Icons.more_horiz),
-              selectedIcon: Icon(Icons.more),
-              label: 'More'),
-        ],
+      bottomNavigationBar: TeacherDashboardNavigationBar(
+        selectedIndex: _tab < 2 ? _tab : _tab + 1,
+        onDestinationSelected: (i) {
+          if (i == 2) {
+            context.go('/teacher/messages');
+          } else if (i == 3) {
+            context.go('/teacher/timetable');
+          } else {
+            setState(() => _tab = i < 2 ? i : i - 1);
+          }
+        },
       ),
     );
   }
@@ -149,32 +155,14 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
           child: _TodayTab(
             workspace: workspace,
             onClockAttendance: () => _openGeoForWorkspace(context, workspace),
+            onAttendClass: (today) => _openGeo(context, workspace, today),
             onOpenAttendance: () => setState(() => _tab = 1),
-            onOpenClasses: () => setState(() => _tab = 2),
-            onOpenMore: () => setState(() => _tab = 3),
-            onSubmitUpdate: (pending) =>
-                _openDailyUpdateScreen(context, vm, pending),
+            onUpdateSyllabus: () => context.push('/teacher/syllabus'),
+            onAssignHomework: () => context.push('/teacher/homework'),
+            onEnterResults: () => context.push('/teacher/results'),
           ),
         );
     }
-  }
-
-  Future<void> _openDailyUpdateScreen(
-    BuildContext context,
-    TeacherPortalViewModel vm,
-    TeacherPendingUpdate pending,
-  ) async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => DailyUpdateScreen(
-          pending: pending,
-          onSubmit: (content) => vm.submitSessionUpdate(
-            sessionId: pending.sessionId,
-            updateContent: content,
-          ),
-        ),
-      ),
-    );
   }
 
   Future<void> _openGeo(
@@ -269,18 +257,20 @@ class _TodayTab extends StatelessWidget {
   const _TodayTab({
     required this.workspace,
     required this.onClockAttendance,
+    required this.onAttendClass,
     required this.onOpenAttendance,
-    required this.onOpenClasses,
-    required this.onOpenMore,
-    required this.onSubmitUpdate,
+    required this.onUpdateSyllabus,
+    required this.onAssignHomework,
+    required this.onEnterResults,
   });
 
   final TeacherWorkspace workspace;
   final VoidCallback onClockAttendance;
+  final ValueChanged<TeacherTodayClass> onAttendClass;
   final VoidCallback onOpenAttendance;
-  final VoidCallback onOpenClasses;
-  final VoidCallback onOpenMore;
-  final void Function(TeacherPendingUpdate) onSubmitUpdate;
+  final VoidCallback onUpdateSyllabus;
+  final VoidCallback onAssignHomework;
+  final VoidCallback onEnterResults;
 
   @override
   Widget build(BuildContext context) {
@@ -288,50 +278,26 @@ class _TodayTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        _HeaderCard(workspace: workspace),
+        const NepalDateTimeHeader(),
         const SizedBox(height: 16),
-        Text('Pending daily updates: ${workspace.pendingUpdateCount}',
-            style: Theme.of(context).textTheme.bodyMedium),
-        if (workspace.pendingUpdates.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          for (final pending in workspace.pendingUpdates)
-            Card(
-              child: ListTile(
-                title: Text('${pending.courseName} - ${pending.className}'),
-                subtitle: pending.date == null
-                    ? null
-                    : Text(pending.date!.toLocal().toString().split(' ').first),
-                trailing: SizedBox(
-                  width: 128,
-                  child: FilledButton.tonal(
-                    onPressed: () => onSubmitUpdate(pending),
-                    child: const FittedBox(child: Text('Submit daily update')),
-                  ),
-                ),
-              ),
-            ),
-          const SizedBox(height: 16),
-        ],
         _ClockCard(workspace: workspace, onPressed: onClockAttendance),
-        const SizedBox(height: 16),
-        _StatsGrid(workspace: workspace),
         const SizedBox(height: 16),
         _QuickActions(
           onAttendance: onOpenAttendance,
-          onClasses: onOpenClasses,
-          onUpdates: () {
-            if (workspace.pendingUpdates.isNotEmpty) {
-              onSubmitUpdate(workspace.pendingUpdates.first);
-            } else {
-              onOpenMore();
-            }
-          },
-          onMore: onOpenMore,
+          onSyllabus: onUpdateSyllabus,
+          onHomework: onAssignHomework,
+          onResults: onEnterResults,
         ),
-        const SizedBox(height: 16),
-        Text('Today\'s classes (${items.length})',
-            style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
+        const SizedBox(height: 24),
+        Row(children: [
+          Expanded(
+              child: Text('Today\'s timetable',
+                  style: Theme.of(context).textTheme.titleLarge)),
+          TextButton(
+              onPressed: () => context.push('/teacher/timetable'),
+              child: const Text('Full timetable'))
+        ]),
+        const SizedBox(height: 4),
         if (items.isEmpty)
           const TeacherEmptyView(
             icon: Icons.event_available_rounded,
@@ -340,54 +306,8 @@ class _TodayTab extends StatelessWidget {
           )
         else
           for (final item in items)
-            _ClassCard(item: item, onTap: onClockAttendance),
+            _ClassCard(item: item, onTap: () => onAttendClass(item)),
       ],
-    );
-  }
-}
-
-class _HeaderCard extends StatelessWidget {
-  const _HeaderCard({required this.workspace});
-
-  final TeacherWorkspace workspace;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(workspace.teacherName,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w700)),
-            Text(workspace.designation,
-                style: Theme.of(context).textTheme.bodyMedium),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: [
-                Chip(
-                  label: Text(
-                      workspace.checkedIn ? 'Checked in' : 'Not checked in'),
-                  avatar: Icon(
-                    workspace.checkedIn ? Icons.check_circle : Icons.schedule,
-                    size: 16,
-                    color: kColorPrimary,
-                  ),
-                ),
-                if (workspace.attendanceRate != null)
-                  Chip(label: Text('Attendance ${workspace.attendanceRate}%')),
-                if (workspace.presentDays != null)
-                  Chip(label: Text('Present ${workspace.presentDays}d')),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -619,13 +539,6 @@ class _AttendanceTabState extends ConsumerState<_AttendanceTab> {
           ),
           if (selected != null) ...[
             const SizedBox(height: 12),
-            _ClassAttendanceSummary(
-              total: selected.students.length,
-              present: present,
-              absent: absent,
-              excused: excused,
-            ),
-            const SizedBox(height: 12),
             if (selected.students.isEmpty)
               const TeacherEmptyView(
                 icon: Icons.group_off_outlined,
@@ -642,6 +555,13 @@ class _AttendanceTabState extends ConsumerState<_AttendanceTab> {
                     () => _statuses = {..._statuses, student.id: value},
                   ),
                 ),
+            const SizedBox(height: 12),
+            _ClassAttendanceSummary(
+              total: selected.students.length,
+              present: present,
+              absent: absent,
+              excused: excused,
+            ),
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
@@ -689,21 +609,34 @@ class _ClassAttendanceSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final counts = [
+      _AttendanceCount(label: 'Students', value: '$total'),
+      _AttendanceCount(label: 'Present', value: '$present'),
+      _AttendanceCount(label: 'Absent', value: '$absent'),
+      _AttendanceCount(label: 'Excused', value: '$excused'),
+    ];
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Expanded(
-                child: _AttendanceCount(label: 'Students', value: '$total')),
-            Expanded(
-                child: _AttendanceCount(label: 'Present', value: '$present')),
-            Expanded(
-                child: _AttendanceCount(label: 'Absent', value: '$absent')),
-            Expanded(
-                child: _AttendanceCount(label: 'Excused', value: '$excused')),
-          ],
-        ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = constraints.maxWidth < 340 ? 2 : 4;
+          final width = constraints.maxWidth / columns;
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Wrap(
+              runSpacing: 12,
+              children: [
+                for (final count in counts)
+                  SizedBox(
+                    width: width,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: count,
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -927,143 +860,55 @@ class _ClockCard extends StatelessWidget {
   }
 }
 
-class _StatsGrid extends StatelessWidget {
-  const _StatsGrid({required this.workspace});
-
-  final TeacherWorkspace workspace;
-
-  @override
-  Widget build(BuildContext context) {
-    final stats = [
-      _StatItem(
-        icon: Icons.calendar_month_outlined,
-        label: 'Attendance',
-        value: workspace.presentDays != null && workspace.requiredDays != null
-            ? '${workspace.presentDays}/${workspace.requiredDays}'
-            : '${workspace.attendanceRate ?? 0}%',
-      ),
-      _StatItem(
-        icon: Icons.co_present_outlined,
-        label: 'Sessions',
-        value: '${workspace.totalSessions ?? 0}',
-      ),
-      _StatItem(
-        icon: Icons.task_alt_outlined,
-        label: 'Updates',
-        value: '${workspace.updateCompliance ?? 0}%',
-      ),
-      _StatItem(
-        icon: Icons.school_outlined,
-        label: 'Classes',
-        value: '${workspace.assignedClasses ?? workspace.classes.length}',
-      ),
-    ];
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
-      childAspectRatio: 1.8,
-      children: [for (final stat in stats) _StatTile(stat: stat)],
-    );
-  }
-}
-
-class _StatItem {
-  const _StatItem({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-}
-
-class _StatTile extends StatelessWidget {
-  const _StatTile({required this.stat});
-
-  final _StatItem stat;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Icon(stat.icon, color: kColorPrimary),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(stat.label,
-                      style: Theme.of(context).textTheme.bodySmall),
-                  Text(
-                    stat.value,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _QuickActions extends StatelessWidget {
   const _QuickActions({
     required this.onAttendance,
-    required this.onClasses,
-    required this.onUpdates,
-    required this.onMore,
+    required this.onSyllabus,
+    required this.onHomework,
+    required this.onResults,
   });
 
   final VoidCallback onAttendance;
-  final VoidCallback onClasses;
-  final VoidCallback onUpdates;
-  final VoidCallback onMore;
+  final VoidCallback onSyllabus;
+  final VoidCallback onHomework;
+  final VoidCallback onResults;
 
   @override
   Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
-      childAspectRatio: 2.65,
-      children: [
-        _QuickActionTile(
-          icon: Icons.how_to_reg_outlined,
-          label: 'Attendance',
-          onTap: onAttendance,
-        ),
-        _QuickActionTile(
-          icon: Icons.school_outlined,
-          label: 'Classes',
-          onTap: onClasses,
-        ),
-        _QuickActionTile(
-          icon: Icons.note_alt_outlined,
-          label: 'Daily update',
-          onTap: onUpdates,
-        ),
-        _QuickActionTile(
-          icon: Icons.more_horiz,
-          label: 'More tools',
-          onTap: onMore,
-        ),
-      ],
+    final actions = [
+      _QuickActionTile(
+        icon: Icons.how_to_reg_outlined,
+        label: 'Attendance',
+        onTap: onAttendance,
+      ),
+      _QuickActionTile(
+        icon: Icons.menu_book_outlined,
+        label: 'Update syllabus',
+        onTap: onSyllabus,
+      ),
+      _QuickActionTile(
+        icon: Icons.assignment_outlined,
+        label: 'Assign homework',
+        onTap: onHomework,
+      ),
+      _QuickActionTile(
+        icon: Icons.analytics_outlined,
+        label: 'Enter results',
+        onTap: onResults,
+      ),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth < 320 ? 1 : 2;
+        final width = (constraints.maxWidth - (columns - 1) * 8) / columns;
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final action in actions) SizedBox(width: width, child: action),
+          ],
+        );
+      },
     );
   }
 }
@@ -1125,34 +970,35 @@ class _MoreTab extends StatelessWidget {
           subtitle: Text('${workspace.leaves.length}'),
           onTap: () => context.push('/teacher/leave'),
         ),
-        const ListTile(
-          leading: Icon(Icons.menu_book_outlined),
-          title: Text('Syllabus tracker'),
-          subtitle: Text('Coming from the web teacher panel'),
-          enabled: false,
+        ListTile(
+          leading: const Icon(Icons.calendar_month_outlined),
+          title: const Text('Academic calendar'),
+          subtitle: const Text('Events, examinations, and deadlines'),
+          onTap: () => context.push('/teacher/calendar'),
         ),
-        const ListTile(
-          leading: Icon(Icons.assignment_outlined),
-          title: Text('Homework'),
-          subtitle: Text('Coming from the web teacher panel'),
-          enabled: false,
+        ListTile(
+          leading: const Icon(Icons.menu_book_outlined),
+          title: const Text('Syllabus tracker'),
+          subtitle: const Text('Plan chapters, topics, and progress'),
+          onTap: () => context.push('/teacher/syllabus'),
         ),
-        const ListTile(
-          leading: Icon(Icons.analytics_outlined),
-          title: Text('Results'),
-          subtitle: Text('Coming from the web teacher panel'),
-          enabled: false,
+        ListTile(
+          leading: const Icon(Icons.assignment_outlined),
+          title: const Text('Homework'),
+          subtitle: const Text('Assign and review recent homework'),
+          onTap: () => context.push('/teacher/homework'),
+        ),
+        ListTile(
+          leading: const Icon(Icons.analytics_outlined),
+          title: const Text('Results'),
+          subtitle: const Text('Enter marks and publish paper evidence'),
+          onTap: () => context.push('/teacher/results'),
         ),
         const ListTile(
           leading: Icon(Icons.receipt_long_outlined),
           title: Text('Salary slips'),
           subtitle: Text('Coming from the web teacher panel'),
           enabled: false,
-        ),
-        ListTile(
-          leading: const Icon(Icons.lock_outline),
-          title: const Text('Change password'),
-          onTap: () => context.push('/teacher/change-password'),
         ),
       ],
     );

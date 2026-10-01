@@ -5,7 +5,6 @@ import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware } from '../middleware/auth';
 import { getSmsSender } from '../utils/sms';
 import { PushNotificationService } from '../services/push-notification';
-import { recordNotification } from '../services/notification-records';
 import { canAccessBranch, isTenantAdmin, managedBranchIds } from '../utils/access-control';
 
 const router = Router();
@@ -21,26 +20,47 @@ async function linkedStudent(parentUserId: string, tenantId: string, studentId: 
   });
 }
 
-async function notifyAppointmentUsers(tenantId: string, userIds: string[], title: string, message: string) {
+async function notifyAppointmentUsers(
+  tenantId: string,
+  userIds: string[],
+  title: string,
+  message: string,
+  destination: string,
+  entityId?: string,
+) {
   const uniqueIds = [...new Set(userIds)];
+  if (uniqueIds.length) {
+    try {
+      await prisma.notification.createMany({
+        data: uniqueIds.map((userId) => ({
+          tenantId,
+          userId,
+          category: 'APPOINTMENT',
+          title,
+          body: message,
+          destination,
+          entityId,
+        })),
+      });
+    } catch (notificationError) {
+      console.warn('Appointment saved but inbox notification persistence failed.', notificationError);
+    }
+  }
   const users = await prisma.user.findMany({
     where: { id: { in: uniqueIds } },
     select: { id: true, phone: true },
   });
   const smsSender = getSmsSender();
-  const results = await Promise.all(users.flatMap((user) => [
-    PushNotificationService.sendPush(tenantId, user.id, title, message),
-    recordNotification(prisma, {
-      tenantId,
-      userId: user.id,
-      category: 'GENERAL',
-      title,
-      body: message,
-      destination: 'appointments',
-    }).then(() => ({ success: true })),
+  const results = await Promise.allSettled(users.flatMap((user) => [
+    PushNotificationService.sendPush(tenantId, user.id, title, message, {
+      destination,
+      ...(entityId ? { entityId } : {}),
+    }),
     ...(user.phone ? [smsSender.sendSms(user.phone, `${title}: ${message}`)] : []),
   ]));
-  return results.every((result) => result.success);
+  return results.every((result) =>
+    result.status === 'fulfilled' && result.value.success,
+  );
 }
 
 router.post('/request', authMiddleware, async (req: TenantRequest, res: Response) => {
@@ -49,8 +69,8 @@ router.post('/request', authMiddleware, async (req: TenantRequest, res: Response
     || participantIds.some((id) => typeof id !== 'string' || !id.trim())) {
     return res.status(400).json({ error: 'isGroup must be a boolean and participantIds must be an array of non-empty user IDs.' });
   }
-  if (!['TEACHER', 'BRANCH_ADMIN'].includes(target)) return res.status(400).json({ error: 'Appointment target must be TEACHER or BRANCH_ADMIN.' });
-  if (!studentId || !scheduledTime || (target === 'TEACHER' && !requestedTeacherId) || (target === 'BRANCH_ADMIN' && !branchId)) {
+  if (!['TEACHER', 'BRANCH_ADMIN', 'STAFF'].includes(target)) return res.status(400).json({ error: 'Appointment target must be TEACHER, STAFF, or BRANCH_ADMIN.' });
+  if (!studentId || !scheduledTime || (target !== 'BRANCH_ADMIN' && !requestedTeacherId) || (target === 'BRANCH_ADMIN' && !branchId)) {
     return res.status(400).json({ error: 'Student, appointment recipient, and preferred date and time are required.' });
   }
   try {
@@ -79,6 +99,19 @@ router.post('/request', authMiddleware, async (req: TenantRequest, res: Response
       });
       if (!assignedAdmin) return res.status(422).json({ error: 'No active Branch Admin is assigned to this branch.' });
       teacherId = assignedAdmin.userId;
+      uniqueParticipants = [teacherId];
+    } else if (target === 'STAFF') {
+      const branchIds = [...new Set(student.enrollments.map((enrollment) => enrollment.class.branchId))];
+      const staff = await prisma.user.findFirst({
+        where: {
+          id: teacherId,
+          tenantId: req.tenantId!,
+          status: 'ACTIVE',
+          userRoles: { some: { branchId: { in: branchIds }, role: { name: { in: ['Teacher', 'Accountant'] } } } },
+        },
+        select: { id: true },
+      });
+      if (!staff) return res.status(403).json({ error: 'This staff member is not available for the child’s branch.' });
       uniqueParticipants = [teacherId];
     } else {
       if (!assignedTeacherIds.has(teacherId)) return res.status(403).json({ error: 'You can only book with teachers assigned to this child.' });
@@ -110,8 +143,12 @@ router.post('/request', authMiddleware, async (req: TenantRequest, res: Response
       where: { tenantId: req.tenantId!, status: 'ACTIVE', userRoles: { some: { branchId: { in: branchIds }, role: { name: 'Branch Admin' } } } },
       select: { id: true },
     });
-    const notificationDelivered = await notifyAppointmentUsers(req.tenantId!, [...uniqueParticipants, ...branchAdmins.map((admin) => admin.id)], 'Appointment requested', `A parent requested an appointment about ${student.user.firstName}.`);
-    return res.status(201).json({ message: 'Appointment requested.', appointment, bookingWindowHours: tenant.appointmentWindowHours, notificationDelivered });
+    await notifyAppointmentUsers(req.tenantId!, uniqueParticipants, 'Appointment requested', `A parent requested an appointment about ${student.user.firstName}.`, '/teacher/meetings', appointment.id);
+    if (branchAdmins.length) {
+      await notifyAppointmentUsers(req.tenantId!, branchAdmins.map((admin) => admin.id), 'Appointment requested', `A parent requested an appointment about ${student.user.firstName}.`, '/branch/home', appointment.id);
+    }
+    return res.status(201).json({ message: 'Appointment requested.', appointment, bookingWindowHours: tenant.appointmentWindowHours });
+
   } catch (error: any) {
     return res.status(500).json({ error: 'Failed to request appointment.', details: error.message });
   }
@@ -123,7 +160,17 @@ router.post('/respond/:appointmentId', authMiddleware, async (req: TenantRequest
     let notificationDelivered = true;
     if (result.notify) {
       try {
-        notificationDelivered = await notifyAppointmentUsers(req.tenantId!, [result.requestedById], 'Appointment updated', `Appointment status: ${result.appointment.status}.`);
+        const proposed = req.body?.action === 'PROPOSE_ALTERNATIVE';
+        notificationDelivered = await notifyAppointmentUsers(
+          req.tenantId!,
+          [result.requestedById],
+          proposed ? 'New meeting time proposed' : 'Appointment updated',
+          proposed
+            ? `The teacher proposed ${(result.appointment.alternativeTime ?? result.appointment.scheduledTime).toLocaleString('en-NP', { timeZone: 'Asia/Kathmandu' })}. Open Meetings to respond.`
+            : `Appointment status: ${result.appointment.status.replaceAll('_', ' ')}.`,
+          '/parent/appointments',
+          result.appointment.id,
+        );
       } catch {
         notificationDelivered = false;
       }
@@ -155,23 +202,25 @@ router.post('/parent-respond/:appointmentId', authMiddleware, async (req: Tenant
     if (!['REQUESTED', 'APPROVED', 'ALTERNATIVE_PROPOSED'].includes(appointment.status)) {
       return res.status(409).json({ error: 'This appointment is already closed.' });
     }
-    const rootId = appointment.originalAppointmentId ?? appointment.id;
-    const linkedAlternative = appointment.status === 'ALTERNATIVE_PROPOSED'
-      ? await prisma.appointment.findFirst({ where: { tenantId: req.tenantId!, originalAppointmentId: appointment.id }, orderBy: { createdAt: 'desc' } })
-      : appointment;
     if (action === 'ACCEPT_ALTERNATIVE') {
-      if (!linkedAlternative || appointment.status !== 'ALTERNATIVE_PROPOSED') return res.status(409).json({ error: 'There is no alternative time to accept.' });
+      if (appointment.status !== 'ALTERNATIVE_PROPOSED' || !appointment.alternativeTime || appointment.proposedById === req.user!.id) return res.status(409).json({ error: 'There is no teacher-proposed time waiting for your approval.' });
       const updated = await prisma.appointment.update({
-        where: { id: linkedAlternative.id },
-        data: { responseRemarks: remarks || 'Parent accepted the proposed time.' },
+        where: { id: appointment.id },
+        data: {
+          scheduledTime: appointment.alternativeTime,
+          alternativeTime: null,
+          proposedById: null,
+          status: 'APPROVED',
+          responseRemarks: remarks || 'Parent confirmed the proposed time.',
+        },
       });
-      await notifyAppointmentUsers(req.tenantId!, (Array.isArray(updated.participantIds) ? updated.participantIds : [updated.teacherId]).filter((id): id is string => typeof id === 'string'), 'Alternative time accepted', 'The parent accepted the proposed appointment time.');
+      await notifyAppointmentUsers(req.tenantId!, (Array.isArray(updated.participantIds) ? updated.participantIds : [updated.teacherId]).filter((id): id is string => typeof id === 'string'), 'Alternative time accepted', 'The parent accepted the proposed appointment time.', '/teacher/meetings', updated.id);
       return res.json({ message: 'Alternative time accepted. Waiting for final participant approval.', appointment: updated });
     }
     if (action === 'REJECT_ALTERNATIVE') {
-      if (!linkedAlternative || appointment.status !== 'ALTERNATIVE_PROPOSED') return res.status(409).json({ error: 'There is no alternative time to reject.' });
-      const updated = await prisma.appointment.update({ where: { id: linkedAlternative.id }, data: { status: 'REJECTED', responseRemarks: remarks || 'Parent rejected the proposed time.' } });
-      await notifyAppointmentUsers(req.tenantId!, (Array.isArray(updated.participantIds) ? updated.participantIds : [updated.teacherId]).filter((id): id is string => typeof id === 'string'), 'Alternative time rejected', 'The parent rejected the proposed appointment time.');
+      if (appointment.status !== 'ALTERNATIVE_PROPOSED' || appointment.proposedById === req.user!.id) return res.status(409).json({ error: 'There is no teacher-proposed time waiting for your response.' });
+      const updated = await prisma.appointment.update({ where: { id: appointment.id }, data: { status: 'REJECTED', alternativeTime: null, proposedById: null, responseRemarks: remarks || 'Parent declined the proposed time.' } });
+      await notifyAppointmentUsers(req.tenantId!, (Array.isArray(updated.participantIds) ? updated.participantIds : [updated.teacherId]).filter((id): id is string => typeof id === 'string'), 'Alternative time rejected', 'The parent rejected the proposed appointment time.', '/teacher/meetings', updated.id);
       return res.json({ message: 'Alternative time rejected.', appointment: updated });
     }
     const alternativeDate = new Date(req.body?.alternativeSlot);
@@ -181,17 +230,18 @@ router.post('/parent-respond/:appointmentId', authMiddleware, async (req: Tenant
       return res.status(422).json({ error: `Choose a time at least ${tenant?.appointmentWindowHours ?? 24} hours in advance.` });
     }
     const participants = (Array.isArray(appointment.participantIds) ? appointment.participantIds : [appointment.teacherId]).filter((id): id is string => typeof id === 'string');
-    const created = await prisma.$transaction(async (tx) => {
-      await tx.appointment.update({ where: { id: appointment.id }, data: { status: 'ALTERNATIVE_PROPOSED', alternativeTime: alternativeDate, responseRemarks: remarks || 'Parent proposed another time.' } });
-      return tx.appointment.create({ data: {
-        tenantId: appointment.tenantId, studentId: appointment.studentId, requestedById: appointment.requestedById,
-        teacherId: appointment.teacherId, scheduledTime: alternativeDate, status: 'REQUESTED', isGroup: appointment.isGroup,
-        participantIds: participants, participantApprovals: Object.fromEntries(participants.map((id) => [id, 'PENDING'])),
-        remarks: appointment.remarks, responseRemarks: remarks || 'Parent proposed another time.', originalAppointmentId: rootId,
-      } });
+    const updated = await prisma.appointment.update({
+      where: { id: appointment.id },
+      data: {
+        status: 'ALTERNATIVE_PROPOSED',
+        alternativeTime: alternativeDate,
+        proposedById: req.user!.id,
+        responseRemarks: remarks || 'Parent proposed another time.',
+        participantApprovals: Object.fromEntries(participants.map((id) => [id, 'PENDING'])),
+      },
     });
-    await notifyAppointmentUsers(req.tenantId!, participants, 'New appointment time proposed', 'The parent proposed another appointment time.');
-    return res.status(201).json({ message: 'Another time proposed.', appointment: created });
+    await notifyAppointmentUsers(req.tenantId!, participants, 'New appointment time proposed', `The parent proposed ${alternativeDate.toLocaleString('en-NP', { timeZone: 'Asia/Kathmandu' })}.`, '/teacher/meetings', updated.id);
+    return res.json({ message: 'Another time proposed.', appointment: updated });
   } catch (error: any) {
     return res.status(500).json({ error: 'Failed to update appointment negotiation.', details: error.message });
   }
@@ -210,7 +260,12 @@ router.get('/branch', authMiddleware, async (req: TenantRequest, res: Response) 
       include: { requestedBy: { select: { firstName: true, lastName: true, phone: true } }, student: { include: { user: { select: { firstName: true, lastName: true } } } } },
       orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
     });
-    return res.json({ appointments });
+    return res.json({ appointments: appointments.map((appointment) => ({
+      ...appointment,
+      proposalFrom: appointment.proposedById === req.user!.id
+        ? 'TEACHER'
+        : appointment.proposedById ? 'PARENT' : null,
+    })) });
   } catch {
     return res.status(500).json({ error: 'Failed to load branch appointments.' });
   }
@@ -221,13 +276,24 @@ router.get('/', authMiddleware, async (req: TenantRequest, res: Response) => {
     const parent = await prisma.parent.findFirst({ where: { userId: req.user!.id }, select: { id: true } });
     const where = parent
       ? { tenantId: req.tenantId!, student: { studentParents: { some: { parentId: parent.id } } } }
-      : { tenantId: req.tenantId!, teacherId: req.user!.id };
+      : {
+          tenantId: req.tenantId!,
+          OR: [
+            { teacherId: req.user!.id },
+            { participantIds: { array_contains: req.user!.id } },
+          ],
+        };
     const appointments = await prisma.appointment.findMany({
       where,
       include: { teacher: { select: { firstName: true, lastName: true } }, student: { include: { user: { select: { firstName: true, lastName: true } } } } },
       orderBy: { createdAt: 'desc' },
     });
-    return res.json({ appointments });
+    return res.json({ appointments: appointments.map((appointment) => ({
+      ...appointment,
+      proposalFrom: appointment.proposedById === req.user!.id
+        ? 'TEACHER'
+        : appointment.proposedById ? 'PARENT' : null,
+    })) });
   } catch (error: any) {
     return res.status(500).json({ error: 'Failed to load appointments.' });
   }

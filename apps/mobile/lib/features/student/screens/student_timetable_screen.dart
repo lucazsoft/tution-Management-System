@@ -1,390 +1,357 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tms_mobile/core/sync/sync.dart';
 import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/features/student/models/student_portal_dto.dart';
 import 'package:tms_mobile/features/student/student_design.dart';
 import 'package:tms_mobile/features/student/viewmodels/student_timetable_viewmodel.dart';
+import 'package:tms_mobile/features/student/widgets/student_scaffold.dart';
+import 'package:tms_mobile/shared/widgets/academic_calendar.dart';
 
-/// Weekly timetable backed by the authenticated student portal.
-///
-/// Primary source is `weeklySessions` from
-/// `GET /api/users/me/student-portal`, grouped by day (Monday → Sunday) with
-/// the tab defaulting to today. `todaySessions` feeds the summary header.
-/// Covers loading, empty days, error with retry, access-denied (403) and
-/// offline (no connection) states; pull-to-refresh reloads.
-class StudentTimetableScreen extends ConsumerWidget {
+class StudentTimetableScreen extends ConsumerStatefulWidget {
   const StudentTimetableScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(studentTimetableViewModelProvider);
-    final viewModel = ref.read(studentTimetableViewModelProvider.notifier);
-    final connectivity = ref.watch(connectivityMonitorProvider);
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'My Weekly Timetable',
-          style:
-              GoogleFonts.fraunces(fontWeight: FontWeight.w700, fontSize: 22),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.go('/student/home'),
-        ),
-      ),
-      body: SafeArea(
-        child: Builder(
-          builder: (context) {
-            if (state.isLoading && !state.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (!state.hasData) {
-              return _TimetableStateMessage(
-                state: state,
-                isOffline: state.isOffline ||
-                    connectivity == ConnectivityState.offline,
-                onRetry: viewModel.load,
-              );
-            }
-            return RefreshIndicator(
-              onRefresh: viewModel.refresh,
-              child: _TimetableBody(
-                state: state,
-                showOfflineBar: connectivity == ConnectivityState.offline,
-                onSelectDay: viewModel.selectDay,
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
+  ConsumerState<StudentTimetableScreen> createState() =>
+      _StudentTimetableScreenState();
 }
 
-class _TimetableBody extends StatelessWidget {
-  const _TimetableBody({
-    required this.state,
-    required this.showOfflineBar,
-    required this.onSelectDay,
-  });
+class _StudentTimetableScreenState
+    extends ConsumerState<StudentTimetableScreen> {
+  int _dayOffset = 0;
 
-  final StudentTimetableState state;
-  final bool showOfflineBar;
-  final ValueChanged<int> onSelectDay;
+  DateTime get _today {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  DateTime get _selectedDate => _today.add(Duration(days: _dayOffset));
+
+  static const _dayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  static const _dayNames = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+  static const _months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+
+  bool _sameDay(DateTime first, DateTime second) =>
+      first.year == second.year &&
+      first.month == second.month &&
+      first.day == second.day;
+
+  List<PortalSession> _sessionsFor(
+    StudentTimetableState state,
+    DateTime date,
+  ) {
+    final key = _dayKeys[date.weekday - 1];
+    final matching = state.days.where((day) => day.key == key);
+    final weekly =
+        matching.isEmpty ? const <PortalSession>[] : matching.first.sessions;
+    if (_dayOffset != 0) return weekly;
+
+    final merged = <String, PortalSession>{};
+    for (final session in [...weekly, ...state.todaySessions]) {
+      final identity = [
+        session.time,
+        session.endTime,
+        session.subject,
+        session.teacher,
+      ].join('|');
+      merged[identity] = session;
+    }
+    final sessions = merged.values.toList()
+      ..sort((a, b) => a.time.compareTo(b.time));
+    return sessions;
+  }
+
+  List<PortalEvent> _eventsFor(
+    StudentTimetableState state,
+    DateTime date,
+  ) =>
+      state.events.where((event) {
+        final eventDate = parsePortalEventDate(event.dateLabel);
+        return eventDate != null && _sameDay(eventDate, date);
+      }).toList(growable: false);
+
+  bool _isHoliday(PortalEvent event) {
+    final searchable = '${event.kind} ${event.title}'.toLowerCase();
+    return searchable.contains('holiday') ||
+        searchable.contains('vacation') ||
+        searchable.contains('closed');
+  }
 
   @override
   Widget build(BuildContext context) {
-    final days = state.days;
-    return DefaultTabController(
-      length: days.length,
-      initialIndex: state.selectedIndex.clamp(0, days.length - 1),
-      child: Builder(
-        builder: (context) {
-          final controller = DefaultTabController.of(context);
-          controller.addListener(() {
-            if (!controller.indexIsChanging) onSelectDay(controller.index);
-          });
-          return Column(
+    final state = ref.watch(studentTimetableViewModelProvider);
+    final viewModel = ref.read(studentTimetableViewModelProvider.notifier);
+    final offline =
+        ref.watch(connectivityMonitorProvider) == ConnectivityState.offline;
+    return StudentScaffold(
+      title: 'My timetable',
+      selectedIndex: 2,
+      body: Builder(builder: (context) {
+        if (state.isLoading && !state.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (!state.hasData) {
+          return _StateMessage(
+            state: state,
+            offline: offline,
+            onRetry: viewModel.load,
+          );
+        }
+        final date = _selectedDate;
+        final events = _eventsFor(state, date);
+        final holidays = events.where(_isHoliday).toList(growable: false);
+        final sessions = holidays.isEmpty
+            ? _sessionsFor(state, date)
+            : const <PortalSession>[];
+        return RefreshIndicator(
+          onRefresh: viewModel.refresh,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(TmsSpace.md),
             children: [
-              if (showOfflineBar)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 8,
+              if (offline)
+                const Card(
+                  child: ListTile(
+                    leading: Icon(Icons.wifi_off),
+                    title: Text(
+                        'You are offline. Showing the last loaded timetable.'),
                   ),
-                  color: kColorAccent.withValues(alpha: 0.15),
-                  child: const Row(
+                ),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: TmsSpace.sm,
+                    vertical: TmsSpace.md,
+                  ),
+                  child: Row(
                     children: [
-                      Icon(Icons.wifi_off_rounded, size: 18),
-                      SizedBox(width: 8),
+                      IconButton.filledTonal(
+                        tooltip: 'Previous day',
+                        onPressed: _dayOffset <= -7
+                            ? null
+                            : () => setState(() => _dayOffset--),
+                        icon: const Icon(Icons.chevron_left_rounded),
+                      ),
                       Expanded(
-                        child: Text(
-                          'You are offline. Showing the last loaded timetable.',
+                        child: Column(
+                          children: [
+                            Text(
+                              _dayOffset == 0
+                                  ? 'Today · ${_dayNames[date.weekday - 1]}'
+                                  : _dayNames[date.weekday - 1],
+                              style: Theme.of(context).textTheme.titleLarge,
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              '${date.day} ${_months[date.month - 1]} ${date.year}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: kColorMutedText,
+                                  ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
                         ),
+                      ),
+                      IconButton.filledTonal(
+                        tooltip: 'Next day',
+                        onPressed: _dayOffset >= 7
+                            ? null
+                            : () => setState(() => _dayOffset++),
+                        icon: const Icon(Icons.chevron_right_rounded),
                       ),
                     ],
                   ),
                 ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                color: kColorPrimary.withValues(alpha: 0.04),
-                child: Row(
-                  children: [
-                    const Icon(Icons.info_outline_rounded,
-                        size: 18, color: kColorPrimary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        state.todaySessions.isEmpty
-                            ? 'No sessions scheduled for today.'
-                            : '${state.todaySessions.length} session${state.todaySessions.length == 1 ? '' : 's'} scheduled for today.',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(color: kColorPrimary),
-                      ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: TmsSpace.sm),
+                child: Text(
+                  'You can review up to one week before or after today.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+              if (holidays.isNotEmpty)
+                ...holidays.map((holiday) => _HolidayCard(event: holiday))
+              else if (sessions.isEmpty)
+                const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(TmsSpace.lg),
+                    child: Column(
+                      children: [
+                        Icon(Icons.event_available_outlined,
+                            size: 42, color: kColorMutedText),
+                        SizedBox(height: TmsSpace.sm),
+                        Text('No classes scheduled for this day.'),
+                      ],
                     ),
-                  ],
+                  ),
+                )
+              else ...[
+                Text(
+                  '${sessions.length} session${sessions.length == 1 ? '' : 's'}',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-              ),
-              TabBar(
-                isScrollable: true,
-                indicatorColor: kColorAccent,
-                labelColor: kColorPrimary,
-                unselectedLabelColor: kColorText.withValues(alpha: 0.6),
-                tabs: days.map((day) => Tab(text: day.label)).toList(),
-              ),
-              Expanded(
-                child: TabBarView(
-                  children:
-                      days.map((day) => _DayScheduleList(day: day)).toList(),
+                const SizedBox(height: TmsSpace.sm),
+                for (final session in sessions) ...[
+                  _SessionCard(session: session),
+                  const SizedBox(height: TmsSpace.sm),
+                ],
+              ],
+              for (final event in events.where((event) => !_isHoliday(event)))
+                Card(
+                  child: ListTile(
+                    leading:
+                        const Icon(Icons.event_outlined, color: kColorPrimary),
+                    title: Text(event.title),
+                    subtitle: Text(
+                        event.details.isEmpty ? event.kind : event.details),
+                  ),
                 ),
-              ),
             ],
-          );
-        },
-      ),
+          ),
+        );
+      }),
     );
   }
 }
 
-class _DayScheduleList extends StatelessWidget {
-  const _DayScheduleList({required this.day});
-
-  final PortalDaySchedule day;
+class _HolidayCard extends StatelessWidget {
+  const _HolidayCard({required this.event});
+  final PortalEvent event;
 
   @override
-  Widget build(BuildContext context) {
-    if (day.sessions.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.event_busy_rounded,
-                size: 48, color: kColorText.withValues(alpha: 0.3)),
-            const SizedBox(height: 12),
-            Text(
-              'No classes scheduled for ${day.label}.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: kColorText.withValues(alpha: 0.55),
-                  ),
-            ),
-          ],
+  Widget build(BuildContext context) => Card(
+        color: StudentColors.accent.withValues(alpha: .10),
+        child: Padding(
+          padding: const EdgeInsets.all(TmsSpace.lg),
+          child: Column(
+            children: [
+              const Icon(Icons.beach_access_rounded,
+                  size: 44, color: StudentColors.accent),
+              const SizedBox(height: TmsSpace.sm),
+              Text('Holiday', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: TmsSpace.xs),
+              Text(event.title, textAlign: TextAlign.center),
+              if (event.details.isNotEmpty) ...[
+                const SizedBox(height: TmsSpace.xs),
+                Text(event.details, textAlign: TextAlign.center),
+              ],
+            ],
+          ),
         ),
       );
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.all(20),
-      itemCount: day.sessions.length,
-      itemBuilder: (context, index) =>
-          _TimetableSessionTile(session: day.sessions[index]),
-    );
-  }
 }
 
-/// Session tile with course-type distinction (Regular, Music, Short-term,
-/// Long-term, Personalized) shown as a pill.
-class _TimetableSessionTile extends StatelessWidget {
-  const _TimetableSessionTile({required this.session});
-
+class _SessionCard extends StatelessWidget {
+  const _SessionCard({required this.session});
   final PortalSession session;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(TmsRadius.r14),
-        border: Border.all(color: StudentColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+  Widget build(BuildContext context) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(TmsSpace.md),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
+            children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                width: 76,
+                padding: const EdgeInsets.symmetric(vertical: TmsSpace.sm),
                 decoration: BoxDecoration(
-                  color: kColorPrimary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(TmsRadius.r12),
+                  color: kColorPrimary.withValues(alpha: .08),
+                  borderRadius: BorderRadius.circular(TmsRadius.r10),
                 ),
-                child: Text(
-                  session.time,
-                  style: const TextStyle(
-                    color: kColorPrimary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
+                child: Column(
+                  children: [
+                    Text(session.time,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w800, color: kColorPrimary)),
+                    Text(session.endTime,
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ],
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: TmsSpace.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      session.subject,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${session.teacher} · ${session.room}',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: kColorText.withValues(alpha: 0.7),
-                          ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Ends ${session.endTime}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: kColorText.withValues(alpha: 0.55),
-                          ),
-                    ),
+                  children: [
+                    Text(session.subject,
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: TmsSpace.xs),
+                    Text(session.teacher),
+                    if (session.room.isNotEmpty)
+                      Text(session.room,
+                          style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(height: TmsSpace.xs),
+                    Text(session.typeLabel,
+                        style: const TextStyle(
+                            color: StudentColors.info,
+                            fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: StudentColors.info.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(TmsRadius.pill),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.school_outlined,
-                    size: 14,
-                    color: StudentColors.info,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    session.typeLabel,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: StudentColors.info,
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+        ),
+      );
 }
 
-/// Full-screen loading/error/denied/offline message for the timetable.
-class _TimetableStateMessage extends StatelessWidget {
-  const _TimetableStateMessage({
-    required this.state,
-    required this.isOffline,
-    required this.onRetry,
-  });
-
+class _StateMessage extends StatelessWidget {
+  const _StateMessage(
+      {required this.state, required this.offline, required this.onRetry});
   final StudentTimetableState state;
-  final bool isOffline;
+  final bool offline;
   final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
-    if (state.error == null) {
-      return _StateBody(
-        icon: Icons.event_busy_rounded,
-        title: 'No timetable yet',
-        message:
-            'No classes are scheduled for you right now. Pull to refresh or check back later.',
-        actionLabel: 'Refresh',
-        onAction: onRetry,
-      );
-    }
-    if (state.isDenied) {
-      return _StateBody(
-        icon: Icons.block_rounded,
-        title: 'Access denied',
-        message: state.error ??
-            'Your account is not allowed to view this timetable.',
-        actionLabel: 'Try again',
-        onAction: onRetry,
-      );
-    }
-    if (isOffline) {
-      return _StateBody(
-        icon: Icons.wifi_off_rounded,
-        title: 'You are offline',
-        message:
-            'Check your connection and try again. The timetable needs the network to load.',
-        actionLabel: 'Retry',
-        onAction: onRetry,
-      );
-    }
-    return _StateBody(
-      icon: Icons.error_outline_rounded,
-      title: 'Could not load the timetable',
-      message: state.error ?? 'Something went wrong. Please try again.',
-      actionLabel: 'Retry',
-      onAction: onRetry,
-    );
-  }
-}
-
-class _StateBody extends StatelessWidget {
-  const _StateBody({
-    required this.icon,
-    required this.title,
-    required this.message,
-    required this.actionLabel,
-    required this.onAction,
-  });
-
-  final IconData icon;
-  final String title;
-  final String message;
-  final String actionLabel;
-  final VoidCallback onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        const SizedBox(height: 64),
-        Icon(icon, size: 56, color: kColorText.withValues(alpha: 0.4)),
-        const SizedBox(height: 16),
-        Text(
-          title,
-          style: Theme.of(context).textTheme.titleLarge,
+    final title = state.isDenied
+        ? 'Access denied'
+        : offline || state.isOffline
+            ? 'You are offline'
+            : state.error == null
+                ? 'No timetable yet'
+                : 'Could not load the timetable';
+    return ListView(padding: const EdgeInsets.all(24), children: [
+      const SizedBox(height: 64),
+      Icon(offline ? Icons.wifi_off : Icons.event_busy_rounded,
+          size: 56, color: kColorMutedText),
+      const SizedBox(height: 16),
+      Text(title,
           textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          message,
-          style: Theme.of(context).textTheme.bodyMedium,
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 20),
-        Center(
-          child: FilledButton(onPressed: onAction, child: Text(actionLabel)),
-        ),
-      ],
-    );
+          style: Theme.of(context).textTheme.titleLarge),
+      const SizedBox(height: 8),
+      Text(state.error ?? 'No classes are scheduled for you right now.',
+          textAlign: TextAlign.center),
+      const SizedBox(height: 20),
+      Center(
+          child: FilledButton(onPressed: onRetry, child: const Text('Retry'))),
+    ]);
   }
 }

@@ -4,9 +4,10 @@ import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware, hasPermission } from '../middleware/auth';
 import { LeaveType, LeaveStatus } from '@tms/types';
 import { getSmsSender } from '../utils/sms';
-import { PushNotificationService } from '../services/push-notification';
-import { recordNotification } from '../services/notification-records';
+import { getPushSender } from '../utils/push';
 import { canAccessBranch, hasBranchPermission, isTenantAdmin } from '../utils/access-control';
+import { recordNotification } from '../services/notification-records';
+
 
 const router = Router();
 
@@ -88,12 +89,17 @@ router.post(
     if (Number.isNaN(parsedStart.getTime()) || Number.isNaN(parsedEnd.getTime()) || parsedEnd < parsedStart) {
       return res.status(400).json({ error: 'Leave end date must be on or after the start date.' });
     }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (parsedStart < today) {
+      return res.status(400).json({ error: 'Leave start date cannot be in the past.' });
+    }
     const normalizedReason = String(reason).trim();
     if (!normalizedReason || normalizedReason.length > 2000) {
       return res.status(400).json({ error: 'Provide a reason no longer than 2,000 characters.' });
     }
     try {
-      const [tenantPolicy, branch, targetStudent] = await Promise.all([
+      const [tenantPolicy, branch, targetStudent, selfStudent] = await Promise.all([
         prisma.tenant.findUnique({ where: { id: tenantId } }),
         prisma.branch.findFirst({ where: { id: branchId, tenantId } }),
         studentId
@@ -113,16 +119,33 @@ router.post(
               },
             })
           : Promise.resolve(null),
+        !studentId
+          ? prisma.student.findFirst({
+              where: {
+                userId: requesterUserId,
+                user: { tenantId },
+                enrollments: { some: { class: { branchId }, status: { in: ['ACTIVE', 'BLOCKED'] } } },
+              },
+              select: {
+                userId: true,
+                enrollments: {
+                  where: { status: { in: ['ACTIVE', 'BLOCKED'] }, class: { branchId } },
+                  select: { class: { select: { teacherId: true } } },
+                },
+              },
+            })
+          : Promise.resolve(null),
       ]);
       if (!tenantPolicy || !branch) return res.status(404).json({ error: 'Tenant or branch not found.' });
       const branchAssignment = req.user!.roles.some((role: any) => role.branchId === branchId);
       if (studentId && !targetStudent) {
         return res.status(404).json({ error: 'Linked student was not found in this branch.' });
       }
-      if (!studentId && !isTenantAdmin(req.user!) && !branchAssignment) {
+      if (!studentId && !selfStudent && !isTenantAdmin(req.user!) && !branchAssignment) {
         return res.status(403).json({ error: 'You cannot submit leave for this branch.' });
       }
-      const leaveSubjectUserId = targetStudent?.userId ?? requesterUserId;
+      const leaveStudent = targetStudent ?? selfStudent;
+      const leaveSubjectUserId = leaveStudent?.userId ?? requesterUserId;
       const overlapping = await prisma.leave.findFirst({
         where: {
           tenantId,
@@ -152,12 +175,13 @@ router.post(
         },
       });
 
-      await PushNotificationService.sendPush(
-        tenantId,
+      // Mocks parent/admin notification on request submission
+      await getPushSender().sendPush(
         requesterUserId,
         'Leave Request Submitted',
         `Your request for ${leaveType} leave starting ${startDate} is pending approval.`
       );
+      // Persistent inbox record. Fail-open: never rolls back the saved leave.
       await recordNotification(prisma, {
         tenantId,
         userId: requesterUserId,
@@ -168,7 +192,7 @@ router.post(
         destination: 'leave',
         entityId: leave.id,
       });
-      if (targetStudent) {
+      if (leaveStudent) {
         const branchAdmins = await prisma.user.findMany({
           where: {
             tenantId,
@@ -176,28 +200,15 @@ router.post(
           },
           select: { id: true },
         });
-        const teacherIds = targetStudent.enrollments
+        const teacherIds = leaveStudent.enrollments
           .map((enrollment) => enrollment.class.teacherId)
           .filter((id): id is string => Boolean(id));
         const recipients = [...new Set([...branchAdmins.map((admin) => admin.id), ...teacherIds])];
-        await Promise.all(recipients.map(async (userId) => {
-          await PushNotificationService.sendPush(
-            tenantId,
-            userId,
-            'Student leave requested',
-            `A linked parent requested ${leaveType} leave from ${startDate} to ${endDate}.`,
-          );
-          await recordNotification(prisma, {
-            tenantId,
-            userId,
-            branchId,
-            category: 'LEAVE',
-            title: 'Student leave requested',
-            body: `A linked parent requested ${leaveType} leave from ${startDate} to ${endDate}.`,
-            destination: 'leave',
-            entityId: leave.id,
-          });
-        }));
+        await Promise.all(recipients.map((userId) => getPushSender().sendPush(
+          userId,
+          'Student leave requested',
+          `${targetStudent ? 'A linked parent' : 'A student'} requested ${leaveType} leave from ${startDate} to ${endDate}.`,
+        )));
       }
 
       return res.status(201).json({ message: 'Leave request submitted successfully.', leave });
@@ -263,12 +274,12 @@ router.post(
         return res.status(409).json({ error: 'Leave request was already processed.' });
       }
 
-      await PushNotificationService.sendPush(
-        req.tenantId!,
+      await getPushSender().sendPush(
         leave.userId,
         `Leave Request Update`,
         `Your request has been ${newStatus.toLowerCase()}.`
       );
+      // Persistent inbox record. Fail-open: never rolls back the saved decision.
       await recordNotification(prisma, {
         tenantId: req.tenantId!,
         userId: leave.userId,

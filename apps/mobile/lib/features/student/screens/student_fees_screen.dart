@@ -31,7 +31,6 @@ class StudentFeesScreen extends ConsumerWidget {
     if (!billingEnabled) {
       return StudentScaffold(
         title: 'Fees & Payment',
-        selectedIndex: 2,
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
@@ -78,7 +77,6 @@ class StudentFeesScreen extends ConsumerWidget {
     if (state.isLoading && state.invoices.isEmpty) {
       return const StudentScaffold(
         title: 'Fees & payment',
-        selectedIndex: 2,
         body: Center(child: CircularProgressIndicator()),
       );
     }
@@ -86,7 +84,6 @@ class StudentFeesScreen extends ConsumerWidget {
     if (state.isDenied && state.invoices.isEmpty) {
       return StudentScaffold(
         title: 'Fees & payment',
-        selectedIndex: 2,
         body: _MessageBody(
           icon: Icons.lock_outline_rounded,
           title: 'Access Denied',
@@ -100,7 +97,6 @@ class StudentFeesScreen extends ConsumerWidget {
     if (state.isOffline && state.invoices.isEmpty) {
       return StudentScaffold(
         title: 'Fees & payment',
-        selectedIndex: 2,
         body: _MessageBody(
           icon: Icons.wifi_off_rounded,
           title: 'You are offline',
@@ -114,7 +110,6 @@ class StudentFeesScreen extends ConsumerWidget {
     if (state.error != null && state.invoices.isEmpty) {
       return StudentScaffold(
         title: 'Fees & payment',
-        selectedIndex: 2,
         body: _MessageBody(
           icon: Icons.error_outline_rounded,
           title: 'Could not load fees',
@@ -128,7 +123,6 @@ class StudentFeesScreen extends ConsumerWidget {
     if (state.isEmpty) {
       return StudentScaffold(
         title: 'Fees & payment',
-        selectedIndex: 2,
         body: _MessageBody(
           icon: Icons.receipt_long_outlined,
           title: 'No invoices yet',
@@ -253,7 +247,6 @@ class _MessageBody extends StatelessWidget {
   Widget build(BuildContext context) {
     return StudentScaffold(
       title: 'Fees & payment',
-      selectedIndex: 2,
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -302,7 +295,6 @@ class _StudentFeesContent extends StatelessWidget {
   Widget build(BuildContext context) {
     return StudentScaffold(
       title: 'Fees & payment',
-      selectedIndex: 2,
       body: RefreshIndicator(
         onRefresh: () async => onRefresh(),
         child: ListView(

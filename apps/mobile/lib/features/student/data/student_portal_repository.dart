@@ -31,6 +31,27 @@ class StudentPortalRepository {
 
   /// Consolidated portal path (no parameters; identity from session cookie).
   static const String portalPath = '/api/users/me/student-portal';
+  static const String leaveRequestPath = '/api/leaves/request';
+
+  Future<void> requestLeave({
+    required String branchId,
+    required String leaveType,
+    required DateTime startDate,
+    required DateTime endDate,
+    required String reason,
+  }) async {
+    try {
+      await _dio.post<dynamic>(leaveRequestPath, data: {
+        'branchId': branchId,
+        'leaveType': leaveType,
+        'startDate': startDate.toIso8601String(),
+        'endDate': endDate.toIso8601String(),
+        'reason': reason,
+      });
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
 
   /// Raw per-student timetable path for a known student id.
   static String timetablePath(String studentId) =>

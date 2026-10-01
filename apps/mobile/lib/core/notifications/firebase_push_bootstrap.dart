@@ -3,14 +3,12 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-import 'firebase_runtime_config.dart';
 import 'push_notification_service.dart';
 
 class FirebaseMessagingGateway implements PushMessagingGateway {
-  FirebaseMessagingGateway(this._messaging, {this.webVapidKey});
+  FirebaseMessagingGateway(this._messaging);
 
   final FirebaseMessaging _messaging;
-  final String? webVapidKey;
 
   PushMessage _convert(RemoteMessage message) => PushMessage(
         title: message.notification?.title,
@@ -21,10 +19,7 @@ class FirebaseMessagingGateway implements PushMessagingGateway {
       );
 
   @override
-  Future<String?> getToken() => _messaging.getToken(vapidKey: webVapidKey);
-
-  @override
-  Future<void> deleteToken() => _messaging.deleteToken();
+  Future<String?> getToken() => _messaging.getToken();
 
   @override
   Future<PushMessage?> getInitialMessage() async {
@@ -98,10 +93,8 @@ class FlutterLocalNotificationPresenter implements LocalNotificationPresenter {
 }
 
 Future<PushNotificationService?> initializeFirebasePushNotifications() async {
-  // Browser push needs a service worker and a separate deployment contract;
-  // this native mobile bootstrap intentionally supports Android and iOS only.
   final platform = kIsWeb
-      ? null
+      ? 'web'
       : switch (defaultTargetPlatform) {
           TargetPlatform.android => 'android',
           TargetPlatform.iOS => 'ios',
@@ -109,28 +102,14 @@ Future<PushNotificationService?> initializeFirebasePushNotifications() async {
         };
   if (platform == null) return null;
 
-  final config = FirebaseRuntimeConfig.current;
-  if (config == null) {
-    const message =
-        'Firebase push configuration is incomplete. Provide FIREBASE_API_KEY, '
-        'FIREBASE_APP_ID, FIREBASE_MESSAGING_SENDER_ID, and '
-        'FIREBASE_PROJECT_ID with --dart-define.';
-    if (kReleaseMode) throw StateError(message);
-    debugPrint('$message Push is disabled for this debug build.');
-    return null;
-  }
-
   try {
-    await Firebase.initializeApp(options: config.options);
+    await Firebase.initializeApp();
     void openDeepLink(String deepLink) {
       PushNotifications.deepLinkHandler?.call(deepLink);
     }
 
     return PushNotificationService(
-      messaging: FirebaseMessagingGateway(
-        FirebaseMessaging.instance,
-        webVapidKey: config.webVapidKey,
-      ),
+      messaging: FirebaseMessagingGateway(FirebaseMessaging.instance),
       api: const ApiPushTokenApi(),
       localNotifications:
           FlutterLocalNotificationPresenter(onDeepLink: openDeepLink),
@@ -138,10 +117,8 @@ Future<PushNotificationService?> initializeFirebasePushNotifications() async {
       onDeepLink: openDeepLink,
     );
   } catch (error) {
-    if (kReleaseMode) rethrow;
     debugPrint(
-      'Firebase push notifications unavailable; continuing without push: '
-      '$error',
+      'Firebase push notifications unavailable; continuing without push.',
     );
     return null;
   }

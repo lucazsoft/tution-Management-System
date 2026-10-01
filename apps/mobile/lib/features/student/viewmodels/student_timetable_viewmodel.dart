@@ -10,6 +10,7 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/core/network/api_exception.dart';
+import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/network/request_cancellation.dart';
 import 'package:tms_mobile/core/viewmodel/base_viewmodel.dart';
 import 'package:tms_mobile/features/student/data/student_portal_repository.dart';
@@ -21,6 +22,7 @@ class StudentTimetableState extends ViewModelState {
   const StudentTimetableState({
     this.days = const [],
     this.todaySessions = const [],
+    this.events = const [],
     this.selectedIndex = 0,
     this.isRefreshing = false,
     this.usedFallback = false,
@@ -31,6 +33,7 @@ class StudentTimetableState extends ViewModelState {
 
   final List<PortalDaySchedule> days;
   final List<PortalSession> todaySessions;
+  final List<PortalEvent> events;
   final int selectedIndex;
   final bool isRefreshing;
   final bool usedFallback;
@@ -46,6 +49,7 @@ class StudentTimetableState extends ViewModelState {
   StudentTimetableState copyWith({
     List<PortalDaySchedule>? days,
     List<PortalSession>? todaySessions,
+    List<PortalEvent>? events,
     int? selectedIndex,
     bool? isRefreshing,
     bool? usedFallback,
@@ -58,6 +62,7 @@ class StudentTimetableState extends ViewModelState {
     return StudentTimetableState(
       days: days ?? this.days,
       todaySessions: todaySessions ?? this.todaySessions,
+      events: events ?? this.events,
       selectedIndex: selectedIndex ?? this.selectedIndex,
       isRefreshing: isRefreshing ?? this.isRefreshing,
       usedFallback: usedFallback ?? this.usedFallback,
@@ -102,6 +107,7 @@ class StudentTimetableViewModel extends BaseViewModel<StudentTimetableState> {
         isLoading: false,
         days: days,
         todaySessions: portal.todaySessions,
+        events: portal.events,
         selectedIndex: _todayIndex(days),
         usedFallback: usedFallback,
         clearError: true,
@@ -142,6 +148,7 @@ class StudentTimetableViewModel extends BaseViewModel<StudentTimetableState> {
         isRefreshing: false,
         days: days,
         todaySessions: portal.todaySessions,
+        events: portal.events,
         selectedIndex: _todayIndex(days),
         usedFallback: usedFallback,
         clearError: true,
@@ -183,6 +190,15 @@ class StudentTimetableViewModel extends BaseViewModel<StudentTimetableState> {
     for (final session in sessions) {
       groups.putIfAbsent(session.dayGroupKey, () => []).add(session);
     }
+    for (final sessions in groups.values) {
+      sessions.sort((a, b) {
+        final byStart = a.time.compareTo(b.time);
+        if (byStart != 0) return byStart;
+        final byEnd = a.endTime.compareTo(b.endTime);
+        if (byEnd != 0) return byEnd;
+        return a.subject.compareTo(b.subject);
+      });
+    }
     final days = groups.entries
         .map((entry) => PortalDaySchedule(
               key: entry.key,
@@ -214,5 +230,6 @@ class StudentTimetableViewModel extends BaseViewModel<StudentTimetableState> {
 final studentTimetableViewModelProvider =
     StateNotifierProvider<StudentTimetableViewModel, StudentTimetableState>(
         (ref) {
+  ref.watch(authProvider.select((state) => state.user?.id));
   return StudentTimetableViewModel();
 });

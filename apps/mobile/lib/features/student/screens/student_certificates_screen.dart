@@ -72,11 +72,11 @@ class StudentCertificatesScreen extends ConsumerWidget {
       );
     }
 
-    if (state.savedFile != null && state.savedForId != null) {
+    if (state.savedPath != null && state.savedForId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Saved to ${state.savedFile!.path}'),
+            content: Text('Certificate downloaded to ${state.savedPath}'),
             action: SnackBarAction(
               label: 'Dismiss',
               onPressed: viewModel.clearSaved,

@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_portal_dto.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_record_states.dart';
 
@@ -57,28 +58,30 @@ class TeacherClassDetailScreen extends StatelessWidget {
               subtitle: 'Daily workflows for this class',
             ),
             const SizedBox(height: 8),
-            const _ToolTile(
+            _ToolTile(
               icon: Icons.fact_check_outlined,
               title: 'Class attendance',
               subtitle: 'Use the Attendance tab to mark today\'s roster',
+              onTap: () =>
+                  GoRouter.maybeOf(context)?.go('/teacher/home?tab=attendance'),
             ),
-            const _ToolTile(
+            _ToolTile(
               icon: Icons.menu_book_outlined,
               title: 'Syllabus progress',
-              subtitle: 'Coming next from the web teacher workflow',
-              enabled: false,
+              subtitle: 'Plan chapters, add topics, and update progress',
+              onTap: () => GoRouter.maybeOf(context)?.push('/teacher/syllabus'),
             ),
-            const _ToolTile(
+            _ToolTile(
               icon: Icons.assignment_outlined,
               title: 'Homework',
-              subtitle: 'Coming next from the web teacher workflow',
-              enabled: false,
+              subtitle: 'Create an assignment for this class',
+              onTap: () => GoRouter.maybeOf(context)?.push('/teacher/homework'),
             ),
-            const _ToolTile(
+            _ToolTile(
               icon: Icons.analytics_outlined,
               title: 'Results',
-              subtitle: 'Coming next from the web teacher workflow',
-              enabled: false,
+              subtitle: 'Record marks with paper evidence',
+              onTap: () => GoRouter.maybeOf(context)?.push('/teacher/results'),
             ),
             const SizedBox(height: 16),
             _SectionHeader(
@@ -197,22 +200,23 @@ class _ToolTile extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
-    this.enabled = true,
+    this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
-  final bool enabled;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Card(
       child: ListTile(
-        enabled: enabled,
         leading: Icon(icon),
         title: Text(title),
         subtitle: Text(subtitle),
+        trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+        onTap: onTap,
       ),
     );
   }

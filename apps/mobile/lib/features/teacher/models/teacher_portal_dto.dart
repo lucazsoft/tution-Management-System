@@ -59,6 +59,8 @@ class TeacherScheduleSlot {
     return '$day$time'.trim();
   }
 
+  String get timeLabel => start.isEmpty || end.isEmpty ? '' : '$start-$end';
+
   bool matchesDay(String candidate) =>
       _dayKey(day) == _dayKey(candidate) && _dayKey(day).isNotEmpty;
 
@@ -83,6 +85,8 @@ class TeacherTodayClass {
     this.slots = const [],
     this.scheduleLabel,
     this.branchName,
+    this.checkInTime,
+    this.checkOutTime,
   });
 
   final String sessionId;
@@ -94,6 +98,8 @@ class TeacherTodayClass {
   final List<TeacherScheduleSlot> slots;
   final String? scheduleLabel;
   final String? branchName;
+  final DateTime? checkInTime;
+  final DateTime? checkOutTime;
 
   factory TeacherTodayClass.fromJson(Map<String, dynamic> json) {
     final branch = json['branch'];
@@ -109,8 +115,125 @@ class TeacherTodayClass {
       scheduleLabel: _scheduleLabel(rawSchedule),
       branchName:
           branch is Map<String, dynamic> ? branch['name'] as String? : null,
+      checkInTime: _date(json['checkInTime']),
+      checkOutTime: _date(json['checkOutTime']),
     );
   }
+}
+
+class TeacherHomework {
+  const TeacherHomework(
+      {required this.id,
+      required this.title,
+      required this.subject,
+      required this.deadline,
+      this.description,
+      this.contentUrl,
+      this.createdAt});
+  final String id;
+  final String title;
+  final String subject;
+  final DateTime deadline;
+  final String? description;
+  final String? contentUrl;
+  final DateTime? createdAt;
+  factory TeacherHomework.fromJson(Map<String, dynamic> json) =>
+      TeacherHomework(
+          id: _str(json['id']),
+          title: _str(json['title']),
+          subject: _str(json['subject']),
+          deadline:
+              _date(json['deadline']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+          description: json['description'] as String?,
+          contentUrl: json['contentUrl'] as String?,
+          createdAt: _date(json['createdAt']));
+}
+
+class TeacherSyllabusTopic {
+  const TeacherSyllabusTopic(
+      {required this.id, required this.title, required this.status});
+  final String id;
+  final String title;
+  final String status;
+  factory TeacherSyllabusTopic.fromJson(Map<String, dynamic> json) =>
+      TeacherSyllabusTopic(
+          id: _str(json['id']),
+          title: _str(json['title']),
+          status: _str(json['status']));
+}
+
+class TeacherSyllabusChapter {
+  const TeacherSyllabusChapter(
+      {required this.id,
+      required this.title,
+      required this.status,
+      required this.topics});
+  final String id;
+  final String title;
+  final String status;
+  final List<TeacherSyllabusTopic> topics;
+  factory TeacherSyllabusChapter.fromJson(Map<String, dynamic> json) =>
+      TeacherSyllabusChapter(
+          id: _str(json['id']),
+          title: _str(json['title']),
+          status: _str(json['status']),
+          topics: _mappedList(json['topics'], TeacherSyllabusTopic.fromJson));
+}
+
+class TeacherSyllabus {
+  const TeacherSyllabus(
+      {required this.id, required this.subject, required this.chapters});
+  final String id;
+  final String subject;
+  final List<TeacherSyllabusChapter> chapters;
+  factory TeacherSyllabus.fromJson(Map<String, dynamic> json) =>
+      TeacherSyllabus(
+          id: _str(json['id']),
+          subject: _str(json['subject']),
+          chapters:
+              _mappedList(json['chapters'], TeacherSyllabusChapter.fromJson));
+}
+
+class TeacherResultDefinition {
+  const TeacherResultDefinition(
+      {required this.id,
+      required this.classId,
+      required this.title,
+      required this.subject,
+      required this.testDate});
+  final String id;
+  final String classId;
+  final String title;
+  final String subject;
+  final DateTime testDate;
+  factory TeacherResultDefinition.fromJson(Map<String, dynamic> json) =>
+      TeacherResultDefinition(
+          id: _str(json['id']),
+          classId: _str(json['classId']),
+          title: _str(json['title']),
+          subject: _str(json['subject']),
+          testDate: _date(json['testDate']) ?? DateTime.now());
+}
+
+class TeacherAcademicEvent {
+  const TeacherAcademicEvent(
+      {required this.id,
+      required this.title,
+      required this.type,
+      required this.startDate,
+      this.description = ''});
+  final String id;
+  final String title;
+  final String type;
+  final DateTime startDate;
+  final String description;
+  factory TeacherAcademicEvent.fromJson(Map<String, dynamic> json) =>
+      TeacherAcademicEvent(
+          id: _str(json['id']),
+          title: _str(json['title']),
+          type: _str(json['eventType']),
+          startDate: _date(json['startDate']) ?? DateTime.now(),
+          description: _str(json['description']));
 }
 
 class TeacherPendingUpdate {
@@ -150,6 +273,8 @@ class TeacherClassInfo {
     this.studentCount = 0,
     this.students = const [],
     this.attendance = const [],
+    this.homework = const [],
+    this.syllabi = const [],
   });
 
   final String id;
@@ -161,6 +286,8 @@ class TeacherClassInfo {
   final int studentCount;
   final List<TeacherStudent> students;
   final List<TeacherClassAttendance> attendance;
+  final List<TeacherHomework> homework;
+  final List<TeacherSyllabus> syllabi;
 
   bool isScheduledOn(String day) => slots.any((slot) => slot.matchesDay(day));
 
@@ -191,6 +318,8 @@ class TeacherClassInfo {
                   TeacherClassAttendance.fromJson(record),
             ]
           : const [],
+      homework: _mappedList(json['homework'], TeacherHomework.fromJson),
+      syllabi: _mappedList(json['syllabi'], TeacherSyllabus.fromJson),
     );
   }
 }
@@ -215,6 +344,39 @@ class TeacherStudent {
       status: _str(json['status']).toUpperCase(),
     );
   }
+}
+
+class TeacherMessageContact {
+  const TeacherMessageContact(
+      {required this.studentId,
+      required this.studentName,
+      required this.gradeName,
+      required this.parentId,
+      required this.parentName});
+  final String studentId, studentName, gradeName, parentId, parentName;
+  factory TeacherMessageContact.fromJson(Map<String, dynamic> json) =>
+      TeacherMessageContact(
+          studentId: _str(json['studentId']),
+          studentName: _str(json['studentName']),
+          gradeName: _str(json['gradeName']),
+          parentId: _str(json['parentId']),
+          parentName: _str(json['parentName']));
+}
+
+class TeacherMessageItem {
+  const TeacherMessageItem(
+      {required this.id,
+      required this.senderId,
+      required this.text,
+      required this.createdAt});
+  final String id, senderId, text;
+  final DateTime? createdAt;
+  factory TeacherMessageItem.fromJson(Map<String, dynamic> json) =>
+      TeacherMessageItem(
+          id: _str(json['id']),
+          senderId: _str(json['senderId']),
+          text: _str(json['messageText']),
+          createdAt: _date(json['createdAt']));
 }
 
 class TeacherClassAttendance {
@@ -296,6 +458,7 @@ class TeacherWorkspace {
     required this.classes,
     required this.leaves,
     required this.stamps,
+    this.resultDefinitions = const [],
     this.checkedIn = false,
     this.lastStampType,
     this.lastStampAt,
@@ -315,6 +478,7 @@ class TeacherWorkspace {
   final List<TeacherClassInfo> classes;
   final List<TeacherLeaveEntry> leaves;
   final List<TeacherStamp> stamps;
+  final List<TeacherResultDefinition> resultDefinitions;
   int get pendingUpdateCount => pendingUpdates.length;
   final bool checkedIn;
   final String? lastStampType;
@@ -358,6 +522,8 @@ class TeacherWorkspace {
       leaves:
           listOf<TeacherLeaveEntry>(json['leaves'], TeacherLeaveEntry.fromJson),
       stamps: listOf<TeacherStamp>(json['stamps'], TeacherStamp.fromJson),
+      resultDefinitions: listOf<TeacherResultDefinition>(
+          json['resultDefinitions'], TeacherResultDefinition.fromJson),
       checkedIn: attendance['checkedIn'] == true,
       lastStampType: attendance['lastStampType'] as String?,
       lastStampAt: _date(attendance['lastStampAt']),
@@ -369,6 +535,14 @@ class TeacherWorkspace {
       assignedClasses: (stats['assignedClasses'] as num?)?.toInt(),
     );
   }
+}
+
+List<T> _mappedList<T>(Object? raw, T Function(Map<String, dynamic>) parser) {
+  if (raw is! List) return <T>[];
+  return [
+    for (final item in raw)
+      if (item is Map<String, dynamic>) parser(item)
+  ];
 }
 
 String _str(Object? v) => v?.toString() ?? '';

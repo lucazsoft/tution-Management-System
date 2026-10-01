@@ -46,26 +46,24 @@ export function createPushNotificationService(dependencies: {
       body: string,
       data?: Record<string, string>,
     ): Promise<PushResult> {
-      let tokenCount = 0;
-      try {
-        const records = await dependencies.tokenStore.findMany({
-          where: { tenantId, userId },
-          select: { token: true },
+      const records = await dependencies.tokenStore.findMany({
+        where: { tenantId, userId },
+        select: { token: true },
+      });
+      if (records.length === 0) {
+        return { success: true, sent: 0, failed: 0, skipped: true };
+      }
+      if (!dependencies.provider) {
+        dependencies.logger.warn({
+          event: 'PUSH_PROVIDER_UNCONFIGURED',
+          tenantId,
+          userId,
+          tokenCount: records.length,
         });
-        tokenCount = records.length;
-        if (records.length === 0) {
-          return { success: true, sent: 0, failed: 0, skipped: true };
-        }
-        if (!dependencies.provider) {
-          dependencies.logger.warn({
-            event: 'PUSH_PROVIDER_UNCONFIGURED',
-            tenantId,
-            userId,
-            tokenCount,
-          });
-          return { success: true, sent: 0, failed: 0, skipped: true };
-        }
+        return { success: true, sent: 0, failed: 0, skipped: true };
+      }
 
+      try {
         const result = await dependencies.provider.send(
           records.map((record) => record.token),
           { title, body, data },
@@ -80,10 +78,10 @@ export function createPushNotificationService(dependencies: {
           event: 'PUSH_DELIVERY_FAILED',
           tenantId,
           userId,
-          tokenCount,
+          tokenCount: records.length,
           error: error instanceof Error ? error.message : String(error),
         });
-        return { success: false, sent: 0, failed: tokenCount };
+        return { success: false, sent: 0, failed: records.length };
       }
     },
   };

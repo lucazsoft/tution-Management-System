@@ -13,12 +13,11 @@
 ///   sourced from the portal payload via [fetchCertificates].
 library;
 
-import 'dart:io';
-
 import 'package:dio/dio.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
 import 'package:tms_mobile/core/network/api_exception.dart';
+
+import 'certificate_download_saver.dart';
 
 /// Certificate entry from the portal payload.
 class ApiStudentCertificate {
@@ -78,15 +77,15 @@ String sanitizeCertificateFileName(String raw, {String fallbackId = ''}) {
 
 /// Repository for the student certificate list + authenticated PDF download.
 class StudentCertificatesRepository {
-  StudentCertificatesRepository({Dio? dio, Directory? saveDir})
+  StudentCertificatesRepository({Dio? dio, String? saveDirectoryPath})
       : _dio = dio ?? ApiClient.instance.dio,
-        _saveDir = saveDir;
+        _saveDirectoryPath = saveDirectoryPath;
 
   final Dio _dio;
 
   /// Test override for the download directory (avoids path_provider in
   /// unit tests).
-  final Directory? _saveDir;
+  final String? _saveDirectoryPath;
 
   /// Certificate list sourced from the student portal payload.
   ///
@@ -115,7 +114,7 @@ class StudentCertificatesRepository {
   /// Downloads the certificate PDF with the authenticated session (the
   /// Better Auth cookie travels on [_dio]) and saves it to the temp
   /// directory. Returns the saved file so the UI can open/share the path.
-  Future<File> downloadCertificate(
+  Future<CertificateDownloadResult> downloadCertificate(
     ApiStudentCertificate certificate, {
     CancelToken? cancelToken,
     void Function(int received, int total)? onProgress,
@@ -150,21 +149,15 @@ class StudentCertificatesRepository {
           message: 'The certificate file is too large to save.',
         );
       }
-      final dir = _saveDir ?? await getTemporaryDirectory();
       final safeName = sanitizeCertificateFileName(
         certificate.fileName,
         fallbackId: certificate.id,
       );
-      final file = File('${dir.path}/$safeName');
-      try {
-        await file.writeAsBytes(bytes, flush: true);
-      } catch (_) {
-        try {
-          if (await file.exists()) await file.delete();
-        } catch (_) {}
-        rethrow;
-      }
-      return file;
+      return await saveCertificateDownload(
+        bytes,
+        safeName,
+        directoryPath: _saveDirectoryPath,
+      );
     } on DioException catch (e) {
       throw ApiException.from(e);
     }

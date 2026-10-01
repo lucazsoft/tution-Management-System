@@ -1,7 +1,7 @@
 // Shared radius + spacing scale for the whole app (UI Phase A).
 //
-// Every screen keeps its current rendered numbers; values that used to live
-// as literals or in StudentSpace/StudentRadius are sourced from here instead.
+// Values that used to live as literals or in StudentSpace/StudentRadius are
+// sourced here; semantic controls follow the web design system.
 // Numeric entries (r2..rFull) pin each distinct radius in use; the semantic
 // aliases below reference the numeric entries so a value change stays atomic.
 
@@ -37,8 +37,8 @@ abstract final class TmsRadius {
   static const double checkbox = r4;
   static const double control = r7;
   static const double card = r12;
-  static const double cardLg = r20;
-  static const double input = r16;
+  static const double cardLg = r16;
+  static const double input = r7;
   static const double modal = r18;
   static const double pill = r20;
 }

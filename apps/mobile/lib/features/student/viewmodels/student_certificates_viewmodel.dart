@@ -2,11 +2,10 @@
 /// authenticated PDF download.
 library;
 
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/core/network/api_exception.dart';
+import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/network/request_cancellation.dart';
 import 'package:tms_mobile/core/viewmodel/base_viewmodel.dart';
 
@@ -21,7 +20,7 @@ class StudentCertificatesState extends ViewModelState {
     this.isOffline = false,
     this.downloadingId,
     this.downloadProgress = 0,
-    this.savedFile,
+    this.savedPath,
     this.savedForId,
     super.error,
     super.isLoading,
@@ -33,7 +32,7 @@ class StudentCertificatesState extends ViewModelState {
   final bool isOffline;
   final String? downloadingId;
   final double downloadProgress;
-  final File? savedFile;
+  final String? savedPath;
   final String? savedForId;
 
   StudentCertificatesState copyWith({
@@ -44,7 +43,7 @@ class StudentCertificatesState extends ViewModelState {
     String? downloadingId,
     bool clearDownloading = false,
     double? downloadProgress,
-    File? savedFile,
+    String? savedPath,
     bool clearSaved = false,
     String? savedForId,
     bool? isLoading,
@@ -59,7 +58,7 @@ class StudentCertificatesState extends ViewModelState {
       downloadingId:
           clearDownloading ? null : (downloadingId ?? this.downloadingId),
       downloadProgress: downloadProgress ?? this.downloadProgress,
-      savedFile: clearSaved ? null : (savedFile ?? this.savedFile),
+      savedPath: clearSaved ? null : (savedPath ?? this.savedPath),
       savedForId: clearSaved ? null : (savedForId ?? this.savedForId),
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
@@ -130,7 +129,7 @@ class StudentCertificatesViewModel
       clearSaved: true,
     );
     try {
-      final file = await _repository.downloadCertificate(
+      final result = await _repository.downloadCertificate(
         certificate,
         cancelToken: token,
         onProgress: (received, total) {
@@ -146,7 +145,7 @@ class StudentCertificatesViewModel
         downloadingId: null,
         clearDownloading: true,
         downloadProgress: 1,
-        savedFile: file,
+        savedPath: result.path,
         savedForId: certificate.id,
       );
     } on ApiException catch (e) {
@@ -169,5 +168,6 @@ class StudentCertificatesViewModel
 
 final studentCertificatesViewModelProvider = StateNotifierProvider<
     StudentCertificatesViewModel, StudentCertificatesState>((ref) {
+  ref.watch(authProvider.select((state) => state.user?.id));
   return StudentCertificatesViewModel();
 });
