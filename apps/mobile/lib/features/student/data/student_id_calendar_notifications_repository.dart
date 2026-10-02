@@ -32,6 +32,18 @@ import 'student_portal_repository.dart';
 /// - [active] otherwise; unpaid dues are surfaced as a notice, not a block.
 enum StudentIdStatus { active, suspended }
 
+class StudentCalendarData {
+  const StudentCalendarData({
+    required this.events,
+    required this.attendance,
+    required this.weeklySessions,
+  });
+
+  final List<PortalEvent> events;
+  final List<PortalAttendance> attendance;
+  final List<PortalSession> weeklySessions;
+}
+
 /// Digital ID card derived from the live portal profile.
 class StudentIdCard {
   const StudentIdCard({
@@ -120,6 +132,15 @@ class StudentIdCalendarNotificationsRepository {
   Future<List<PortalEvent>> fetchEvents({CancelToken? cancelToken}) async {
     final portal = await _portal.fetchPortal(cancelToken: cancelToken);
     return List<PortalEvent>.unmodifiable(portal.events);
+  }
+
+  Future<StudentCalendarData> fetchCalendar({CancelToken? cancelToken}) async {
+    final portal = await _portal.fetchPortal(cancelToken: cancelToken);
+    return StudentCalendarData(
+      events: List.unmodifiable(portal.events),
+      attendance: List.unmodifiable(portal.attendance),
+      weeklySessions: List.unmodifiable(portal.weeklySessions),
+    );
   }
 
   /// Derived inbox (fee, homework, result, attendance, leave and certificate

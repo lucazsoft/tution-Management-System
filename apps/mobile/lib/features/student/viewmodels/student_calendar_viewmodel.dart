@@ -19,6 +19,8 @@ import '../models/student_portal_dto.dart';
 class StudentCalendarState extends ViewModelState {
   const StudentCalendarState({
     this.events = const [],
+    this.attendance = const [],
+    this.weeklySessions = const [],
     this.selectedKind = 'All',
     this.isDenied = false,
     this.isOffline = false,
@@ -27,6 +29,8 @@ class StudentCalendarState extends ViewModelState {
   });
 
   final List<PortalEvent> events;
+  final List<PortalAttendance> attendance;
+  final List<PortalSession> weeklySessions;
 
   /// Active kind filter; 'All' disables filtering.
   final String selectedKind;
@@ -50,6 +54,8 @@ class StudentCalendarState extends ViewModelState {
 
   StudentCalendarState copyWith({
     List<PortalEvent>? events,
+    List<PortalAttendance>? attendance,
+    List<PortalSession>? weeklySessions,
     String? selectedKind,
     bool? isDenied,
     bool? isOffline,
@@ -59,6 +65,8 @@ class StudentCalendarState extends ViewModelState {
   }) {
     return StudentCalendarState(
       events: events ?? this.events,
+      attendance: attendance ?? this.attendance,
+      weeklySessions: weeklySessions ?? this.weeklySessions,
       selectedKind: selectedKind ?? this.selectedKind,
       isDenied: isDenied ?? this.isDenied,
       isOffline: isOffline ?? this.isOffline,
@@ -89,7 +97,8 @@ class StudentCalendarViewModel extends BaseViewModel<StudentCalendarState> {
       isOffline: false,
     );
     try {
-      final events = await _repository.fetchEvents(cancelToken: token);
+      final calendar = await _repository.fetchCalendar(cancelToken: token);
+      final events = calendar.events;
       final kinds = {
         for (final event in events)
           if (event.kind.trim().isNotEmpty) event.kind,
@@ -97,6 +106,8 @@ class StudentCalendarViewModel extends BaseViewModel<StudentCalendarState> {
       state = state.copyWith(
         isLoading: false,
         events: events,
+        attendance: calendar.attendance,
+        weeklySessions: calendar.weeklySessions,
         selectedKind:
             kinds.contains(state.selectedKind) ? state.selectedKind : 'All',
         clearError: true,

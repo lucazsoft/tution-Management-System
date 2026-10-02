@@ -298,6 +298,7 @@ class PortalEvent {
   const PortalEvent({
     required this.id,
     required this.dateLabel,
+    required this.endDateLabel,
     required this.day,
     required this.month,
     required this.title,
@@ -308,6 +309,7 @@ class PortalEvent {
   factory PortalEvent.fromJson(Map<String, dynamic> json) => PortalEvent(
         id: _str(json['id'], ''),
         dateLabel: _str(json['date'], ''),
+        endDateLabel: _str(json['endDate'], _str(json['date'], '')),
         day: _str(json['day'], ''),
         month: _str(json['month'], ''),
         title: _str(json['title'], ''),
@@ -317,11 +319,43 @@ class PortalEvent {
 
   final String id;
   final String dateLabel;
+  final String endDateLabel;
   final String day;
   final String month;
   final String title;
   final String kind;
   final String details;
+}
+
+/// One attendance mark returned with the authenticated student portal.
+class PortalAttendance {
+  const PortalAttendance({
+    required this.id,
+    required this.dateLabel,
+    required this.subject,
+    required this.session,
+    required this.state,
+    this.leaveReason,
+  });
+
+  factory PortalAttendance.fromJson(Map<String, dynamic> json) =>
+      PortalAttendance(
+        id: _str(json['id'], ''),
+        dateLabel: _str(json['date'], ''),
+        subject: _str(json['subject'], 'Class'),
+        session: _str(json['session'], ''),
+        state: _str(json['state'], 'Attendance not recorded'),
+        leaveReason: json['leaveReason'] == null
+            ? null
+            : '${json['leaveReason']}'.trim(),
+      );
+
+  final String id;
+  final String dateLabel;
+  final String subject;
+  final String session;
+  final String state;
+  final String? leaveReason;
 }
 
 class PortalCertificate {
@@ -382,6 +416,8 @@ class PortalLeaveRecord {
   const PortalLeaveRecord(
       {required this.id,
       required this.dates,
+      required this.startDate,
+      required this.endDate,
       required this.reason,
       required this.state,
       required this.detail});
@@ -390,6 +426,8 @@ class PortalLeaveRecord {
       PortalLeaveRecord(
         id: _str(json['id'], ''),
         dates: _str(json['dates']),
+        startDate: DateTime.tryParse('${json['startDate'] ?? ''}'),
+        endDate: DateTime.tryParse('${json['endDate'] ?? ''}'),
         reason: _str(json['reason']),
         state: _str(json['state'], 'Pending'),
         detail: _str(json['detail']),
@@ -397,6 +435,8 @@ class PortalLeaveRecord {
 
   final String id;
   final String dates;
+  final DateTime? startDate;
+  final DateTime? endDate;
   final String reason;
   final String state;
   final String detail;
@@ -412,6 +452,7 @@ class StudentPortal {
     required this.insights,
     required this.invoices,
     required this.events,
+    required this.attendance,
     required this.certificates,
     required this.leaves,
     required this.notifications,
@@ -455,6 +496,7 @@ class StudentPortal {
       insights: list('insights', PortalInsight.fromJson),
       invoices: list('invoices', PortalInvoice.fromJson),
       events: list('events', PortalEvent.fromJson),
+      attendance: list('attendance', PortalAttendance.fromJson),
       certificates: list('certificates', PortalCertificate.fromJson),
       leaves: list('leaves', PortalLeaveRecord.fromJson),
       notifications: list('notifications', PortalNotification.fromJson),
@@ -469,6 +511,7 @@ class StudentPortal {
   final List<PortalInsight> insights;
   final List<PortalInvoice> invoices;
   final List<PortalEvent> events;
+  final List<PortalAttendance> attendance;
   final List<PortalCertificate> certificates;
   final List<PortalLeaveRecord> leaves;
   final List<PortalNotification> notifications;

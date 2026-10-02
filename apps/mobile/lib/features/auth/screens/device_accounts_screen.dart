@@ -209,8 +209,6 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
     mpin.dispose();
     confirm.dispose();
     if (saved == true && mounted) setState(_reload);
-    final auth = ref.read(authProvider);
-    if (mounted && auth.isTwoFactorPending) context.go('/2fa');
   }
 
   Future<void> _switch(DeviceAccount account) async {
@@ -329,15 +327,12 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
                           });
                           return;
                         }
-                        final user = await ref
+                        await ref
                             .read(authProvider.notifier)
                             .activateDeviceAccount(account.email,
                                 useMpin ? account.password : value);
                         if (!dialogContext.mounted) return;
                         Navigator.pop(dialogContext);
-                        if (user != null && mounted) {
-                          context.go(ref.read(authProvider).roleRedirectPath);
-                        }
                       } on AuthFailure catch (failure) {
                         setDialogState(() {
                           busy = false;
@@ -359,9 +354,6 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
     // Wait until the dialog transition is fully gone before releasing it.
     await Future<void>.delayed(const Duration(milliseconds: 500));
     credential.dispose();
-    if (mounted && ref.read(authProvider).isTwoFactorPending) {
-      context.go('/2fa');
-    }
   }
 
   @override

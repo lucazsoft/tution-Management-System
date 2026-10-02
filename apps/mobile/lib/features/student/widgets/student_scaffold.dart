@@ -6,6 +6,7 @@ import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
 import 'package:tms_mobile/features/auth/data/device_account_vault.dart';
 import 'package:tms_mobile/features/auth/data/account_repository.dart';
+import 'package:tms_mobile/shared/widgets/portal_navigation_drawer.dart';
 
 import '../student_design.dart';
 
@@ -233,85 +234,40 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
 
   Widget _buildDrawer(BuildContext context) {
     final user = ref.watch(authProvider).user;
-    final baseTheme = Theme.of(context);
-    return Theme(
-      data: baseTheme.copyWith(
-        navigationDrawerTheme: NavigationDrawerThemeData(
-          backgroundColor: Colors.white,
-          surfaceTintColor: Colors.transparent,
-          indicatorColor: StudentColors.primary.withValues(alpha: .10),
-          iconTheme: const WidgetStatePropertyAll(IconThemeData(
-            color: StudentColors.primary,
-          )),
-          labelTextStyle: WidgetStateProperty.resolveWith(
-            (states) => baseTheme.textTheme.bodyMedium?.copyWith(
-              color: StudentColors.text,
-              fontWeight: states.contains(WidgetState.selected)
-                  ? FontWeight.w700
-                  : FontWeight.w500,
-            ),
-          ),
-        ),
-        listTileTheme: const ListTileThemeData(
-          iconColor: StudentColors.primary,
-          textColor: StudentColors.text,
-          minLeadingWidth: 24,
-          horizontalTitleGap: 16,
-        ),
-        dividerColor: StudentColors.border,
-        textTheme: baseTheme.textTheme.apply(
-          bodyColor: StudentColors.text,
-          displayColor: StudentColors.text,
-        ),
-      ),
+    return PortalDrawerTheme(
       child: NavigationDrawer(
         selectedIndex: widget.selectedIndex,
         onDestinationSelected: (index) => _open(_navigationItems[index].route),
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(28, 24, 28, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                FutureBuilder<PersonalAccount?>(
-                  future: _drawerAccount,
-                  builder: (context, snapshot) {
-                    final account = snapshot.data;
-                    return CircleAvatar(
-                      radius: 38,
-                      backgroundColor: Colors.white,
-                      foregroundImage: account?.photoUrl?.isNotEmpty == true
-                          ? NetworkImage(account!.photoUrl!)
-                          : null,
-                      child: account?.photoUrl?.isNotEmpty == true
-                          ? null
-                          : Text(
-                              account?.initials.isNotEmpty == true
-                                  ? account!.initials
-                                  : (user?.name.isNotEmpty == true
-                                      ? user!.name[0].toUpperCase()
-                                      : 'S'),
-                              style: const TextStyle(
-                                color: StudentColors.primary,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  user?.name ?? 'Student',
-                  style: Theme.of(context).textTheme.titleMedium,
-                  textAlign: TextAlign.center,
-                ),
-                if (user?.email.isNotEmpty == true)
-                  Text(
-                    user!.email,
-                    style: Theme.of(context).textTheme.bodySmall,
-                    textAlign: TextAlign.center,
-                  ),
-              ],
+          PortalDrawerHeader(
+            name: user?.name ?? 'Student',
+            subtitle:
+                user?.email.isNotEmpty == true ? user!.email : 'Student portal',
+            avatar: FutureBuilder<PersonalAccount?>(
+              future: _drawerAccount,
+              builder: (context, snapshot) {
+                final account = snapshot.data;
+                return CircleAvatar(
+                  radius: 30,
+                  backgroundColor: StudentColors.primary.withValues(alpha: .10),
+                  foregroundImage: account?.photoUrl?.isNotEmpty == true
+                      ? NetworkImage(account!.photoUrl!)
+                      : null,
+                  child: account?.photoUrl?.isNotEmpty == true
+                      ? null
+                      : Text(
+                          account?.initials.isNotEmpty == true
+                              ? account!.initials
+                              : (user?.name.isNotEmpty == true
+                                  ? user!.name[0].toUpperCase()
+                                  : 'S'),
+                          style: const TextStyle(
+                            color: StudentColors.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                );
+              },
             ),
           ),
           ..._navigationItems.map(
@@ -322,39 +278,31 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
             ),
           ),
           const Divider(indent: 28, endIndent: 28),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(28, 8, 28, 4),
-            child: Text('ACCOUNT'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.manage_accounts_outlined),
-            title: const Text('Profile settings'),
+          const PortalDrawerSectionLabel('Account'),
+          PortalDrawerAction(
+            icon: Icons.manage_accounts_outlined,
+            label: 'Profile settings',
             onTap: () => _open('/student/account'),
           ),
-          ListTile(
-            leading: const Icon(Icons.key_rounded),
-            title: const Text('Change password'),
+          PortalDrawerAction(
+            icon: Icons.key_rounded,
+            label: 'Change password',
             onTap: () => _open('/student/change-password'),
           ),
-          ListTile(
-            leading: const Icon(Icons.pin_outlined),
-            title: const Text('Set or change MPIN'),
+          PortalDrawerAction(
+            icon: Icons.pin_outlined,
+            label: 'Set or change MPIN',
             onTap: () => _open('/student/mpin'),
           ),
-          ListTile(
-            leading: const Icon(Icons.switch_account_rounded),
-            title: const Text('Switch account'),
+          PortalDrawerAction(
+            icon: Icons.switch_account_rounded,
+            label: 'Switch account',
             onTap: _switchAccount,
           ),
-          ListTile(
-            leading: const Icon(
-              Icons.logout_rounded,
-              color: StudentColors.error,
-            ),
-            title: const Text(
-              'Log out',
-              style: TextStyle(color: StudentColors.error),
-            ),
+          PortalDrawerAction(
+            icon: Icons.logout_rounded,
+            label: 'Log out',
+            destructive: true,
             onTap: () {
               Navigator.of(context).pop();
               ref.read(authProvider.notifier).logout();

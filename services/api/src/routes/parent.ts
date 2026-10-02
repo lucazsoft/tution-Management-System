@@ -341,6 +341,7 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
     });
     const mappedLeaves = leaves.map((leave) => ({
       id: leave.id, childId: student.id,
+      startDate: leave.startDate.toISOString(), endDate: leave.endDate.toISOString(),
       dates: leave.startDate.getTime() === leave.endDate.getTime() ? formatDate(leave.startDate) : `${formatDate(leave.startDate)} – ${formatDate(leave.endDate)}`,
       reason: leave.reason.replace(/^Emergency Out:\s*/, ''),
       state: leaveState(leave.status, leave.reason),

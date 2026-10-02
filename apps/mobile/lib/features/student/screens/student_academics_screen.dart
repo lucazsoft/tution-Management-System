@@ -143,7 +143,7 @@ class _AcademicsTabBar extends StatelessWidget {
     required this.onSelected,
   });
 
-  static const _labels = ['Results', 'Syllabus', 'Homework', 'Analytics'];
+  static const _labels = ['Results', 'Syllabus', 'Homework', 'Insights'];
 
   final int selectedIndex;
   final ValueChanged<int> onSelected;
@@ -260,51 +260,26 @@ class _ResultsViewState extends State<_ResultsView> {
         message: 'Scores appear here as soon as your teacher publishes them.',
       );
     }
-    final assessments = state.results.map((item) => item.assessment).toSet();
-    final years = state.results
-        .map((item) => item.academicYear)
-        .whereType<int>()
-        .toSet()
-        .toList()
-      ..sort((a, b) => b.compareTo(a));
-    final options = <String, String>{
-      for (final assessment in assessments)
-        'assessment:$assessment': assessment,
-      for (final year in years) 'year:$year': '$year yearly improvement',
-    };
-    _selection ??= options.keys.first;
-    if (!options.containsKey(_selection)) _selection = options.keys.first;
-    final results = state.results.where((item) {
-      final selection = _selection!;
-      if (selection.startsWith('year:')) {
-        return item.academicYear.toString() == selection.substring(5);
+    final latestByAssessment = <String, DateTime>{};
+    for (final result in state.results) {
+      final date = result.testDate ?? DateTime(1970);
+      final current = latestByAssessment[result.assessment];
+      if (current == null || date.isAfter(current)) {
+        latestByAssessment[result.assessment] = date;
       }
-      return item.assessment == selection.substring('assessment:'.length);
-    }).toList();
+    }
+    final assessments = latestByAssessment.keys.toList()
+      ..sort(
+          (a, b) => latestByAssessment[b]!.compareTo(latestByAssessment[a]!));
+    _selection ??= assessments.first;
+    if (!assessments.contains(_selection)) _selection = assessments.first;
+    final results =
+        state.results.where((item) => item.assessment == _selection).toList();
     return RefreshIndicator(
       onRefresh: viewModel.refresh,
       child: ListView(
         padding: const EdgeInsets.all(TmsSpace.md),
         children: [
-          Container(
-            padding: const EdgeInsets.all(TmsSpace.md),
-            decoration: BoxDecoration(
-              color: StudentColors.primary.withValues(alpha: .08),
-              borderRadius: BorderRadius.circular(TmsRadius.card),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.bolt_rounded, color: StudentColors.primary),
-                SizedBox(width: TmsSpace.sm),
-                Expanded(
-                  child: Text(
-                    'Scores appear here as soon as your teacher publishes them.',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: TmsSpace.lg),
           Text('Published results',
               style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: TmsSpace.sm),
@@ -312,13 +287,13 @@ class _ResultsViewState extends State<_ResultsView> {
             initialValue: _selection,
             isExpanded: true,
             decoration: const InputDecoration(
-              labelText: 'Assessment or academic year',
+              labelText: 'Published result',
               prefixIcon: Icon(Icons.fact_check_outlined),
             ),
-            items: options.entries
-                .map((entry) => DropdownMenuItem(
-                      value: entry.key,
-                      child: Text(entry.value, overflow: TextOverflow.ellipsis),
+            items: assessments
+                .map((assessment) => DropdownMenuItem(
+                      value: assessment,
+                      child: Text(assessment, overflow: TextOverflow.ellipsis),
                     ))
                 .toList(),
             onChanged: (value) => setState(() => _selection = value),
@@ -1354,93 +1329,27 @@ class _InsightsView extends StatefulWidget {
 
 class _InsightsViewState extends State<_InsightsView> {
   String _selectedSubject = 'Overall';
-  String _selectedPeriod = 'all';
-  DateTimeRange? _dateRange;
 
   String _dateLabel(DateTime date) =>
       '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
-
-  Future<void> _selectDates() async {
-    final dates = widget.state.results.map((item) => item.testDate).nonNulls;
-    final earliest = dates.isEmpty
-        ? DateTime(DateTime.now().year - 1)
-        : dates.reduce((a, b) => a.isBefore(b) ? a : b);
-    final latest = dates.isEmpty
-        ? DateTime.now()
-        : dates.reduce((a, b) => a.isAfter(b) ? a : b);
-    final selected = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(earliest.year - 1),
-      lastDate: DateTime(latest.year + 1, 12, 31),
-      initialDateRange: _dateRange,
-      helpText: 'Select performance period',
-    );
-    if (selected != null && mounted) setState(() => _dateRange = selected);
-  }
 
   @override
   Widget build(BuildContext context) {
     final state = widget.state;
     final viewModel = widget.viewModel;
-    final insights = state.detail?.insights.isNotEmpty == true
-        ? state.detail!.insights
-        : state.insights;
-    if (insights.isEmpty) {
+    if (state.results.isEmpty) {
       return const StudentEmptyView(
         icon: Icons.insights_outlined,
         title: 'No insights yet',
         message: 'Insights are calculated from your published scores.',
       );
     }
-    final years = state.results
-        .map((item) => item.academicYear)
-        .whereType<int>()
-        .toSet()
-        .toList()
-      ..sort((a, b) => b.compareTo(a));
-    final assessments = state.results.map((item) => item.assessment).toSet();
-    final periodOptions = <String, String>{
-      'all': 'All published',
-      for (final assessment in assessments)
-        'assessment:$assessment': assessment,
-      for (final year in years) 'year:$year': '$year',
-    };
-    if (!periodOptions.containsKey(_selectedPeriod)) _selectedPeriod = 'all';
-    final visibleMarks = state.results.where((item) {
-      final testDate = item.testDate;
-      if (_dateRange != null &&
-          (testDate == null ||
-              testDate.isBefore(_dateRange!.start) ||
-              testDate.isAfter(_dateRange!.end.add(const Duration(days: 1))))) {
-        return false;
-      }
-      if (_selectedPeriod == 'all') return true;
-      if (_selectedPeriod.startsWith('year:')) {
-        return item.academicYear.toString() == _selectedPeriod.substring(5);
-      }
-      return item.assessment == _selectedPeriod.substring('assessment:'.length);
-    }).toList();
-    final scoresBySubject = <String, List<double>>{};
-    for (final result in visibleMarks) {
-      scoresBySubject
-          .putIfAbsent(result.subject, () => [])
-          .add(result.percentage);
-    }
-    final periodAverages = scoresBySubject.entries
-        .map((entry) => (
-              subject: entry.key,
-              average: entry.value.reduce((a, b) => a + b) / entry.value.length,
-            ))
-        .toList();
-    final strongest = [...periodAverages]
-      ..sort((a, b) => b.average.compareTo(a.average));
-    final weakest = [...periodAverages]
-      ..sort((a, b) => a.average.compareTo(b.average));
-    if (_selectedSubject != 'Overall' &&
-        !insights.any((item) => item.subject == _selectedSubject)) {
+    final subjects = state.results.map((item) => item.subject).toSet().toList()
+      ..sort();
+    if (_selectedSubject != 'Overall' && !subjects.contains(_selectedSubject)) {
       _selectedSubject = 'Overall';
     }
-    final chartResults = visibleMarks
+    final matchingResults = state.results
         .where((item) =>
             _selectedSubject == 'Overall' || item.subject == _selectedSubject)
         .toList()
@@ -1450,6 +1359,9 @@ class _InsightsViewState extends State<_InsightsView> {
         if (b.testDate == null) return 1;
         return a.testDate!.compareTo(b.testDate!);
       });
+    final chartResults = matchingResults.length <= 5
+        ? matchingResults
+        : matchingResults.sublist(matchingResults.length - 5);
     final chartValues = chartResults.map((item) => item.percentage).toList();
     final chartTrend =
         chartValues.length < 2 ? 0.0 : chartValues.last - chartValues.first;
@@ -1469,117 +1381,41 @@ class _InsightsViewState extends State<_InsightsView> {
       child: ListView(
         padding: const EdgeInsets.all(TmsSpace.md),
         children: [
-          Container(
-            padding: const EdgeInsets.all(TmsSpace.lg),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [StudentColors.primaryDark, StudentColors.primary],
-              ),
-              borderRadius: BorderRadius.circular(TmsRadius.card),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.insights_rounded,
-                    color: Colors.white, size: 30),
-                const SizedBox(height: TmsSpace.sm),
-                Text(
-                  'Track progress over time',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: Colors.white,
-                      ),
-                ),
-                const SizedBox(height: TmsSpace.xs),
-                Text(
-                  'Filter by subject and date to see where performance is improving.',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.white.withValues(alpha: .84),
-                      ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: TmsSpace.md),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(TmsSpace.md),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text('Performance trend',
-                            style: Theme.of(context).textTheme.titleLarge),
-                      ),
-                      DropdownButton<String>(
-                        value: _selectedSubject,
-                        underline: const SizedBox.shrink(),
-                        items: [
-                          const DropdownMenuItem(
-                            value: 'Overall',
-                            child: Text('Overall'),
-                          ),
-                          for (final insight in insights)
-                            DropdownMenuItem(
-                              value: insight.subject,
-                              child: Text(insight.subject),
-                            ),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => _selectedSubject = value);
-                          }
-                        },
-                      ),
-                    ],
-                  ),
+                  Text('Performance trend',
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: TmsSpace.xxs),
+                  Text('Latest five published results',
+                      style: Theme.of(context).textTheme.bodySmall),
                   const SizedBox(height: TmsSpace.sm),
                   DropdownButtonFormField<String>(
-                    initialValue: _selectedPeriod,
+                    initialValue: _selectedSubject,
                     isExpanded: true,
                     decoration: const InputDecoration(
-                      labelText: 'Assessment or academic year',
-                      prefixIcon: Icon(Icons.date_range_outlined),
-                      isDense: true,
+                      labelText: 'Subject',
+                      prefixIcon: Icon(Icons.school_outlined),
                     ),
-                    items: periodOptions.entries
-                        .map((entry) => DropdownMenuItem(
-                              value: entry.key,
-                              child: Text(entry.value,
-                                  overflow: TextOverflow.ellipsis),
-                            ))
-                        .toList(),
+                    items: [
+                      const DropdownMenuItem(
+                        value: 'Overall',
+                        child: Text('Overall'),
+                      ),
+                      for (final subject in subjects)
+                        DropdownMenuItem(
+                          value: subject,
+                          child: Text(subject, overflow: TextOverflow.ellipsis),
+                        ),
+                    ],
                     onChanged: (value) {
                       if (value != null) {
-                        setState(() => _selectedPeriod = value);
+                        setState(() => _selectedSubject = value);
                       }
                     },
-                  ),
-                  const SizedBox(height: TmsSpace.sm),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _selectDates,
-                          icon: const Icon(Icons.calendar_month_outlined),
-                          label: Text(
-                            _dateRange == null
-                                ? 'Choose date range'
-                                : '${_dateLabel(_dateRange!.start)} – ${_dateLabel(_dateRange!.end)}',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                      if (_dateRange != null) ...[
-                        const SizedBox(width: TmsSpace.xs),
-                        IconButton(
-                          tooltip: 'Clear date range',
-                          onPressed: () => setState(() => _dateRange = null),
-                          icon: const Icon(Icons.close_rounded),
-                        ),
-                      ],
-                    ],
                   ),
                   const SizedBox(height: TmsSpace.sm),
                   Text(
@@ -1597,7 +1433,7 @@ class _InsightsViewState extends State<_InsightsView> {
                         ? Center(
                             child: Text(
                               chartValues.isEmpty
-                                  ? 'No published evaluations match these filters.'
+                                  ? 'No published results are available.'
                                   : 'At least two published evaluations are needed for a trend.',
                               textAlign: TextAlign.center,
                             ),
@@ -1615,7 +1451,7 @@ class _InsightsViewState extends State<_InsightsView> {
                       spacing: TmsSpace.xs,
                       runSpacing: TmsSpace.xs,
                       children: [
-                        for (final result in chartResults.take(4))
+                        for (final result in chartResults)
                           Chip(
                             avatar: const Icon(Icons.event_outlined, size: 16),
                             label: Text(
@@ -1632,128 +1468,6 @@ class _InsightsViewState extends State<_InsightsView> {
                 ],
               ),
             ),
-          ),
-          const SizedBox(height: TmsSpace.md),
-          if (periodAverages.isNotEmpty)
-            Row(
-              children: [
-                Expanded(
-                  child: _InsightSummary(
-                    label: 'Strongest',
-                    subject: strongest.first.subject,
-                    value: strongest.first.average,
-                    color: StudentColors.success,
-                    icon: Icons.workspace_premium_outlined,
-                  ),
-                ),
-                const SizedBox(width: TmsSpace.sm),
-                Expanded(
-                  child: _InsightSummary(
-                    label: 'Needs focus',
-                    subject: weakest.first.subject,
-                    value: weakest.first.average,
-                    color: StudentColors.warning,
-                    icon: Icons.track_changes_rounded,
-                  ),
-                ),
-              ],
-            ),
-          const SizedBox(height: TmsSpace.lg),
-          Text('Subject trends', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: TmsSpace.sm),
-          for (final insight in insights) ...[
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(TmsSpace.md),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(insight.subject,
-                              style: Theme.of(context).textTheme.titleMedium),
-                          const SizedBox(height: TmsSpace.xs),
-                          LinearProgressIndicator(
-                            minHeight: 7,
-                            value: (insight.average / 100)
-                                .clamp(0.0, 1.0)
-                                .toDouble(),
-                            borderRadius: BorderRadius.circular(TmsRadius.pill),
-                            backgroundColor: StudentColors.border,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: TmsSpace.md),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text('${insight.average.toStringAsFixed(0)}%',
-                            style: Theme.of(context).textTheme.titleMedium),
-                        Text(
-                          _trendStatus(
-                            insight.change,
-                            failed: _subjectFailed(
-                              insight.subject,
-                              state.results,
-                            ),
-                            hasHistory: true,
-                          ).label,
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: _trendStatus(
-                                      insight.change,
-                                      failed: _subjectFailed(
-                                        insight.subject,
-                                        state.results,
-                                      ),
-                                      hasHistory: true,
-                                    ).color,
-                                  ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: TmsSpace.sm),
-          ],
-          const SizedBox(height: TmsSpace.xs),
-          if (state.detailLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: TmsSpace.sm),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (state.detail == null && state.snapshot != null)
-            Center(
-              child: TextButton.icon(
-                onPressed: viewModel.loadDetail,
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Refresh detailed insights'),
-              ),
-            ),
-          if (state.detail?.remarks.isNotEmpty == true) ...[
-            const SizedBox(height: TmsSpace.md),
-            Text('Teacher comments',
-                style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: TmsSpace.sm),
-          ],
-          for (final remark in state.detail?.remarks ?? const []) ...[
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.comment_outlined,
-                    color: StudentColors.primary),
-                title: Text(remark.subject),
-                subtitle: Text(remark.message),
-              ),
-            ),
-            const SizedBox(height: TmsSpace.sm),
-          ],
-          Text(
-            'Insights use averages across published tests and are read-only.',
-            style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
       ),
@@ -1805,16 +1519,6 @@ class _InsightsViewState extends State<_InsightsView> {
       label: 'Stable performance',
       color: StudentColors.primary,
     );
-  }
-
-  bool _subjectFailed(String subject, List<AcademicResult> results) {
-    final matches = results.where((result) => result.subject == subject);
-    if (matches.isEmpty) return false;
-    final latest = matches.first;
-    final passPercentage = latest.passMarks == null || latest.maximum <= 0
-        ? 40.0
-        : (latest.passMarks! / latest.maximum) * 100;
-    return latest.percentage < passPercentage;
   }
 }
 
@@ -1878,44 +1582,4 @@ class _PerformanceLineChartPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _PerformanceLineChartPainter oldDelegate) =>
       oldDelegate.values != values || oldDelegate.color != color;
-}
-
-class _InsightSummary extends StatelessWidget {
-  const _InsightSummary({
-    required this.label,
-    required this.subject,
-    required this.value,
-    required this.color,
-    required this.icon,
-  });
-
-  final String label;
-  final String subject;
-  final double value;
-  final Color color;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(TmsSpace.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: color),
-            const SizedBox(height: TmsSpace.md),
-            Text(label, style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: TmsSpace.xxs),
-            Text(subject, style: Theme.of(context).textTheme.titleMedium),
-            Text('${value.toStringAsFixed(0)}%',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: color, fontWeight: FontWeight.w700)),
-          ],
-        ),
-      ),
-    );
-  }
 }

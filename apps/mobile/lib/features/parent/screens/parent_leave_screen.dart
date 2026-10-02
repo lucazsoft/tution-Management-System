@@ -24,7 +24,9 @@ class ParentLeaveScreen extends ConsumerWidget {
                         subjectName: child.name,
                         history: portal.leaves
                             .map((item) => LeaveHistoryItem(item.dates,
-                                item.reason, item.state, item.detail))
+                                item.reason, item.state, item.detail,
+                                startDate: item.startDate,
+                                endDate: item.endDate))
                             .toList(),
                         onSubmit: (type, start, end, reason) async {
                           await ref

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nepali_utils/nepali_utils.dart';
 import 'package:tms_mobile/shared/widgets/academic_calendar.dart';
@@ -32,5 +33,83 @@ void main() {
       nextBs.year * 12 + nextBs.month,
       currentBs.year * 12 + currentBs.month + 1,
     );
+  });
+
+  testWidgets('selected holiday does not present attendance as required',
+      (tester) async {
+    final day = DateTime(2026, 10, 2);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: AcademicCalendar(
+            now: () => day,
+            events: [
+              AcademicCalendarEvent(
+                id: 'holiday-1',
+                title: 'Dashain break',
+                date: day,
+                kind: 'Holiday',
+              ),
+            ],
+            scheduledClasses: const [
+              AcademicCalendarClass(
+                id: 'class-1',
+                weekday: DateTime.friday,
+                subject: 'Mathematics',
+                time: '09:00 - 10:00',
+                teacher: 'Teacher',
+              ),
+            ],
+          ),
+        ),
+      ),
+    ));
+
+    expect(find.text('Holiday - no attendance required'), findsOneWidget);
+    expect(find.text('Attendance not recorded'), findsNothing);
+  });
+
+  testWidgets('past class day shows its attendance and class details',
+      (tester) async {
+    final today = DateTime(2026, 10, 2);
+    final day = today.subtract(const Duration(days: 1));
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: AcademicCalendar(
+            now: () => today,
+            events: const [],
+            attendance: [
+              AcademicCalendarAttendance(
+                id: 'attendance-1',
+                date: day,
+                subject: 'Science',
+                session: 'Grade 8 A',
+                status: 'Absent',
+              ),
+            ],
+            scheduledClasses: [
+              AcademicCalendarClass(
+                id: 'class-1',
+                weekday: day.weekday,
+                subject: 'Science',
+                time: '10:00 - 11:00',
+                teacher: 'Ms Rai',
+              ),
+            ],
+          ),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.byKey(
+      ValueKey('calendar-day-${day.year}-${day.month}-${day.day}'),
+    ));
+    await tester.pump();
+
+    expect(find.text('Absent - Science'), findsOneWidget);
+    expect(find.text('Grade 8 A'), findsOneWidget);
+    expect(find.text('10:00 - 11:00 - Ms Rai'), findsOneWidget);
+    expect(find.text('Attendance not recorded'), findsNothing);
   });
 }

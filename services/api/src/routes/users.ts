@@ -975,6 +975,7 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
     const events = calendarRows.map((event) => ({
       id: event.id,
       date: formatDate(event.startDate),
+      endDate: formatDate(event.endDate),
       day: event.startDate.toLocaleDateString('en', { day: '2-digit', timeZone: 'Asia/Kathmandu' }),
       month: event.startDate.toLocaleDateString('en', { month: 'short', timeZone: 'Asia/Kathmandu' }).toUpperCase(),
       title: event.title,
@@ -1104,6 +1105,8 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
       certificates,
       leaves: leaveRows.map((leave) => ({
         id: leave.id,
+        startDate: leave.startDate.toISOString(),
+        endDate: leave.endDate.toISOString(),
         dates: `${formatDate(leave.startDate)}${leave.startDate.getTime() === leave.endDate.getTime() ? '' : ` – ${formatDate(leave.endDate)}`}`,
         reason: leave.reason.includes(':') ? leave.reason.split(':')[0].trim() : leave.reason,
         state: leave.status === 'APPROVED_LEVEL2' ? 'Approved' : leave.status === 'REJECTED' ? 'Rejected' : 'Pending',

@@ -38,19 +38,52 @@ class StudentCalendarScreen extends ConsumerWidget {
             onRetry: viewModel.load),
       );
     }
-    final events = state.events
-        .map((event) {
-          final date = parsePortalEventDate(event.dateLabel);
+    final events = state.events.expand((event) {
+      final start = parsePortalEventDate(event.dateLabel);
+      final end = parsePortalEventDate(event.endDateLabel) ?? start;
+      if (start == null || end == null || end.isBefore(start)) {
+        return const <AcademicCalendarEvent>[];
+      }
+      return <AcademicCalendarEvent>[
+        for (var date = start;
+            !date.isAfter(end);
+            date = date.add(const Duration(days: 1)))
+          AcademicCalendarEvent(
+            id: '${event.id}-${date.toIso8601String()}',
+            title: event.title,
+            date: date,
+            kind: event.kind.isEmpty ? 'Event' : event.kind,
+            details: event.details,
+          ),
+      ];
+    }).toList();
+    final attendance = state.attendance
+        .map((record) {
+          final date = parsePortalEventDate(record.dateLabel);
           return date == null
               ? null
-              : AcademicCalendarEvent(
-                  id: event.id,
-                  title: event.title,
+              : AcademicCalendarAttendance(
+                  id: record.id,
                   date: date,
-                  kind: event.kind.isEmpty ? 'Event' : event.kind,
-                  details: event.details);
+                  subject: record.subject,
+                  session: record.session,
+                  status: record.state,
+                  details: record.leaveReason ?? '',
+                );
         })
-        .whereType<AcademicCalendarEvent>()
+        .whereType<AcademicCalendarAttendance>()
+        .toList();
+    final scheduledClasses = state.weeklySessions
+        .map((session) => AcademicCalendarClass(
+              id: session.id,
+              weekday: _weekdayNumber(session.dayGroupKey),
+              subject: session.subject,
+              time: [session.time, session.endTime]
+                  .where((value) => value.isNotEmpty)
+                  .join(' - '),
+              teacher: session.teacher,
+            ))
+        .where((session) => session.weekday != null)
         .toList();
     return StudentScaffold(
       title: 'Academic calendar',
@@ -64,9 +97,24 @@ class StudentCalendarScreen extends ConsumerWidget {
               Text('Holidays, exams, ceremonies, and fee deadlines.',
                   style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(height: TmsSpace.md),
-              AcademicCalendar(events: events),
+              AcademicCalendar(
+                events: events,
+                attendance: attendance,
+                scheduledClasses: scheduledClasses,
+              ),
             ]),
       ),
     );
   }
 }
+
+int? _weekdayNumber(String day) => switch (day) {
+      'mon' => DateTime.monday,
+      'tue' => DateTime.tuesday,
+      'wed' => DateTime.wednesday,
+      'thu' => DateTime.thursday,
+      'fri' => DateTime.friday,
+      'sat' => DateTime.saturday,
+      'sun' => DateTime.sunday,
+      _ => null,
+    };

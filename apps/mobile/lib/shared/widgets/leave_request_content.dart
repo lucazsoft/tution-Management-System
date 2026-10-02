@@ -1,12 +1,49 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:tms_mobile/core/network/api_exception.dart';
 
 class LeaveHistoryItem {
-  const LeaveHistoryItem(this.dates, this.reason, this.state, this.detail);
+  const LeaveHistoryItem(
+    this.dates,
+    this.reason,
+    this.state,
+    this.detail, {
+    this.startDate,
+    this.endDate,
+  });
   final String dates;
   final String reason;
   final String state;
   final String detail;
+  final DateTime? startDate;
+  final DateTime? endDate;
+}
+
+DateTime _dateOnly(DateTime value) =>
+    DateTime(value.year, value.month, value.day);
+
+bool leaveDateRangeOverlaps(
+  List<LeaveHistoryItem> history,
+  DateTime start,
+  DateTime end,
+) {
+  final requestedStart = _dateOnly(start);
+  final requestedEnd = _dateOnly(end);
+  return history.any((item) {
+    final state = item.state.toLowerCase();
+    final active = state == 'pending' || state == 'approved';
+    final existingStart = item.startDate;
+    final existingEnd = item.endDate;
+    if (!active || existingStart == null || existingEnd == null) return false;
+    return !_dateOnly(existingStart).isAfter(requestedEnd) &&
+        !_dateOnly(existingEnd).isBefore(requestedStart);
+  });
+}
+
+String leaveSubmissionErrorMessage(Object error) {
+  if (error is ApiException) return error.message;
+  if (error is StateError) return error.message.toString();
+  return 'Could not submit the leave request. Please try again.';
 }
 
 class LeaveRequestContent extends StatefulWidget {
@@ -32,6 +69,20 @@ class _LeaveRequestContentState extends State<LeaveRequestContent> {
   String? _reason;
   final _details = TextEditingController();
   bool _submitting = false;
+  String? _dateError;
+
+  bool _isCovered(DateTime day) {
+    return leaveDateRangeOverlaps(widget.history, day, day);
+  }
+
+  DateTime? _firstAvailable(DateTime from, DateTime last) {
+    for (var day = _dateOnly(from);
+        !day.isAfter(last);
+        day = day.add(const Duration(days: 1))) {
+      if (!_isCovered(day)) return day;
+    }
+    return null;
+  }
 
   @override
   void dispose() {
@@ -44,12 +95,23 @@ class _LeaveRequestContentState extends State<LeaveRequestContent> {
     final today = DateTime(now.year, now.month, now.day);
     final firstAllowed = start ? today : (_start ?? today);
     final candidate = (start ? _start : _end) ?? _start ?? today;
-    final initial = candidate.isBefore(firstAllowed) ? firstAllowed : candidate;
+    final lastAllowed = today.add(const Duration(days: 730));
+    final preferred =
+        candidate.isBefore(firstAllowed) ? firstAllowed : candidate;
+    final initial = _isCovered(preferred)
+        ? _firstAvailable(preferred, lastAllowed)
+        : preferred;
+    if (initial == null) {
+      setState(() => _dateError =
+          'No available leave dates were found in the selectable period.');
+      return;
+    }
     final value = await showDatePicker(
       context: context,
       initialDate: initial,
       firstDate: firstAllowed,
-      lastDate: today.add(const Duration(days: 730)),
+      lastDate: lastAllowed,
+      selectableDayPredicate: (day) => !_isCovered(day),
     );
     if (value != null) {
       setState(() {
@@ -59,6 +121,7 @@ class _LeaveRequestContentState extends State<LeaveRequestContent> {
         } else {
           _end = value;
         }
+        _dateError = null;
       });
     }
   }
@@ -78,6 +141,11 @@ class _LeaveRequestContentState extends State<LeaveRequestContent> {
           content: Text('End date must be on or after the start date.')));
       return;
     }
+    if (leaveDateRangeOverlaps(widget.history, _start!, _end!)) {
+      setState(() => _dateError =
+          'These dates overlap a pending or approved leave request. Choose an available date range.');
+      return;
+    }
     setState(() => _submitting = true);
     try {
       await widget.onSubmit(_reason == 'Sick leave' ? 'SICK' : 'CASUAL',
@@ -87,14 +155,15 @@ class _LeaveRequestContentState extends State<LeaveRequestContent> {
         _start = null;
         _end = null;
         _reason = null;
+        _dateError = null;
         _details.clear();
       });
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Leave request submitted for approval.')));
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(leaveSubmissionErrorMessage(error))));
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -164,6 +233,16 @@ class _LeaveRequestContentState extends State<LeaveRequestContent> {
                               fields[1]
                             ]);
                     }),
+                    if (_dateError != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _dateError!,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: colors.error),
+                      ),
+                    ],
                     const SizedBox(height: 14),
                     DropdownButtonFormField<String>(
                       initialValue: _reason,

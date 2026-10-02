@@ -345,6 +345,8 @@ class ParentLeaveRecord {
   const ParentLeaveRecord({
     required this.id,
     required this.dates,
+    required this.startDate,
+    required this.endDate,
     required this.reason,
     required this.state,
     required this.detail,
@@ -352,6 +354,8 @@ class ParentLeaveRecord {
 
   final String id;
   final String dates;
+  final DateTime? startDate;
+  final DateTime? endDate;
   final String reason;
   final String state;
   final String detail;
@@ -360,6 +364,8 @@ class ParentLeaveRecord {
       ParentLeaveRecord(
         id: _str(json['id']),
         dates: _str(json['dates']),
+        startDate: DateTime.tryParse('${json['startDate'] ?? ''}'),
+        endDate: DateTime.tryParse('${json['endDate'] ?? ''}'),
         reason: _str(json['reason']),
         state: _str(json['state'], 'Pending'),
         detail: _str(json['detail']),

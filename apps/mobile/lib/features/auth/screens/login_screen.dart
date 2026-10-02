@@ -103,9 +103,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         await ref
             .read(authProvider.notifier)
             .activateDeviceAccount(saved.email, saved.password);
-        if (!mounted) return;
-        final auth = ref.read(authProvider);
-        context.go(auth.isTwoFactorPending ? '/2fa' : auth.roleRedirectPath);
+        await _persistRememberedCredentials(email);
         return;
       }
 
@@ -124,6 +122,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               mpin: mpin,
             );
           }
+          await _persistRememberedCredentials(email);
           ref.read(authProvider.notifier).beginDeviceAccountTwoFactor(email);
         } else {
           final user = prepared.user!;
@@ -136,6 +135,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               mpin: mpin,
             );
           }
+          await _persistRememberedCredentials(email);
           ref.read(authProvider.notifier).completeDeviceAccountSignIn(user);
         }
       } else {
@@ -153,6 +153,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               mpin: mpin,
             );
           }
+          await _persistRememberedCredentials(email);
           ref.read(authProvider.notifier).beginDeviceAccountTwoFactor(email);
         } else {
           final user = prepared.user!;
@@ -165,23 +166,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               mpin: mpin,
             );
           }
+          await _persistRememberedCredentials(email);
           ref.read(authProvider.notifier).completeDeviceAccountSignIn(user);
         }
-      }
-      if (!mounted) return;
-      final auth = ref.read(authProvider);
-      if (auth.isTwoFactorPending) {
-        await _persistRememberedCredentials(email);
-        if (!mounted) return;
-        context.go('/2fa');
-      } else if (auth.isAuthenticated) {
-        await _persistRememberedCredentials(email);
-        if (!mounted) return;
-        context.go(auth.roleRedirectPath);
-      } else {
-        throw const AuthFailure(
-          'Sign in did not complete. Please check your details and try again.',
-        );
       }
     } on AuthFailure catch (e) {
       if (!mounted) return;

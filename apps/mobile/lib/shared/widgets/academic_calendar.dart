@@ -19,6 +19,40 @@ class AcademicCalendarEvent {
   final String details;
 }
 
+class AcademicCalendarAttendance {
+  const AcademicCalendarAttendance({
+    required this.id,
+    required this.date,
+    required this.subject,
+    required this.session,
+    required this.status,
+    this.details = '',
+  });
+
+  final String id;
+  final DateTime date;
+  final String subject;
+  final String session;
+  final String status;
+  final String details;
+}
+
+class AcademicCalendarClass {
+  const AcademicCalendarClass({
+    required this.id,
+    required this.weekday,
+    required this.subject,
+    required this.time,
+    required this.teacher,
+  });
+
+  final String id;
+  final int? weekday;
+  final String subject;
+  final String time;
+  final String teacher;
+}
+
 DateTime? parsePortalEventDate(String value) {
   final iso = DateTime.tryParse(value);
   if (iso != null) return DateTime(iso.year, iso.month, iso.day);
@@ -95,9 +129,17 @@ DateTime shiftNepaliMonth(DateTime anchor, int offset) {
 }
 
 class AcademicCalendar extends StatefulWidget {
-  const AcademicCalendar({super.key, required this.events, this.now});
+  const AcademicCalendar({
+    super.key,
+    required this.events,
+    this.attendance = const [],
+    this.scheduledClasses = const [],
+    this.now,
+  });
 
   final List<AcademicCalendarEvent> events;
+  final List<AcademicCalendarAttendance> attendance;
+  final List<AcademicCalendarClass> scheduledClasses;
   final DateTime Function()? now;
 
   @override
@@ -139,6 +181,19 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
   List<AcademicCalendarEvent> _eventsOn(DateTime day) =>
       widget.events.where((event) => _same(event.date, day)).toList();
 
+  List<AcademicCalendarAttendance> _attendanceOn(DateTime day) =>
+      widget.attendance.where((record) => _same(record.date, day)).toList();
+
+  List<AcademicCalendarClass> _classesOn(DateTime day) =>
+      widget.scheduledClasses
+          .where((session) => session.weekday == day.weekday)
+          .toList();
+
+  bool _isHoliday(AcademicCalendarEvent event) {
+    final text = '${event.kind} ${event.title}'.toLowerCase();
+    return text.contains('holiday') || text.contains('break');
+  }
+
   void _moveMonth(int offset) => setState(() {
         _monthAnchor = shiftNepaliMonth(_monthAnchor, offset);
         _selected = _monthAnchor;
@@ -155,9 +210,15 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
     ).toDateTime();
     final today = (widget.now ?? DateTime.now)();
     final selectedEvents = _eventsOn(_selected);
+    final selectedAttendance = _attendanceOn(_selected);
+    final selectedClasses = _classesOn(_selected);
+    final isSelectedHoliday = selectedEvents.any(_isHoliday);
+    final selectedIsPast = _selected.isBefore(
+      DateTime(today.year, today.month, today.day),
+    );
     final upcomingEvents = widget.events
-        .where((event) => !event.date.isBefore(
-            DateTime(today.year, today.month, today.day)))
+        .where((event) =>
+            !event.date.isBefore(DateTime(today.year, today.month, today.day)))
         .toList()
       ..sort((a, b) => a.date.compareTo(b.date));
     return Column(
@@ -204,7 +265,7 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                         onPressed: () => _moveMonth(1),
                         icon: const Icon(Icons.chevron_right)),
                   ]);
-                  if (constraints.maxWidth < 430)
+                  if (constraints.maxWidth < 430) {
                     return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -213,6 +274,7 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                           Align(
                               alignment: Alignment.centerRight, child: controls)
                         ]);
+                  }
                   return Row(children: [Expanded(child: heading), controls]);
                 }),
                 const SizedBox(height: 8),
@@ -246,6 +308,7 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                     final day = days[index];
                     final bs = day.toNepaliDateTime();
                     final events = _eventsOn(day);
+                    final attendance = _attendanceOn(day);
                     final selected = _same(day, _selected);
                     final isToday = _same(day, today);
                     final outside =
@@ -253,7 +316,7 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                     return Semantics(
                       selected: selected,
                       label:
-                          '${day.day} ${_englishMonth(day.month)}, ${events.length} events',
+                          '${day.day} ${_englishMonth(day.month)}, ${events.length} events, ${attendance.length} attendance records',
                       child: InkWell(
                         key: ValueKey(
                             'calendar-day-${day.year}-${day.month}-${day.day}'),
@@ -296,7 +359,7 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                                                 ? kColorMutedText.withValues(
                                                     alpha: .38)
                                                 : kColorMutedText)),
-                                if (events.isNotEmpty)
+                                if (events.isNotEmpty || attendance.isNotEmpty)
                                   Container(
                                       width: 5,
                                       height: 5,
@@ -332,22 +395,72 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
             '${_englishMonth(_selected.month)} ${_selected.day}, ${_selected.year}',
             style: Theme.of(context).textTheme.bodyMedium),
         const SizedBox(height: TmsSpace.sm),
-        if (selectedEvents.isEmpty)
+        if (isSelectedHoliday)
+          _DayRecordTile(
+            icon: Icons.beach_access_outlined,
+            color: kColorWarning,
+            title: 'Holiday - no attendance required',
+            details: selectedEvents.where(_isHoliday).map((event) {
+              return event.details.isEmpty
+                  ? event.title
+                  : '${event.title} - ${event.details}';
+            }).join('\n'),
+          )
+        else if (selectedAttendance.isNotEmpty)
+          for (final record in selectedAttendance)
+            _DayRecordTile(
+              icon: record.status.toLowerCase() == 'present'
+                  ? Icons.check_circle_outline
+                  : Icons.cancel_outlined,
+              color: record.status.toLowerCase() == 'present'
+                  ? kColorSuccess
+                  : record.status.toLowerCase().contains('excused')
+                      ? kColorWarning
+                      : kColorError,
+              title: '${record.status} - ${record.subject}',
+              details: [
+                if (record.session.isNotEmpty) record.session,
+                if (record.details.isNotEmpty) record.details,
+              ].join(' - '),
+            )
+        else if (selectedIsPast && selectedClasses.isNotEmpty)
+          const _DayRecordTile(
+            icon: Icons.pending_actions_outlined,
+            color: kColorWarning,
+            title: 'Attendance not recorded',
+            details:
+                'This was a scheduled class day, but no attendance mark is available.',
+          ),
+        if (!isSelectedHoliday && selectedClasses.isNotEmpty)
+          for (final session in selectedClasses)
+            _DayRecordTile(
+              icon: Icons.menu_book_outlined,
+              color: kColorPrimary,
+              title: session.subject,
+              details: [session.time, session.teacher]
+                  .where((value) => value.isNotEmpty)
+                  .join(' - '),
+            ),
+        for (final event in selectedEvents.where((event) => !_isHoliday(event)))
+          _DayRecordTile(
+            icon: Icons.event_outlined,
+            color: kColorPrimary,
+            title: event.title,
+            details: [event.kind, event.details]
+                .where((value) => value.isNotEmpty)
+                .join(' - '),
+          ),
+        if (selectedEvents.isEmpty &&
+            selectedAttendance.isEmpty &&
+            selectedClasses.isEmpty)
           const Card(
-              child: Padding(
-                  padding: EdgeInsets.all(TmsSpace.md),
-                  child: Text(
-                      'No events scheduled for this day. Select another date to review its schedule.')))
-        else
-          for (final event in selectedEvents)
-            Card(
-                child: ListTile(
-                    leading: const Icon(Icons.event, color: kColorPrimary),
-                    title: Text(event.title),
-                    subtitle: Text([
-                      event.kind,
-                      if (event.details.isNotEmpty) event.details
-                    ].join(' · ')))),
+            child: Padding(
+              padding: EdgeInsets.all(TmsSpace.md),
+              child: Text(
+                'No class, attendance, holiday, or event is recorded for this day.',
+              ),
+            ),
+          ),
         const SizedBox(height: TmsSpace.lg),
         Text('Upcoming events', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: TmsSpace.xs),
@@ -398,4 +511,27 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
         'November',
         'December'
       ][month - 1];
+}
+
+class _DayRecordTile extends StatelessWidget {
+  const _DayRecordTile({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.details,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String details;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: ListTile(
+          leading: Icon(icon, color: color),
+          title: Text(title),
+          subtitle: details.isEmpty ? null : Text(details),
+        ),
+      );
 }

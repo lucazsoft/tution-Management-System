@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/features/auth/data/device_account_vault.dart';
 import 'package:tms_mobile/core/theme/app_theme.dart';
+import 'package:tms_mobile/shared/widgets/portal_navigation_drawer.dart';
 
 /// Shared navigation chrome for the teacher portal's route-based screens.
 abstract final class TeacherNavigation {
@@ -82,85 +83,51 @@ abstract final class TeacherNavigation {
     }
 
     return Consumer(
-      builder: (context, ref, _) => Theme(
-        data: Theme.of(context).copyWith(
-          navigationDrawerTheme: NavigationDrawerThemeData(
-            backgroundColor: Colors.white,
-            surfaceTintColor: Colors.transparent,
-            indicatorColor: kColorPrimary.withValues(alpha: .10),
-            iconTheme: const WidgetStatePropertyAll(
-              IconThemeData(color: kColorPrimary, size: 24),
-            ),
-          ),
-          listTileTheme: const ListTileThemeData(
-            iconColor: kColorPrimary,
-            minLeadingWidth: 24,
-            horizontalTitleGap: 16,
-          ),
-        ),
+      builder: (context, ref, _) => PortalDrawerTheme(
         child: NavigationDrawer(
           selectedIndex: selected < 0 ? null : selected,
           onDestinationSelected: (index) => open(drawerItems[index].route),
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(28, 28, 28, 18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CircleAvatar(
-                    radius: 30,
-                    backgroundColor:
-                        Theme.of(context).colorScheme.primaryContainer,
-                    child: const Icon(Icons.person_rounded, size: 30),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    ref.watch(authProvider).user?.name ?? 'Teacher',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  Text(
-                    ref.watch(authProvider).user?.email ?? 'Teacher portal',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
+            PortalDrawerHeader(
+              name: ref.watch(authProvider).user?.name ?? 'Teacher',
+              subtitle: ref.watch(authProvider).user?.email ?? 'Teacher portal',
+              avatar: CircleAvatar(
+                radius: 30,
+                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                foregroundColor: kColorPrimary,
+                child: const Icon(Icons.person_rounded, size: 30),
               ),
             ),
             for (final item in drawerItems)
               NavigationDrawerDestination(
                 icon: Icon(item.icon),
                 selectedIcon: Icon(item.icon),
-                label: SizedBox(
-                  width: 150,
-                  child: Text(
-                    item.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                label: Text(
+                  item.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             const Divider(indent: 28, endIndent: 28),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(28, 8, 28, 4),
-              child: Text('ACCOUNT'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.manage_accounts_outlined),
-              title: const Text('Profile settings'),
+            const PortalDrawerSectionLabel('Account'),
+            PortalDrawerAction(
+              icon: Icons.manage_accounts_outlined,
+              label: 'Profile settings',
               onTap: () => open('/teacher/account'),
             ),
-            ListTile(
-              leading: const Icon(Icons.key_rounded),
-              title: const Text('Change password'),
+            PortalDrawerAction(
+              icon: Icons.key_rounded,
+              label: 'Change password',
               onTap: () => open('/teacher/change-password'),
             ),
-            ListTile(
-              leading: const Icon(Icons.pin_outlined),
-              title: const Text('Set or change MPIN'),
+            PortalDrawerAction(
+              icon: Icons.pin_outlined,
+              label: 'Set or change MPIN',
               onTap: () => open('/teacher/mpin'),
             ),
-            ListTile(
-              leading: const Icon(Icons.switch_account_rounded),
-              title: const Text('Switch account'),
+            PortalDrawerAction(
+              icon: Icons.switch_account_rounded,
+              label: 'Switch account',
               onTap: () async {
                 Navigator.of(context).pop();
                 final currentId = ref.read(authProvider).user?.id;
@@ -178,15 +145,10 @@ abstract final class TeacherNavigation {
                 }
               },
             ),
-            ListTile(
-              leading: Icon(
-                Icons.logout_rounded,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              title: Text(
-                'Log out',
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
+            PortalDrawerAction(
+              icon: Icons.logout_rounded,
+              label: 'Log out',
+              destructive: true,
               onTap: () {
                 Navigator.of(context).pop();
                 ref.read(authProvider.notifier).logout();
