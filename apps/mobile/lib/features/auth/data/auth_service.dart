@@ -95,9 +95,15 @@ class PasswordSignInResult {
   final String? pendingEmail;
 
   bool get requiresTwoFactor => pendingEmail != null;
+
+  // Compatibility for callers that only inspect authenticated results.
+  String get role => user?.role ?? '';
 }
 
-/// Server-backed authentication service.
+/// Production auth service — server-backed only.
+///
+/// Every path uses the Better Auth session-cookie transport. Production code
+/// never falls back to demo credentials or fixed one-time codes.
 class AuthService {
   AuthService._();
 
@@ -217,7 +223,7 @@ class AuthService {
   }
 
   /// Request a 2FA code sent to the account's verified security mobile.
-  static Future<void> sendTwoFactorCode() async {
+  static Future<void> sendTwoFactorCode([String? _]) async {
     try {
       await _dio.post(
         '/api/auth/two-factor/send-otp',
@@ -231,8 +237,9 @@ class AuthService {
 
   /// Verify the 2FA code.
   static Future<void> verifyTwoFactorCode({
+    String? email,
     required String code,
-    required bool trustDevice,
+    bool trustDevice = false,
   }) async {
     try {
       await _dio.post(
@@ -261,7 +268,9 @@ class AuthService {
   /// Retrieves the authenticated profile only from the server session cookie.
   static Future<AuthUser?> restoreSession() async {
     try {
-      return await _getAuthenticatedSession();
+      final user = await _getAuthenticatedSession();
+      if (user == null) await ApiClient.clearAuth();
+      return user;
     } on DioException catch (error) {
       if (error.response?.statusCode == 401) await ApiClient.clearAuth();
       return null;

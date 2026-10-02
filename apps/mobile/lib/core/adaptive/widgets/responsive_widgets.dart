@@ -21,17 +21,17 @@ class TeacherHomeScreenResponsive extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (sizeClass.isCompact) {
-      return Scaffold(
+      return const Scaffold(
         body: Column(
-          children: const [
+          children: [
             Text('Teacher Dashboard'),
             Expanded(child: Text('Content for teacher home')),
           ],
         ),
       );
     } else {
-      return Row(
-        children: const [
+      return const Row(
+        children: [
           Expanded(child: Text('Teacher Dashboard')),
           Expanded(child: Text('Content for teacher home')),
         ],
@@ -48,17 +48,17 @@ class StudentHomeScreenResponsive extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (sizeClass.isCompact) {
-      return Scaffold(
+      return const Scaffold(
         body: Column(
-          children: const [
+          children: [
             Text('Student Dashboard'),
             Expanded(child: Text('Content for student home')),
           ],
         ),
       );
     } else {
-      return Row(
-        children: const [
+      return const Row(
+        children: [
           Expanded(child: Text('Student Dashboard')),
           Expanded(child: Text('Content for student home')),
         ],

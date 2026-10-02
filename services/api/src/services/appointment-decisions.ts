@@ -63,15 +63,29 @@ export async function decideAppointment(actor: UserPayload, id: string, input: a
         if (appointment.proposedById === actor.id) {
           throw new AppointmentDecisionError(409, 'The parent must respond to your proposed time.');
         }
+        if (appointment.proposedById !== appointment.requestedById) {
+          throw new AppointmentDecisionError(409, 'The parent must respond to the proposed time before teachers can approve it.');
+        }
         if (!appointment.alternativeTime) {
           throw new AppointmentDecisionError(409, 'The proposed meeting time is unavailable.');
         }
+        if (!participants.includes(actor.id)) {
+          throw new AppointmentDecisionError(403, 'Only invited teachers may approve their participation.');
+        }
+        const approvals = { ...((appointment.participantApprovals as Record<string, string> | null) ?? {}) };
+        approvals[actor.id] = 'APPROVED';
+        const allApproved = participants.every(person => approvals[person] === 'APPROVED');
         updated = await tx.appointment.update({ where: { id }, data: {
-          scheduledTime: appointment.alternativeTime, status: 'CONFIRMED',
-          alternativeTime: null, proposedById: null, responseRemarks,
-          participantApprovals: Object.fromEntries(participants.map(person => [person, 'APPROVED'])),
+          ...(allApproved ? {
+            scheduledTime: appointment.alternativeTime,
+            alternativeTime: null,
+            proposedById: null,
+          } : {}),
+          status: allApproved ? 'CONFIRMED' : 'APPROVED',
+          responseRemarks,
+          participantApprovals: approvals as Prisma.InputJsonObject,
         } });
-        return { appointment: updated, notify: true, requestedById: appointment.requestedById };
+        return { appointment: updated, notify: allApproved, requestedById: appointment.requestedById };
       }
       const branchRecipient = appointment.teacher.userRoles.some(role => role.role.name === 'Branch Admin' && branches.includes(role.branchId || ''));
       if (branchRecipient) {

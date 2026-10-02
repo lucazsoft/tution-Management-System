@@ -117,7 +117,10 @@ void main() {
       final dir = await Directory.systemTemp.createTemp('cert-test');
       addTearDown(() => dir.delete(recursive: true));
       final repo =
-          StudentCertificatesRepository(dio: stubCertDio(), saveDir: dir);
+          StudentCertificatesRepository(
+            dio: stubCertDio(),
+            saveDirectoryPath: dir.path,
+          );
 
       final result = await repo.downloadCertificate(
         const ApiStudentCertificate(
@@ -138,7 +141,10 @@ void main() {
       final dir = await Directory.systemTemp.createTemp('cert-test');
       addTearDown(() => dir.delete(recursive: true));
       final repo =
-          StudentCertificatesRepository(dio: stubCertDio(), saveDir: dir);
+          StudentCertificatesRepository(
+            dio: stubCertDio(),
+            saveDirectoryPath: dir.path,
+          );
       try {
         await repo.downloadCertificate(
           const ApiStudentCertificate(
@@ -159,7 +165,10 @@ void main() {
       final dir = await Directory.systemTemp.createTemp('cert-test');
       addTearDown(() => dir.delete(recursive: true));
       final repo =
-          StudentCertificatesRepository(dio: stubDownloadDio(), saveDir: dir);
+          StudentCertificatesRepository(
+            dio: stubDownloadDio(),
+            saveDirectoryPath: dir.path,
+          );
 
       final result = await repo.downloadCertificate(
         const ApiStudentCertificate(
@@ -183,7 +192,10 @@ void main() {
       final dir = await Directory.systemTemp.createTemp('cert-test');
       addTearDown(() => dir.delete(recursive: true));
       final repo =
-          StudentCertificatesRepository(dio: stubDownloadDio(), saveDir: dir);
+          StudentCertificatesRepository(
+            dio: stubDownloadDio(),
+            saveDirectoryPath: dir.path,
+          );
 
       final result = await repo.downloadCertificate(
         const ApiStudentCertificate(
@@ -206,7 +218,7 @@ void main() {
         dio: stubDownloadDio(
           bytes: List<int>.filled(kCertificateMaxBytes + 1, 0),
         ),
-        saveDir: dir,
+        saveDirectoryPath: dir.path,
       );
 
       await expectLater(
@@ -233,7 +245,7 @@ void main() {
             'content-type': ['text/html'],
           },
         ),
-        saveDir: dir,
+        saveDirectoryPath: dir.path,
       );
 
       await expectLater(
@@ -269,7 +281,10 @@ void main() {
       addTearDown(() => dir.delete(recursive: true));
       final vm = StudentCertificatesViewModel(
         repository:
-            StudentCertificatesRepository(dio: stubCertDio(), saveDir: dir),
+            StudentCertificatesRepository(
+              dio: stubCertDio(),
+              saveDirectoryPath: dir.path,
+            ),
       );
       addTearDown(vm.dispose);
       await waitFor(() => !vm.state.isLoading);

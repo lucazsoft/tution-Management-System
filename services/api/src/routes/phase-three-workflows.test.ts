@@ -124,6 +124,10 @@ async function main() {
   assert.equal(state.appointment.status, 'ALTERNATIVE_PROPOSED');
   assert.equal(state.appointment.proposedById, 'one');
   assert.deepEqual(state.appointment.participantApprovals, { one: 'PENDING', two: 'PENDING' });
+  await assert.rejects(
+    decideAppointment(teacher('two'), 'appointment', { action: 'APPROVE' }),
+    (error: any) => error.status === 409,
+  );
   state.appointment = appointment(); failAlternative = true;
   await assert.rejects(decideAppointment(teacher('one'), 'appointment', alternative));
   assert.equal(state.appointment.status, 'REQUESTED'); failAlternative = false;

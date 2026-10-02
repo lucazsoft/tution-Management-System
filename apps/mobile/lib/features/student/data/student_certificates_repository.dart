@@ -13,8 +13,6 @@
 ///   sourced from the portal payload via [fetchCertificates].
 library;
 
-import 'dart:io';
-
 import 'package:dio/dio.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
 import 'package:tms_mobile/core/network/api_exception.dart';
@@ -79,15 +77,15 @@ String sanitizeCertificateFileName(String raw, {String fallbackId = ''}) {
 
 /// Repository for the student certificate list + authenticated PDF download.
 class StudentCertificatesRepository {
-  StudentCertificatesRepository({Dio? dio, Directory? saveDir})
+  StudentCertificatesRepository({Dio? dio, String? saveDirectoryPath})
       : _dio = dio ?? ApiClient.instance.dio,
-        _saveDir = saveDir;
+        _saveDirectoryPath = saveDirectoryPath;
 
   final Dio _dio;
 
   /// Test override for the download directory (avoids path_provider in
   /// unit tests).
-  final Directory? _saveDir;
+  final String? _saveDirectoryPath;
 
   /// Certificate list sourced from the student portal payload.
   ///
@@ -158,7 +156,7 @@ class StudentCertificatesRepository {
       return await saveCertificateDownload(
         bytes,
         safeName,
-        directoryPath: _saveDir?.path,
+        directoryPath: _saveDirectoryPath,
       );
     } on DioException catch (e) {
       throw ApiException.from(e);

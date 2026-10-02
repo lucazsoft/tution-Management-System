@@ -48,6 +48,7 @@
     "test:certificates": "ts-node src/services/certificate-renderer.test.ts",
     "test:result-averages": "ts-node src/utils/result-averages.test.ts",
     "test:push": "ts-node src/utils/push.test.ts",
+    "test:ledger": "ts-node src/services/general-ledger.test.ts && ts-node src/routes/ledger.test.ts",
     "admissions:recover": "ts-node src/scripts/recover-admission-deliveries.ts",
     "test:tenant-admin:integration": "ts-node src/integration/tenant-admin.integration.test.ts"
   },

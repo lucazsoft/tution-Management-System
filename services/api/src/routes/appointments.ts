@@ -210,7 +210,7 @@ router.post('/parent-respond/:appointmentId', authMiddleware, async (req: Tenant
           scheduledTime: appointment.alternativeTime,
           alternativeTime: null,
           proposedById: null,
-          status: 'CONFIRMED',
+          status: 'APPROVED',
           responseRemarks: remarks || 'Parent confirmed the proposed time.',
         },
       });

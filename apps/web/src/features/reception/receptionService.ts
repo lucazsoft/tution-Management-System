@@ -6,6 +6,7 @@ export interface ReceptionStudent {
   className: string;
   schedule: unknown;
   checkedInAt: string | null;
+  photoUrl?: string | null;
 }
 
 export interface ReceptionAppointment {

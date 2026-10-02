@@ -1,4 +1,5 @@
 import { AcademicCalendarView } from '../components/calendar/AcademicCalendarView';
+import { SyllabusTracker } from '../components/syllabus/SyllabusTracker';
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -263,8 +264,15 @@ function ResultsView() {
 
 function SyllabusView() {
   const { syllabi } = useStudentData();
-  const tone = (status: string) => status === 'COMPLETED' ? 'success' : status === 'IN_PROGRESS' ? 'warning' : 'error';
-  return <div className="student-view">{syllabi.length ? syllabi.map((syllabus) => <section className="student-card" key={syllabus.id}><SectionHeader title={syllabus.subject} description={`${syllabus.className}${syllabus.teacherName ? ` · ${syllabus.teacherName}` : ''} · ${syllabus.chapters.length} chapters`} /><div className="student-syllabus-list">{syllabus.chapters.map((chapter) => { const latest = syllabus.dailyLogs.find((log) => log.chapterId === chapter.id); return <article key={chapter.id} className={`is-${tone(chapter.status)}`}><span>{chapter.position}</span><div><h3>{chapter.title}</h3><p>{latest?.notes || (chapter.status === 'COMPLETED' ? 'All topics completed' : chapter.status === 'IN_PROGRESS' ? 'Chapter in progress' : 'Not started')}</p>{chapter.topics?.length ? <ul className="student-topic-list">{chapter.topics.map((topic) => <li key={topic.id} className={`is-${tone(topic.status)}`}><span aria-hidden="true" /><div><strong>{topic.title}</strong>{topic.logs[0]?.notes ? <small>{topic.logs[0].notes} · {topic.logs[0].logDate}</small> : null}</div><StatusPill label={topic.status === 'COMPLETED' ? 'Completed' : topic.status === 'IN_PROGRESS' ? 'In progress' : 'Left to start'} iconName={topic.status === 'COMPLETED' ? 'check_circle' : topic.status === 'IN_PROGRESS' ? 'pending' : 'radio_button_unchecked'} tone={tone(topic.status)} /></li>)}</ul> : null}{latest ? <small>Updated by {syllabus.teacherName || 'your teacher'} · {latest.logDate}</small> : <small>Shared by {syllabus.teacherName || 'your teacher'}</small>}</div><StatusPill label={chapter.status === 'COMPLETED' ? 'Completed' : chapter.status === 'IN_PROGRESS' ? 'In progress' : 'Untouched'} iconName={chapter.status === 'COMPLETED' ? 'check_circle' : chapter.status === 'IN_PROGRESS' ? 'pending' : 'radio_button_unchecked'} tone={tone(chapter.status)} /></article>; })}</div></section>) : <section className="student-card"><EmptyState title="No syllabus shared" message="Teacher-created chapter and topic plans will appear here." iconName="menu_book" /></section>}</div>;
+
+  return (
+    <div className="student-view">
+      <SyllabusTracker
+        syllabi={syllabi}
+        role="student"
+      />
+    </div>
+  );
 }
 
 function attendanceTone(state: AttendanceState) {

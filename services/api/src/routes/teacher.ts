@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import prisma from '../utils/db';
 import { normalizeSchedule } from '../utils/schedule';
+import { privateImageUrl } from '../services/object-storage';
 import { generateDailyTeacherSessions } from '../services/timetable-service';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware } from '../middleware/auth';
@@ -124,18 +125,32 @@ router.get('/workspace', authMiddleware, async (req: TenantRequest, res: Respons
       pendingUpdates: classes.flatMap((item) => item.sessions.filter((session) => !session.dailyUpdateSubmitted).map((session) => ({
         sessionId: session.id, classId: item.id, className: item.name, courseName: item.course.name, date: session.date,
       }))),
-      classes: classes.map((item) => ({
+      classes: await Promise.all(classes.map(async (item) => ({
         id: item.id, name: item.name, subject: item.course.name, type: item.course.type, schedule: normalizeSchedule(item.schedule),
         branch: { id: item.branch.id, name: item.branch.name, address: item.branch.address, radiusMeters: item.branch.radiusMeters },
-        students: (() => {
-          const explicit = item.enrollments.map((enrollment) => ({ id: enrollment.student.id, name: `${enrollment.student.user.firstName} ${enrollment.student.user.lastName}`, status: enrollment.status }));
+        students: await (async () => {
+          const explicit = await Promise.all(item.enrollments.map(async (enrollment) => ({
+            id: enrollment.student.id,
+            name: `${enrollment.student.user.firstName} ${enrollment.student.user.lastName}`,
+            photoUrl: await privateImageUrl(enrollment.student.user.image),
+            status: enrollment.status,
+          })));
           const known = new Set(explicit.map((student) => student.id));
-          const inherited = (gradeRosters.get(item.id) ?? []).filter((student) => !known.has(student.id)).map((student) => ({ id: student.id, name: `${student.user.firstName} ${student.user.lastName}`, status: 'ACTIVE' }));
+          const inherited = await Promise.all(
+            (gradeRosters.get(item.id) ?? [])
+              .filter((student) => !known.has(student.id))
+              .map(async (student) => ({
+                id: student.id,
+                name: `${student.user.firstName} ${student.user.lastName}`,
+                photoUrl: await privateImageUrl(student.user.image),
+                status: 'ACTIVE',
+              }))
+          );
           return [...explicit, ...inherited].sort((a, b) => a.name.localeCompare(b.name));
         })(),
         attendance: item.sessions.flatMap((session) => session.studentAttendance),
         syllabi: item.syllabi, homework: item.homework,
-      })),
+      }))),
       results: scores.map((score) => ({ ...score, score: Number(score.score), maximum: Number(score.maximum), passMarks: score.passMarks == null ? null : Number(score.passMarks), percentile: score.percentile == null ? null : Number(score.percentile), studentName: `${score.student.user.firstName} ${score.student.user.lastName}` })),
       resultDefinitions,
       profile: { performance: staff?.performanceScore ?? null, salaryStructure: staff?.salaryStructure ?? null },
