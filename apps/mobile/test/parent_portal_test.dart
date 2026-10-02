@@ -164,6 +164,34 @@ class _FakeParentPortalRepository extends ParentPortalRepository {
       ),
     );
   }
+
+  @override
+  Future<ParentPerformanceDetail> fetchPerformance(
+    String studentId, {
+    CancelToken? cancelToken,
+  }) async =>
+      ParentPerformanceDetail.fromJson({
+        'scores': [
+          {
+            'id': 'score-1',
+            'subject': 'API Mathematics',
+            'assessment': 'First Term',
+            'score': 72,
+            'maximum': 100,
+            'testDate': '2026-04-15T00:00:00.000Z',
+          },
+          {
+            'id': 'score-2',
+            'subject': 'API Mathematics',
+            'assessment': 'Second Term',
+            'score': 84,
+            'maximum': 100,
+            'testDate': '2026-08-15T00:00:00.000Z',
+          },
+        ],
+        'insights': const [],
+        'remarks': const [],
+      });
 }
 
 class _PendingPortalRequest {
@@ -869,6 +897,10 @@ void main() {
 
     expect(find.text('API progress remark'), findsOneWidget);
     expect(find.text('API Science'), findsWidgets);
+    expect(find.text('Score trend'), findsOneWidget);
+    expect(find.text('Improving by 12.0 points'), findsOneWidget);
+    expect(find.text('Latest'), findsOneWidget);
+    expect(find.text('84%'), findsWidgets);
     expect(find.text('Algebraic Expressions'), findsNothing);
   });
 
@@ -885,5 +917,24 @@ void main() {
     expect(find.text('Branch Support'), findsOneWidget);
     expect(find.text('API message about your child'), findsOneWidget);
     expect(find.text('Message about API Child One'), findsOneWidget);
+  });
+
+  testWidgets('messages opens a contact without an existing thread',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await _pumpPortalScreen(
+      tester,
+      const ParentMessagesScreen(),
+      _FakeParentPortalRepository(),
+    );
+
+    await tester.tap(find.text('Branch Support'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Say hello'), findsOneWidget);
+    expect(find.text('Send a message about API Child One.'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Message about API Child One'),
+        findsOneWidget);
   });
 }

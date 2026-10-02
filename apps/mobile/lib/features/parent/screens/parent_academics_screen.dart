@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tms_mobile/core/providers/feature_flags_provider.dart';
 import 'package:tms_mobile/core/theme/app_colors.dart';
+import 'package:tms_mobile/features/parent/data/parent_portal_repository.dart';
 import 'package:tms_mobile/features/parent/models/parent_portal.dart';
 import 'package:tms_mobile/features/parent/viewmodels/parent_portal_viewmodel.dart';
 import 'package:tms_mobile/features/parent/widgets/child_switcher_bar.dart';
@@ -154,11 +155,34 @@ class _HomeworkTab extends StatelessWidget {
       );
 }
 
-class _ProgressTab extends StatelessWidget {
+class _ProgressTab extends ConsumerStatefulWidget {
   const _ProgressTab({required this.portal, required this.child});
 
   final ParentPortal portal;
   final ParentChild child;
+
+  @override
+  ConsumerState<_ProgressTab> createState() => _ProgressTabState();
+}
+
+class _ProgressTabState extends ConsumerState<_ProgressTab> {
+  late Future<ParentPerformanceDetail> _performance;
+
+  @override
+  void initState() {
+    super.initState();
+    _performance = _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProgressTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.child.id != widget.child.id) _performance = _load();
+  }
+
+  Future<ParentPerformanceDetail> _load() => ref
+      .read(parentPortalRepositoryProvider)
+      .fetchPerformance(widget.child.id);
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -177,12 +201,12 @@ class _ProgressTab extends StatelessWidget {
                 children: [
                   _Summary(
                     label: 'Student',
-                    value: child.name,
+                    value: widget.child.name,
                   ),
-                  _Summary(label: 'Grade', value: child.grade),
+                  _Summary(label: 'Grade', value: widget.child.grade),
                   _Summary(
                     label: 'Progress signals',
-                    value: '${portal.remarks.length}',
+                    value: '${widget.portal.remarks.length}',
                   ),
                 ],
               ),
@@ -197,7 +221,46 @@ class _ProgressTab extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          if (portal.remarks.isEmpty)
+          FutureBuilder<ParentPerformanceDetail>(
+            future: _performance,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(28),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                );
+              }
+              if (snapshot.hasError) {
+                return Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.error_outline_rounded),
+                    title: const Text('Progress chart unavailable'),
+                    subtitle: const Text(
+                        'Published remarks are still available below.'),
+                    trailing: IconButton(
+                      tooltip: 'Retry',
+                      onPressed: () => setState(() => _performance = _load()),
+                      icon: const Icon(Icons.refresh_rounded),
+                    ),
+                  ),
+                );
+              }
+              return _ParentProgressAnalytics(
+                  scores: snapshot.data?.scores ?? const []);
+            },
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Academic progress',
+            style: GoogleFonts.fraunces(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (widget.portal.remarks.isEmpty)
             const Card(
               child: Padding(
                 padding: EdgeInsets.all(20),
@@ -205,12 +268,236 @@ class _ProgressTab extends StatelessWidget {
               ),
             )
           else
-            for (final remark in portal.remarks) ...[
+            for (final remark in widget.portal.remarks) ...[
               _RemarkCard(remark: remark),
               const SizedBox(height: 12),
             ],
         ],
       );
+}
+
+class _ParentProgressAnalytics extends StatefulWidget {
+  const _ParentProgressAnalytics({required this.scores});
+
+  final List<Map<String, dynamic>> scores;
+
+  @override
+  State<_ParentProgressAnalytics> createState() =>
+      _ParentProgressAnalyticsState();
+}
+
+class _ParentProgressAnalyticsState extends State<_ParentProgressAnalytics> {
+  String? _subject;
+
+  @override
+  Widget build(BuildContext context) {
+    final all = widget.scores.map(_ParentScorePoint.fromJson).where((item) {
+      return item.subject.isNotEmpty && item.maximum > 0;
+    }).toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+    if (all.isEmpty) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+              'No published results are available yet. The progress graph will appear after results are published.'),
+        ),
+      );
+    }
+    final subjects = all.map((item) => item.subject).toSet().toList()..sort();
+    final selected = subjects.contains(_subject) ? _subject! : subjects.first;
+    final points = all.where((item) => item.subject == selected).toList();
+    final latest = points.last.percentage;
+    final previous =
+        points.length > 1 ? points[points.length - 2].percentage : null;
+    final change = previous == null ? null : latest - previous;
+    final average =
+        points.fold<double>(0, (sum, item) => sum + item.percentage) /
+            points.length;
+    final trend = change == null
+        ? 'More results are needed to identify a trend'
+        : change > 3
+            ? 'Improving by ${change.toStringAsFixed(1)} points'
+            : change < -3
+                ? 'Needs attention: ${change.abs().toStringAsFixed(1)} points lower'
+                : 'Performance is stable';
+    final trendColor = change == null
+        ? kColorMutedText
+        : change > 3
+            ? kColorSuccess
+            : change < -3
+                ? kColorWarning
+                : kColorPrimary;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(
+              child: Text('Score trend',
+                  style: Theme.of(context).textTheme.titleLarge),
+            ),
+            DropdownButton<String>(
+              value: selected,
+              underline: const SizedBox.shrink(),
+              items: [
+                for (final subject in subjects)
+                  DropdownMenuItem(value: subject, child: Text(subject)),
+              ],
+              onChanged: (value) => setState(() => _subject = value),
+            ),
+          ]),
+          const SizedBox(height: 4),
+          Text(trend,
+              style: TextStyle(color: trendColor, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(
+                child: _ProgressMetric(
+                    label: 'Latest', value: '${latest.toStringAsFixed(0)}%')),
+            Expanded(
+                child: _ProgressMetric(
+                    label: 'Average', value: '${average.toStringAsFixed(0)}%')),
+            Expanded(
+              child: _ProgressMetric(
+                label: 'Change',
+                value: change == null
+                    ? '--'
+                    : '${change >= 0 ? '+' : ''}${change.toStringAsFixed(1)}',
+              ),
+            ),
+          ]),
+          const SizedBox(height: 18),
+          SizedBox(
+            height: 210,
+            width: double.infinity,
+            child: points.length < 2
+                ? Center(
+                    child: Text(
+                        '${points.first.assessment}: ${latest.toStringAsFixed(0)}%\nA second result will create the progress line.',
+                        textAlign: TextAlign.center),
+                  )
+                : CustomPaint(
+                    painter: _ParentProgressChartPainter(
+                      values: points.map((item) => item.percentage).toList(),
+                    ),
+                  ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final point in points)
+                Chip(
+                  label: Text(
+                      '${point.assessment} ${point.percentage.toStringAsFixed(0)}%'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text('Based on teacher-published results only.',
+              style: Theme.of(context).textTheme.bodySmall),
+        ]),
+      ),
+    );
+  }
+}
+
+class _ProgressMetric extends StatelessWidget {
+  const _ProgressMetric({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Column(children: [
+        Text(value, style: Theme.of(context).textTheme.titleMedium),
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
+      ]);
+}
+
+class _ParentScorePoint {
+  const _ParentScorePoint({
+    required this.subject,
+    required this.assessment,
+    required this.score,
+    required this.maximum,
+    required this.date,
+  });
+
+  factory _ParentScorePoint.fromJson(Map<String, dynamic> json) =>
+      _ParentScorePoint(
+        subject: '${json['subject'] ?? ''}',
+        assessment: '${json['assessment'] ?? 'Assessment'}',
+        score: (json['score'] as num?)?.toDouble() ?? 0,
+        maximum: (json['maximum'] as num?)?.toDouble() ?? 100,
+        date: DateTime.tryParse('${json['testDate'] ?? ''}') ?? DateTime(1970),
+      );
+
+  final String subject;
+  final String assessment;
+  final double score;
+  final double maximum;
+  final DateTime date;
+  double get percentage => (score / maximum * 100).clamp(0, 100).toDouble();
+}
+
+class _ParentProgressChartPainter extends CustomPainter {
+  const _ParentProgressChartPainter({required this.values});
+  final List<double> values;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const left = 34.0;
+    const top = 12.0;
+    const bottom = 24.0;
+    final height = size.height - top - bottom;
+    final width = size.width - left - 8;
+    final labels = TextPainter(textDirection: TextDirection.ltr);
+    final grid = Paint()
+      ..color = kColorDivider
+      ..strokeWidth = 1;
+    for (final score in [0, 25, 50, 75, 100]) {
+      final y = top + height * (1 - score / 100);
+      canvas.drawLine(Offset(left, y), Offset(size.width, y), grid);
+      labels
+        ..text = TextSpan(
+            text: '$score%',
+            style: const TextStyle(fontSize: 9, color: kColorMutedText))
+        ..layout();
+      labels.paint(canvas, Offset(0, y - labels.height / 2));
+    }
+    final path = Path();
+    final points = <Offset>[];
+    for (var i = 0; i < values.length; i++) {
+      final point = Offset(
+        left + width * i / (values.length - 1),
+        top + height * (1 - values[i].clamp(0, 100) / 100),
+      );
+      points.add(point);
+      i == 0
+          ? path.moveTo(point.dx, point.dy)
+          : path.lineTo(point.dx, point.dy);
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = kColorPrimary
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke,
+    );
+    for (final point in points) {
+      canvas.drawCircle(point, 5, Paint()..color = kColorPrimary);
+      canvas.drawCircle(point, 2, Paint()..color = Colors.white);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ParentProgressChartPainter oldDelegate) =>
+      oldDelegate.values != values;
 }
 
 class _EventsTab extends StatelessWidget {

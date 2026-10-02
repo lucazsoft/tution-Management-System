@@ -225,6 +225,38 @@ class ParentPortalRepository {
     }
   }
 
+  Future<void> updateAppointment({
+    required String appointmentId,
+    required DateTime scheduledTime,
+    required String remarks,
+  }) async {
+    try {
+      await _dio.patch(
+        '$appointmentsPath/${Uri.encodeComponent(appointmentId)}',
+        data: {
+          'scheduledTime': scheduledTime.toUtc().toIso8601String(),
+          'remarks': remarks.trim(),
+        },
+      );
+    } on DioException catch (error) {
+      throw ApiException.from(error);
+    }
+  }
+
+  Future<void> cancelAppointment(String appointmentId,
+      {String? remarks}) async {
+    try {
+      await _dio.post(
+        '$appointmentsPath/cancel/${Uri.encodeComponent(appointmentId)}',
+        data: {
+          if (remarks?.trim().isNotEmpty == true) 'remarks': remarks!.trim(),
+        },
+      );
+    } on DioException catch (error) {
+      throw ApiException.from(error);
+    }
+  }
+
   /// Drops session-scoped snapshot data owned by this repository.
   void dispose() {
     _disposed = true;

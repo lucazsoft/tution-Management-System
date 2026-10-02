@@ -148,6 +148,173 @@ class _ParentAppointmentsScreenState
     }
   }
 
+  Future<void> _editAppointment(
+      ParentAppointmentItem item, int minimumHours) async {
+    var scheduled = item.scheduledAt?.toLocal() ??
+        DateTime.now().add(Duration(hours: minimumHours));
+    final reason = TextEditingController(text: item.subject);
+    final formKey = GlobalKey<FormState>();
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+              20, 0, 20, MediaQuery.viewInsetsOf(context).bottom + 20),
+          child: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Edit meeting request',
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 16),
+                  InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Meeting with',
+                      prefixIcon: Icon(Icons.person_outline_rounded),
+                    ),
+                    child: Text(item.teacher),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final next = await _pickDateTime(scheduled, minimumHours,
+                          pickerContext: sheetContext);
+                      if (next != null) {
+                        setSheetState(() => scheduled = next);
+                      }
+                    },
+                    icon: const Icon(Icons.calendar_month_rounded),
+                    label: Text(_dateTimeLabel(scheduled)),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: reason,
+                    maxLength: 2000,
+                    minLines: 3,
+                    maxLines: 5,
+                    decoration:
+                        const InputDecoration(labelText: 'Reason for meeting'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Enter the reason for this meeting.'
+                        : null,
+                  ),
+                  FilledButton.icon(
+                    onPressed: () {
+                      if (formKey.currentState!.validate()) {
+                        Navigator.pop(sheetContext, true);
+                      }
+                    },
+                    icon: const Icon(Icons.save_outlined),
+                    label: const Text('Save changes'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final note = reason.text;
+    reason.dispose();
+    if (saved != true || !mounted) return;
+    setState(() => _sending = true);
+    try {
+      await ref.read(parentPortalRepositoryProvider).updateAppointment(
+            appointmentId: item.id,
+            scheduledTime: scheduled,
+            remarks: note,
+          );
+      await ref.read(parentPortalProvider.notifier).refresh();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not update appointment: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<DateTime?> _pickDateTime(DateTime initial, int minimumHours,
+      {BuildContext? pickerContext}) async {
+    final host = pickerContext ?? context;
+    final minimum = DateTime.now().add(Duration(hours: minimumHours));
+    final safeInitial = initial.isBefore(minimum) ? minimum : initial;
+    final date = await showDatePicker(
+      context: host,
+      firstDate: DateTime(minimum.year, minimum.month, minimum.day),
+      lastDate: minimum.add(const Duration(days: 365)),
+      initialDate: safeInitial,
+    );
+    if (date == null || !host.mounted) return null;
+    final time = await showTimePicker(
+      context: host,
+      initialTime: TimeOfDay.fromDateTime(safeInitial),
+    );
+    if (time == null) return null;
+    final result =
+        DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    if (result.isBefore(minimum)) return null;
+    return result;
+  }
+
+  String _dateTimeLabel(DateTime value) {
+    final local = value.toLocal();
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}  ${local.hour.toString().padLeft(2, '0')}:$minute';
+  }
+
+  Future<void> _cancelAppointment(ParentAppointmentItem item) async {
+    final reason = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cancel meeting?'),
+        content: TextField(
+          controller: reason,
+          maxLength: 500,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            labelText: 'Reason for cancellation (optional)',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Keep meeting'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Cancel meeting'),
+          ),
+        ],
+      ),
+    );
+    final note = reason.text;
+    reason.dispose();
+    if (confirmed != true || !mounted) return;
+    setState(() => _sending = true);
+    try {
+      await ref
+          .read(parentPortalRepositoryProvider)
+          .cancelAppointment(item.id, remarks: note);
+      await ref.read(parentPortalProvider.notifier).refresh();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not cancel meeting: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         drawer: ParentNavigation.drawer(context),
@@ -167,8 +334,6 @@ class _ParentAppointmentsScreenState
                   ? _contactId
                   : (contacts.isEmpty ? null : contacts.first.id);
               return ListView(padding: const EdgeInsets.all(16), children: [
-                const ChildSwitcherBar(),
-                const SizedBox(height: 16),
                 Card(
                   color: Theme.of(context).colorScheme.primaryContainer,
                   child: const ListTile(
@@ -184,15 +349,16 @@ class _ParentAppointmentsScreenState
                     style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 12),
                 if (portal.appointments
-                    .where((item) => item.childId == child.id)
+                    .where((item) =>
+                        item.childId.isEmpty || item.childId == child.id)
                     .isEmpty)
                   const Card(
                       child: Padding(
                           padding: EdgeInsets.all(20),
                           child: Text('No appointment requests yet.')))
                 else
-                  for (final item in portal.appointments
-                      .where((item) => item.childId == child.id))
+                  for (final item in portal.appointments.where((item) =>
+                      item.childId.isEmpty || item.childId == child.id))
                     Card(
                         child: Column(children: [
                       ListTile(
@@ -240,14 +406,41 @@ class _ParentAppointmentsScreenState
                       if (item.state.toLowerCase() == 'requested')
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            alignment: WrapAlignment.end,
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed: _sending
+                                    ? null
+                                    : () => _editAppointment(
+                                        item, portal.bookingWindowHours),
+                                icon: const Icon(Icons.edit_outlined),
+                                label: const Text('Edit request'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: _sending
+                                    ? null
+                                    : () => _cancelAppointment(item),
+                                icon: const Icon(Icons.cancel_outlined),
+                                label: const Text('Cancel'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (!['requested', 'rejected', 'cancelled']
+                          .contains(item.state.toLowerCase()))
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                           child: Align(
                             alignment: Alignment.centerRight,
-                            child: OutlinedButton.icon(
+                            child: TextButton.icon(
                               onPressed: _sending
                                   ? null
-                                  : () => _proposeAlternative(item),
-                              icon: const Icon(Icons.update),
-                              label: const Text('Change requested time'),
+                                  : () => _cancelAppointment(item),
+                              icon: const Icon(Icons.cancel_outlined),
+                              label: const Text('Cancel meeting'),
                             ),
                           ),
                         ),
@@ -266,6 +459,8 @@ class _ParentAppointmentsScreenState
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 12),
+                const ChildSwitcherBar(),
+                const SizedBox(height: 12),
                 if (contacts.isEmpty)
                   const Card(
                     child: Padding(
@@ -276,67 +471,24 @@ class _ParentAppointmentsScreenState
                     ),
                   ),
                 if (contacts.isNotEmpty) ...[
-                  Text('Who would you like to meet?',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 112,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: contacts.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 10),
-                      itemBuilder: (context, index) {
-                        final contact = contacts[index];
-                        final selected = contact.id == selectedId;
-                        return SizedBox(
-                          width: 220,
-                          child: Card(
-                            color: selected
-                                ? Theme.of(context).colorScheme.primaryContainer
-                                : null,
-                            clipBehavior: Clip.antiAlias,
-                            child: InkWell(
-                              onTap: () =>
-                                  setState(() => _contactId = contact.id),
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Row(
-                                  children: [
-                                    CircleAvatar(child: Text(contact.initials)),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(contact.name,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                  fontWeight: FontWeight.w700)),
-                                          Text(contact.subject,
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis),
-                                        ],
-                                      ),
-                                    ),
-                                    if (selected)
-                                      Icon(
-                                        Icons.check_circle,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary,
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Meeting with',
+                      prefixIcon: Icon(Icons.person_outline_rounded),
                     ),
+                    items: [
+                      for (final contact in contacts)
+                        DropdownMenuItem(
+                          value: contact.id,
+                          child: Text('${contact.name} - ${contact.subject}',
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                    ],
+                    onChanged: _sending
+                        ? null
+                        : (value) => setState(() => _contactId = value),
                   ),
                 ],
                 const SizedBox(height: 12),

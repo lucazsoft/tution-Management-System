@@ -357,22 +357,6 @@ class _TodayTimetableTable extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          color: Theme.of(context).colorScheme.primary.withValues(alpha: .07),
-          child: Row(children: [
-            Icon(Icons.table_chart_outlined,
-                color: Theme.of(context).colorScheme.primary),
-            const SizedBox(width: 10),
-            Text(
-                '${rows.length} scheduled ${rows.length == 1 ? 'period' : 'periods'}',
-                style: Theme.of(context).textTheme.titleSmall),
-            const Spacer(),
-            const Text('Managed by Branch Admin',
-                style: TextStyle(fontSize: 11)),
-          ]),
-        ),
         LayoutBuilder(builder: (context, constraints) {
           return SingleChildScrollView(
             scrollDirection: Axis.horizontal,

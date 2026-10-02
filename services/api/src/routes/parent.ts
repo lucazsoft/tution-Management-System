@@ -32,7 +32,7 @@ const appointmentState = (status: string) => ({
   REJECTED: 'Rejected',
   ALTERNATIVE_PROPOSED: 'Alternative proposed',
   CONFIRMED: 'Confirmed',
-  CANCELLED: 'Rejected',
+  CANCELLED: 'Cancelled',
 }[status] ?? 'Requested');
 const leaveState = (status: string, reason: string) => reason.startsWith('Emergency Out:')
   ? 'Emergency departure'
@@ -324,7 +324,9 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
       teacher: isBranchAdminAppointment ? `Branch Admin · ${appointment.teacher.firstName} ${appointment.teacher.lastName}` : `${appointment.teacher.firstName} ${appointment.teacher.lastName}`,
       subject: appointment.remarks || 'Student meeting',
       requestedTime: formatDateTime(appointment.scheduledTime),
+      scheduledAt: appointment.scheduledTime.toISOString(),
       alternativeTime: appointment.alternativeTime ? formatDateTime(appointment.alternativeTime) : undefined,
+      alternativeAt: appointment.alternativeTime?.toISOString(),
       proposalFrom: appointment.proposedById === req.user!.id ? 'PARENT' : appointment.proposedById ? 'TEACHER' : undefined,
       responseMessage: appointment.responseRemarks || undefined,
       responseDescription: appointment.responseRemarks || undefined,

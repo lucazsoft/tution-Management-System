@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/theme/app_theme.dart';
+import 'package:tms_mobile/shared/widgets/messenger_chat.dart';
 
 import '../data/teacher_portal_repository.dart';
 import '../models/teacher_portal_dto.dart';
@@ -19,11 +20,13 @@ class TeacherMessagesScreen extends ConsumerStatefulWidget {
 class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
   final _repository = TeacherPortalRepository();
   final _controller = TextEditingController();
+  final _searchController = TextEditingController();
   List<TeacherMessageContact>? _contacts;
   List<TeacherMessageItem>? _messages;
   TeacherMessageContact? _selected;
   String? _error;
   bool _sending = false;
+  String _query = '';
   Timer? _refreshTimer;
 
   @override
@@ -40,6 +43,7 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
   void dispose() {
     _refreshTimer?.cancel();
     _controller.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -128,9 +132,8 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
         builder: (sheetContext) => StatefulBuilder(
           builder: (context, setSheetState) {
             final filtered = recipients
-                .where((item) => item.parentName
-                    .toLowerCase()
-                    .contains(query.toLowerCase()))
+                .where((item) =>
+                    item.parentName.toLowerCase().contains(query.toLowerCase()))
                 .toList();
             return SafeArea(
               child: Padding(
@@ -146,7 +149,7 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
                       autofocus: true,
                       decoration: const InputDecoration(
                         prefixIcon: Icon(Icons.search_rounded),
-                        hintText: 'Search teachers',
+                        hintText: 'Search parents',
                         border: OutlineInputBorder(),
                       ),
                       onChanged: (value) => setSheetState(() => query = value),
@@ -164,7 +167,9 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
                                   leading: const CircleAvatar(
                                       child: Icon(Icons.person_outline)),
                                   title: Text(item.parentName),
-                                  subtitle: const Text('Teacher'),
+                                  subtitle: Text(item.studentId.isEmpty
+                                      ? 'School colleague'
+                                      : 'Parent of ${item.studentName}'),
                                   onTap: () =>
                                       Navigator.pop(sheetContext, item),
                                 );
@@ -191,53 +196,53 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
   @override
   Widget build(BuildContext context) => TeacherPortalScaffold(
         title: 'Messages',
-        body: RefreshIndicator(
-          onRefresh: _loadContacts,
-          child:
-              ListView(padding: const EdgeInsets.all(TmsSpace.md), children: [
-            Text('Messages',
-                style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 4),
-            const Text(
-                'Recent conversations stay here. Start a new chat with another teacher when needed.'),
-            const SizedBox(height: TmsSpace.md),
-            if (_contacts == null)
-              const Center(
-                  child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: CircularProgressIndicator()))
-            else
-              LayoutBuilder(builder: (context, box) {
-                final contacts = _contactCard();
-                final thread = _selected == null
-                    ? _empty(Icons.forum_outlined, 'Select a conversation',
-                        'Choose a recent chat or start a new one.')
-                    : _threadCard();
-                return box.maxWidth < 760
-                    ? (_selected == null ? contacts : thread)
-                    : Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                            SizedBox(width: 330, child: contacts),
-                            const SizedBox(width: 16),
-                            Expanded(child: thread)
-                          ]);
-              }),
-            if (_error != null)
-              Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Text(_error!,
-                      style: TextStyle(
-                          color: Theme.of(context).colorScheme.error))),
-          ]),
+        body: Padding(
+          padding: const EdgeInsets.all(TmsSpace.md),
+          child: _contacts == null
+              ? const Center(child: CircularProgressIndicator())
+              : LayoutBuilder(builder: (context, box) {
+                  final compact = box.maxWidth < 760;
+                  final contacts = _contactCard();
+                  final thread = _selected == null
+                      ? _empty(Icons.forum_outlined, 'Your messages',
+                          'Choose a conversation or start a new chat.')
+                      : _threadCard(compact: compact);
+                  if (compact) return _selected == null ? contacts : thread;
+                  return Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1180),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: kColorBg,
+                          border: Border.all(color: kColorDivider),
+                          borderRadius: BorderRadius.circular(TmsRadius.r8),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: Row(children: [
+                          SizedBox(width: 340, child: contacts),
+                          const VerticalDivider(width: 1),
+                          Expanded(child: thread),
+                        ]),
+                      ),
+                    ),
+                  );
+                }),
         ),
       );
 
-  Widget _contactCard() => Card(
-      child: Padding(
-          padding: const EdgeInsets.all(12),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget _contactCard() {
+    final contacts = _contacts!.where((contact) {
+      final value =
+          '${contact.parentName} ${contact.studentName} ${contact.gradeName} ${contact.lastMessage}'
+              .toLowerCase();
+      return value.contains(_query.toLowerCase());
+    }).toList();
+    return ColoredBox(
+      color: kColorBg,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 10, 10),
+          child: Column(children: [
             Row(children: [
               Expanded(
                 child: Text('Conversations',
@@ -246,107 +251,162 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
               IconButton.filledTonal(
                 tooltip: 'New chat',
                 onPressed: _startNewChat,
-                icon: const Icon(Icons.edit_square),
+                icon: const Icon(Icons.edit_rounded),
               ),
             ]),
-            if (_contacts!.isEmpty)
-              _empty(Icons.forum_outlined, 'No recent conversations',
-                  'Tap New chat to message another teacher.'),
-            for (final contact in _contacts!)
-              ListTile(
-                selected: contact == _selected,
-                leading: const CircleAvatar(child: Icon(Icons.person_outline)),
-                title: Text(contact.parentName),
-                subtitle: Text('${contact.studentName} · ${contact.gradeName}',
-                    maxLines: 2, overflow: TextOverflow.ellipsis),
-                trailing: contact.unreadCount > 0
-                    ? Badge(label: Text('${contact.unreadCount}'))
-                    : null,
-                onTap: () => _select(contact),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _searchController,
+              onChanged: (value) => setState(() => _query = value),
+              decoration: const InputDecoration(
+                hintText: 'Search conversations',
+                prefixIcon: Icon(Icons.search_rounded),
+                isDense: true,
               ),
-          ])));
-
-  Widget _threadCard() {
-    final contact = _selected!;
-    final ownId = ref.watch(authProvider).user?.id;
-    return Card(
-        child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(children: [
-                    IconButton(
-                      tooltip: 'Back to conversations',
-                      onPressed: () => setState(() {
-                        _selected = null;
-                        _messages = null;
-                      }),
-                      icon: const Icon(Icons.arrow_back_rounded),
-                    ),
-                    Expanded(
-                      child: Text(contact.parentName,
-                          style: Theme.of(context).textTheme.titleLarge),
-                    ),
-                  ]),
-                  Text(contact.studentId.isEmpty
-                      ? 'Direct teacher conversation'
-                      : 'Regarding ${contact.studentName}',
-                      style: Theme.of(context).textTheme.bodySmall),
-                  const Divider(height: 28),
-                  if (_messages == null)
-                    const Center(child: CircularProgressIndicator())
-                  else if (_messages!.isEmpty)
-                    _empty(Icons.chat_bubble_outline, 'No messages yet',
-                        'Start a private conversation with this parent.')
-                  else
-                    for (final message in _messages!)
-                      Align(
-                        alignment: message.senderId == ownId
-                            ? Alignment.centerRight
-                            : Alignment.centerLeft,
-                        child: Container(
-                            constraints: const BoxConstraints(maxWidth: 520),
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                                color: message.senderId == ownId
-                                    ? Theme.of(context)
-                                        .colorScheme
-                                        .primaryContainer
-                                    : Theme.of(context)
-                                        .colorScheme
-                                        .surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(14)),
-                            child: Text(message.text)),
-                      ),
-                  const Divider(height: 28),
-                  TextField(
-                      controller: _controller,
-                      enabled: !_sending,
-                      minLines: 2,
-                      maxLines: 5,
-                      maxLength: 4000,
-                      decoration: const InputDecoration(
-                          labelText: 'Message',
-                          hintText: 'Write a message to the parent…',
-                          border: OutlineInputBorder())),
-                  Align(
-                      alignment: Alignment.centerRight,
-                      child: FilledButton.icon(
-                          onPressed: _sending ? null : _send,
-                          icon: const Icon(Icons.send_rounded),
-                          label: Text(_sending ? 'Sending…' : 'Send message'))),
-                ])));
+            ),
+          ]),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _loadContacts,
+            child: contacts.isEmpty
+                ? ListView(children: [
+                    _empty(
+                        Icons.forum_outlined,
+                        'No conversations',
+                        _query.isEmpty
+                            ? 'Start a chat with a parent or colleague.'
+                            : 'No conversations match your search.'),
+                  ])
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    itemCount: contacts.length,
+                    itemBuilder: (context, index) {
+                      final contact = contacts[index];
+                      final contextLabel = contact.studentId.isEmpty
+                          ? 'School colleague'
+                          : '${contact.studentName} - ${contact.gradeName}';
+                      return ConversationTile(
+                        name: contact.parentName,
+                        preview: contact.lastMessage.isEmpty
+                            ? contextLabel
+                            : contact.lastMessage,
+                        time: compactChatTime(contact.lastMessageAt),
+                        unreadCount: contact.unreadCount,
+                        selected: contact == _selected,
+                        onTap: () => _select(contact),
+                      );
+                    },
+                  ),
+          ),
+        ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(_error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ),
+      ]),
+    );
   }
 
-  Widget _empty(IconData icon, String title, String message) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 28),
+  Widget _threadCard({required bool compact}) {
+    final contact = _selected!;
+    final ownId = ref.watch(authProvider).user?.id;
+    final messages = _messages;
+    return ColoredBox(
+      color: kColorBg,
       child: Column(children: [
-        Icon(icon, size: 40),
-        const SizedBox(height: 8),
-        Text(title, style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 4),
-        Text(message, textAlign: TextAlign.center)
-      ]));
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+          decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: kColorDivider))),
+          child: Row(children: [
+            if (compact)
+              IconButton(
+                tooltip: 'Back to conversations',
+                onPressed: () => setState(() {
+                  _selected = null;
+                  _messages = null;
+                }),
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+            ChatAvatar(name: contact.parentName, size: 42),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(contact.parentName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text(
+                      contact.studentId.isEmpty
+                          ? 'School colleague'
+                          : 'Parent of ${contact.studentName}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Refresh conversation',
+              onPressed: () => _select(contact),
+              icon: const Icon(Icons.refresh_rounded),
+            ),
+          ]),
+        ),
+        Expanded(
+          child: messages == null
+              ? const Center(child: CircularProgressIndicator())
+              : messages.isEmpty
+                  ? _empty(Icons.waving_hand_outlined, 'Say hello',
+                      'Start a private conversation with ${contact.parentName}.')
+                  : ListView.builder(
+                      reverse: true,
+                      padding: const EdgeInsets.fromLTRB(14, 18, 14, 12),
+                      itemCount: messages.length,
+                      itemBuilder: (context, reverseIndex) {
+                        final index = messages.length - 1 - reverseIndex;
+                        final message = messages[index];
+                        final own = message.senderId == ownId;
+                        final nextIsSame = index < messages.length - 1 &&
+                            (messages[index + 1].senderId == ownId) == own;
+                        return ChatBubble(
+                          text: message.text,
+                          own: own,
+                          time: compactChatTime(message.createdAt),
+                          senderName: contact.parentName,
+                          showAvatar: !nextIsSame,
+                        );
+                      },
+                    ),
+        ),
+        ChatComposer(
+          controller: _controller,
+          sending: _sending,
+          hintText: 'Message ${contact.parentName}',
+          onSend: _send,
+        ),
+      ]),
+    );
+  }
+
+  Widget _empty(IconData icon, String title, String message) => Center(
+      child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 40, color: kColorPrimary),
+            const SizedBox(height: 8),
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(message,
+                textAlign: TextAlign.center,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: kColorMutedText))
+          ])));
 }

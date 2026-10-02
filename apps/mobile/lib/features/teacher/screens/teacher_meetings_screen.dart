@@ -83,61 +83,179 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
     }
   }
 
-  Future<void> _reschedule(String id) async {
-    final earliest = DateTime.now().add(const Duration(hours: 24));
-    final day = await showDatePicker(
-      context: context,
-      firstDate: DateTime(earliest.year, earliest.month, earliest.day),
-      lastDate: earliest.add(const Duration(days: 365)),
-      initialDate: earliest,
+  Future<void> _editMeeting(Map<String, dynamic> item) async {
+    final id = '${item['id'] ?? ''}';
+    var scheduled = DateTime.tryParse(
+                '${item['alternativeTime'] ?? item['scheduledTime'] ?? ''}')
+            ?.toLocal() ??
+        DateTime.now().add(const Duration(days: 1));
+    final note = TextEditingController(
+      text: '${item['responseRemarks'] ?? item['remarks'] ?? ''}',
     );
-    if (day == null || !mounted) return;
-    final clock = await showTimePicker(
+    final formKey = GlobalKey<FormState>();
+    final saved = await showModalBottomSheet<bool>(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(earliest),
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+              20, 0, 20, MediaQuery.viewInsetsOf(context).bottom + 20),
+          child: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Edit meeting',
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 16),
+                  InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Student',
+                      prefixIcon: Icon(Icons.school_outlined),
+                    ),
+                    child: Text(_studentName(item)),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final earliest =
+                          DateTime.now().add(const Duration(hours: 1));
+                      final day = await showDatePicker(
+                        context: sheetContext,
+                        firstDate: DateTime(
+                            earliest.year, earliest.month, earliest.day),
+                        lastDate: earliest.add(const Duration(days: 365)),
+                        initialDate:
+                            scheduled.isBefore(earliest) ? earliest : scheduled,
+                      );
+                      if (day == null || !sheetContext.mounted) return;
+                      final clock = await showTimePicker(
+                        context: sheetContext,
+                        initialTime: TimeOfDay.fromDateTime(scheduled),
+                      );
+                      if (clock != null) {
+                        setSheetState(() => scheduled = DateTime(day.year,
+                            day.month, day.day, clock.hour, clock.minute));
+                      }
+                    },
+                    icon: const Icon(Icons.calendar_month_rounded),
+                    label: Text(_dateTimeLabel(scheduled)),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: note,
+                    minLines: 3,
+                    maxLines: 5,
+                    maxLength: 5000,
+                    decoration: const InputDecoration(
+                      labelText: 'Message to parent',
+                      hintText: 'Add context for the updated meeting',
+                    ),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Add a message for the parent.'
+                        : null,
+                  ),
+                  FilledButton.icon(
+                    onPressed: () {
+                      if (scheduled.isAfter(DateTime.now()) &&
+                          formKey.currentState!.validate()) {
+                        Navigator.pop(sheetContext, true);
+                      }
+                    },
+                    icon: const Icon(Icons.save_outlined),
+                    label: const Text('Save and notify parent'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
-    if (clock == null || !mounted) return;
-    final selected =
-        DateTime(day.year, day.month, day.day, clock.hour, clock.minute);
-    if (!selected.isAfter(DateTime.now())) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Choose a future meeting time.')),
-      );
-      return;
+    final remarks = note.text;
+    note.dispose();
+    if (saved != true || !mounted) return;
+    setState(() => _busyId = id);
+    try {
+      await ApiClient.instance.dio
+          .patch<dynamic>('/api/appointments/$id', data: {
+        'scheduledTime': scheduled.toUtc().toIso8601String(),
+        'remarks': remarks.trim(),
+      });
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Meeting updated. The parent was notified.')));
+      }
+    } on DioException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error.message ?? 'Update failed.')));
+      }
+    } finally {
+      if (mounted) setState(() => _busyId = null);
     }
-    final remarks = TextEditingController();
-    final proceed = await showDialog<bool>(
+  }
+
+  Future<void> _cancelMeeting(Map<String, dynamic> item) async {
+    final id = '${item['id'] ?? ''}';
+    final note = TextEditingController();
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Propose another time'),
+        title: const Text('Cancel meeting?'),
         content: TextField(
-          controller: remarks,
+          controller: note,
           maxLength: 500,
           maxLines: 3,
-          decoration: InputDecoration(
-            labelText: 'Message to parent',
-            hintText: 'Explain why this time works better',
-            helperText: selected.toString(),
-          ),
+          decoration: const InputDecoration(
+              labelText: 'Reason for cancellation (optional)'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: const Text('Keep meeting'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Send proposal'),
+            child: const Text('Cancel meeting'),
           ),
         ],
       ),
     );
-    final note = remarks.text;
-    remarks.dispose();
-    if (proceed == true && mounted) {
-      await _respond(id, 'PROPOSE_ALTERNATIVE',
-          alternative: selected, remarks: note);
+    final remarks = note.text;
+    note.dispose();
+    if (confirmed != true || !mounted) return;
+    setState(() => _busyId = id);
+    try {
+      await ApiClient.instance.dio
+          .post<dynamic>('/api/appointments/cancel/$id', data: {
+        if (remarks.trim().isNotEmpty) 'remarks': remarks.trim(),
+      });
+      await _load();
+    } on DioException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error.message ?? 'Cancellation failed.')));
+      }
+    } finally {
+      if (mounted) setState(() => _busyId = null);
     }
+  }
+
+  String _studentName(Map<String, dynamic> item) {
+    final student =
+        item['student'] is Map ? item['student']['user'] as Map? : null;
+    return student == null
+        ? 'Student'
+        : '${student['firstName'] ?? ''} ${student['lastName'] ?? ''}'.trim();
+  }
+
+  String _dateTimeLabel(DateTime value) {
+    final minute = value.minute.toString().padLeft(2, '0');
+    return '${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}  ${value.hour.toString().padLeft(2, '0')}:$minute';
   }
 
   @override
@@ -184,11 +302,7 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
 
   Widget _meetingCard(Map<String, dynamic> item) {
     final id = '${item['id'] ?? ''}';
-    final student =
-        item['student'] is Map ? item['student']['user'] as Map? : null;
-    final name = student == null
-        ? 'Student'
-        : '${student['firstName'] ?? ''} ${student['lastName'] ?? ''}'.trim();
+    final name = _studentName(item);
     final status = '${item['status'] ?? 'REQUESTED'}';
     final requested = status == 'REQUESTED';
     final proposalFrom = '${item['proposalFrom'] ?? ''}';
@@ -196,6 +310,7 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
         status == 'ALTERNATIVE_PROPOSED' && proposalFrom == 'PARENT';
     final teacherProposed =
         status == 'ALTERNATIVE_PROPOSED' && proposalFrom == 'TEACHER';
+    final active = !['REJECTED', 'CANCELLED'].contains(status);
     final time = DateTime.tryParse('${item['scheduledTime'] ?? ''}')?.toLocal();
     final alternative =
         DateTime.tryParse('${item['alternativeTime'] ?? ''}')?.toLocal();
@@ -215,11 +330,18 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
           trailing: Chip(label: Text(status.replaceAll('_', ' '))),
         ),
         if (teacherProposed)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: Text('Waiting for the parent to respond.'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Row(
+              children: [
+                const Expanded(
+                    child: Text('Waiting for the parent to respond.')),
+                OutlinedButton.icon(
+                  onPressed: _busyId == id ? null : () => _editMeeting(item),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Edit proposal'),
+                ),
+              ],
             ),
           ),
         if (requested || parentProposed)
@@ -237,9 +359,9 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
                   label: const Text('Decline'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: _busyId == id ? null : () => _reschedule(id),
-                  icon: const Icon(Icons.update),
-                  label: const Text('Reschedule'),
+                  onPressed: _busyId == id ? null : () => _editMeeting(item),
+                  icon: const Icon(Icons.edit_calendar_outlined),
+                  label: const Text('Edit / reschedule'),
                 ),
                 FilledButton.icon(
                   onPressed:
@@ -249,6 +371,24 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
                 ),
               ],
             ),
+          ),
+        if (active)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              if (!requested && !parentProposed && !teacherProposed)
+                OutlinedButton.icon(
+                  onPressed: _busyId == id ? null : () => _editMeeting(item),
+                  icon: const Icon(Icons.edit_calendar_outlined),
+                  label: const Text('Reschedule'),
+                ),
+              const SizedBox(width: 8),
+              TextButton.icon(
+                onPressed: _busyId == id ? null : () => _cancelMeeting(item),
+                icon: const Icon(Icons.cancel_outlined),
+                label: const Text('Cancel meeting'),
+              ),
+            ]),
           ),
       ]),
     );

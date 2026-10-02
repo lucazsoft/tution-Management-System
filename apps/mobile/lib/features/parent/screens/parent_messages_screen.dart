@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/core/theme/app_theme.dart';
+import 'package:tms_mobile/shared/widgets/messenger_chat.dart';
 
 import '../models/parent_portal.dart';
 import '../viewmodels/parent_portal_viewmodel.dart';
@@ -18,12 +19,15 @@ class ParentMessagesScreen extends ConsumerStatefulWidget {
 
 class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
   final _text = TextEditingController();
+  final _search = TextEditingController();
   String? _contactId;
+  String _query = '';
   bool _sending = false;
 
   @override
   void dispose() {
     _text.dispose();
+    _search.dispose();
     super.dispose();
   }
 
@@ -39,11 +43,6 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
           );
       _text.clear();
       await ref.read(parentPortalProvider.notifier).refresh();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Message sent.')),
-        );
-      }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -61,312 +60,293 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
         appBar: AppBar(title: const Text('Messages')),
         bottomNavigationBar: const ParentNavigationBar(selectedIndex: 2),
         body: ParentPortalStateView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          wrapInScrollView: false,
           builder: (context, portal, child) {
-            // The parent endpoint is already scoped to the selected child.
-            // Do not discard contacts/messages when older payloads omit the
-            // redundant childId field.
-            final latestByContact = <String, DateTime>{};
+            final latestByContact = <String, ParentMessageItem>{};
             for (final message in portal.messages) {
-              final instant = message.occurredAt ?? DateTime(1970);
               final current = latestByContact[message.teacherId];
-              if (current == null || instant.isAfter(current)) {
-                latestByContact[message.teacherId] = instant;
+              if (current == null ||
+                  (message.occurredAt ?? DateTime(1970))
+                      .isAfter(current.occurredAt ?? DateTime(1970))) {
+                latestByContact[message.teacherId] = message;
               }
             }
-            final contacts = portal.contacts
-                .where((item) => latestByContact.containsKey(item.id))
-                .toList()
-              ..sort((a, b) =>
-                  latestByContact[b.id]!.compareTo(latestByContact[a.id]!));
+            final contacts = portal.contacts.toList()
+              ..sort((a, b) {
+                final aTime =
+                    latestByContact[a.id]?.occurredAt ?? DateTime(1970);
+                final bTime =
+                    latestByContact[b.id]?.occurredAt ?? DateTime(1970);
+                return bTime.compareTo(aTime);
+              });
             final selected = contacts.where((item) => item.id == _contactId);
             final contact = selected.isNotEmpty ? selected.first : null;
             final thread = contact == null
-                ? const <ParentMessageItem>[]
+                ? <ParentMessageItem>[]
                 : portal.messages
                     .where((message) => message.teacherId == contact.id)
                     .toList();
-            return Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1180),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
+            thread.sort((a, b) => (a.occurredAt ?? DateTime(1970))
+                .compareTo(b.occurredAt ?? DateTime(1970)));
+
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1180),
+                  child: Column(children: [
                     const ChildSwitcherBar(),
-                    const SizedBox(height: TmsSpace.md),
-                    _PrivacyNotice(child: child),
-                    const SizedBox(height: TmsSpace.md),
-                    LayoutBuilder(builder: (context, constraints) {
-                      final contactList = _ContactList(
-                        contacts: contacts,
-                        selectedId: contact?.id,
-                        onSelect: (id) => setState(() => _contactId = id),
-                      );
-                      final conversation = _Conversation(
-                        child: child,
-                        contact: contact,
-                        messages: thread,
-                        controller: _text,
-                        sending: _sending,
-                        onSend: contact == null
-                            ? null
-                            : () => _send(child, contact),
-                        onBack: () => setState(() => _contactId = null),
-                      );
-                      if (constraints.maxWidth < 760) {
-                        return contact == null ? contactList : conversation;
-                      }
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(width: 330, child: contactList),
-                          const SizedBox(width: TmsSpace.md),
-                          Expanded(child: conversation),
-                        ],
-                      );
-                    }),
-                  ],
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: LayoutBuilder(builder: (context, constraints) {
+                        final isCompact = constraints.maxWidth < 760;
+                        final list = _conversationList(
+                          contacts,
+                          latestByContact,
+                          contact?.id,
+                        );
+                        final conversation = _conversation(
+                          child,
+                          contact,
+                          thread,
+                          compact: isCompact,
+                        );
+                        if (isCompact) {
+                          return contact == null ? list : conversation;
+                        }
+                        final desktopContact = contact ??
+                            (contacts.isEmpty ? null : contacts.first);
+                        final desktopThread = desktopContact == null
+                            ? <ParentMessageItem>[]
+                            : portal.messages
+                                .where((m) => m.teacherId == desktopContact.id)
+                                .toList();
+                        desktopThread.sort((a, b) =>
+                            (a.occurredAt ?? DateTime(1970))
+                                .compareTo(b.occurredAt ?? DateTime(1970)));
+                        return Container(
+                          decoration: BoxDecoration(
+                            color: kColorBg,
+                            border: Border.all(color: kColorDivider),
+                            borderRadius: BorderRadius.circular(TmsRadius.r8),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Row(children: [
+                            SizedBox(width: 340, child: list),
+                            const VerticalDivider(width: 1),
+                            Expanded(
+                              child: _conversation(
+                                child,
+                                desktopContact,
+                                desktopThread,
+                                compact: false,
+                              ),
+                            ),
+                          ]),
+                        );
+                      }),
+                    ),
+                  ]),
                 ),
               ),
             );
           },
         ),
       );
-}
 
-class _PrivacyNotice extends StatelessWidget {
-  const _PrivacyNotice({required this.child});
-  final ParentChild child;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(TmsSpace.md),
-        decoration: BoxDecoration(
-          color: kColorPrimary.withValues(alpha: .07),
-          borderRadius: BorderRadius.circular(TmsRadius.card),
-        ),
-        child: Row(children: [
-          const Icon(Icons.shield_outlined, color: kColorPrimary),
-          const SizedBox(width: TmsSpace.sm),
-          Expanded(
-            child: Text(
-              'Privacy scoped to ${child.name}. Only authorized teaching, accounts, and branch staff are available; sibling conversations stay separate.',
-            ),
-          ),
-        ]),
-      );
-}
-
-class _ContactList extends StatelessWidget {
-  const _ContactList({
-    required this.contacts,
-    required this.selectedId,
-    required this.onSelect,
-  });
-  final List<ParentContact> contacts;
-  final String? selectedId;
-  final ValueChanged<String> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    final teachers = contacts.where((item) => item.role == 'TEACHER').length;
-    final admins = contacts.where((item) => item.role == 'BRANCH_ADMIN').length;
-    final staff = contacts.where((item) => item.role == 'STAFF').length;
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(TmsSpace.md),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Authorized contacts',
-              style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 3),
-          Text(
-              '$teachers assigned teacher${teachers == 1 ? '' : 's'} · $staff staff · $admins branch support',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: kColorMutedText)),
-          const SizedBox(height: TmsSpace.sm),
-          if (contacts.isEmpty)
-            const _MessageEmpty(
-              icon: Icons.person_off_outlined,
-              title: 'No authorized contacts',
-              message:
-                  'Teacher and branch contacts appear after class assignment.',
-            )
-          else
-            for (final contact in contacts)
-              Material(
-                color: contact.id == selectedId
-                    ? kColorPrimary.withValues(alpha: .07)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(TmsRadius.control),
-                child: ListTile(
-                  selected: contact.id == selectedId,
-                  leading: CircleAvatar(
-                    backgroundColor: kColorPrimary.withValues(alpha: .1),
-                    foregroundColor: kColorPrimary,
-                    child: Text(contact.initials.isEmpty
-                        ? (contact.name.isEmpty ? '?' : contact.name[0])
-                        : contact.initials),
-                  ),
-                  title: Text(contact.name),
-                  subtitle: Text(contact.role == 'BRANCH_ADMIN'
-                      ? 'Branch support'
-                      : contact.role == 'STAFF'
-                          ? contact.subject
-                          : 'Assigned teacher · ${contact.subject}'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => onSelect(contact.id),
-                ),
-              ),
-        ]),
-      ),
-    );
-  }
-}
-
-class _Conversation extends StatelessWidget {
-  const _Conversation({
-    required this.child,
-    required this.contact,
-    required this.messages,
-    required this.controller,
-    required this.sending,
-    required this.onSend,
-    required this.onBack,
-  });
-  final ParentChild child;
-  final ParentContact? contact;
-  final List<ParentMessageItem> messages;
-  final TextEditingController controller;
-  final bool sending;
-  final VoidCallback? onSend;
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) => Card(
-        margin: EdgeInsets.zero,
-        child: Padding(
-          padding: const EdgeInsets.all(TmsSpace.md),
+  Widget _conversationList(
+    List<ParentContact> contacts,
+    Map<String, ParentMessageItem> latest,
+    String? selectedId,
+  ) {
+    final filtered = contacts.where((contact) {
+      final haystack = '${contact.name} ${contact.subject}'.toLowerCase();
+      return haystack.contains(_query.toLowerCase());
+    }).toList();
+    return ColoredBox(
+      color: kColorBg,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
           child:
-              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Row(children: [
-              IconButton(
-                tooltip: 'Back to conversations',
-                onPressed: onBack,
-                icon: const Icon(Icons.arrow_back_rounded),
-              ),
-              Expanded(
-                child: Text(contact?.name ?? 'Conversation',
-                    style: Theme.of(context).textTheme.titleLarge),
-              ),
-            ]),
-            if (contact != null)
-              Text('${contact!.subject} · regarding ${child.name}',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: kColorMutedText)),
-            const SizedBox(height: TmsSpace.md),
-            if (messages.isEmpty)
-              const _MessageEmpty(
-                icon: Icons.forum_outlined,
-                title: 'No messages yet',
-                message: 'Messages remain in this child-and-contact thread.',
-              )
-            else
-              for (final message in messages)
-                _MessageBubble(message: message, contact: contact),
-            const Divider(height: TmsSpace.lg),
-            Text('Message about ${child.name}',
-                style: Theme.of(context).textTheme.labelLarge),
-            const SizedBox(height: TmsSpace.xs),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Authorized contacts',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 10),
             TextField(
-              controller: controller,
-              enabled: contact != null && !sending,
-              maxLength: 4000,
-              minLines: 3,
-              maxLines: 6,
-              decoration: InputDecoration(
-                hintText: contact == null
-                    ? 'No eligible contact selected'
-                    : 'Write a private message…',
-                border: const OutlineInputBorder(),
-              ),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton.icon(
-                onPressed: onSend == null || sending ? null : onSend,
-                icon: const Icon(Icons.send_rounded),
-                label: Text(sending ? 'Sending…' : 'Send message'),
+              controller: _search,
+              onChanged: (value) => setState(() => _query = value),
+              decoration: const InputDecoration(
+                hintText: 'Search conversations',
+                prefixIcon: Icon(Icons.search_rounded),
+                isDense: true,
               ),
             ),
           ]),
         ),
-      );
-}
-
-class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message, required this.contact});
-  final ParentMessageItem message;
-  final ParentContact? contact;
-
-  @override
-  Widget build(BuildContext context) {
-    final own = message.sender == 'Parent';
-    return Align(
-      alignment: own ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 520),
-        margin: const EdgeInsets.only(bottom: TmsSpace.sm),
-        padding: const EdgeInsets.all(TmsSpace.sm),
-        decoration: BoxDecoration(
-          color: own ? kColorPrimary.withValues(alpha: .1) : kColorSurface,
-          borderRadius: BorderRadius.circular(TmsRadius.card),
+        Expanded(
+          child: filtered.isEmpty
+              ? _empty(
+                  Icons.forum_outlined,
+                  'No conversations',
+                  _query.isEmpty
+                      ? 'Teacher conversations appear here after the first message.'
+                      : 'No conversations match your search.')
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  itemCount: filtered.length,
+                  itemBuilder: (context, index) {
+                    final contact = filtered[index];
+                    final message = latest[contact.id];
+                    return ConversationTile(
+                      name: contact.name,
+                      preview: message?.text ?? contact.subject,
+                      time: compactChatTime(message?.occurredAt),
+                      selected: contact.id == selectedId,
+                      onTap: () => setState(() => _contactId = contact.id),
+                    );
+                  },
+                ),
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(own ? 'You' : contact?.name ?? message.sender,
-              style: Theme.of(context).textTheme.labelMedium),
-          const SizedBox(height: 3),
-          Text(message.text),
-          const SizedBox(height: 3),
-          Text(message.time,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: kColorMutedText)),
-        ]),
+      ]),
+    );
+  }
+
+  Widget _conversation(
+    ParentChild child,
+    ParentContact? contact,
+    List<ParentMessageItem> messages, {
+    required bool compact,
+  }) {
+    if (contact == null) {
+      return ColoredBox(
+        color: kColorBg,
+        child: _empty(Icons.chat_bubble_outline_rounded, 'Your messages',
+            'Select a conversation to start chatting.'),
+      );
+    }
+    return ColoredBox(
+      color: kColorBg,
+      child: Column(children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: kColorDivider)),
+          ),
+          child: Row(children: [
+            if (compact)
+              IconButton(
+                tooltip: 'Back to conversations',
+                onPressed: () => setState(() => _contactId = null),
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+            ChatAvatar(name: contact.name, size: 42),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(contact.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text('${contact.subject} - regarding ${child.name}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: kColorMutedText)),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Conversation details',
+              onPressed: () => _showDetails(child, contact),
+              icon: const Icon(Icons.info_outline_rounded),
+            ),
+          ]),
+        ),
+        Expanded(
+          child: messages.isEmpty
+              ? _empty(Icons.waving_hand_outlined, 'Say hello',
+                  'Send a message about ${child.name}.')
+              : ListView.builder(
+                  reverse: true,
+                  padding: const EdgeInsets.fromLTRB(14, 18, 14, 12),
+                  itemCount: messages.length,
+                  itemBuilder: (context, reverseIndex) {
+                    final index = messages.length - 1 - reverseIndex;
+                    final message = messages[index];
+                    final own = message.sender.toLowerCase() == 'parent';
+                    final nextIsSame = index < messages.length - 1 &&
+                        (messages[index + 1].sender.toLowerCase() ==
+                                'parent') ==
+                            own;
+                    return ChatBubble(
+                      text: message.text,
+                      own: own,
+                      time: message.time,
+                      senderName: contact.name,
+                      showAvatar: !nextIsSame,
+                    );
+                  },
+                ),
+        ),
+        ChatComposer(
+          controller: _text,
+          sending: _sending,
+          hintText: 'Message about ${child.name}',
+          onSend: () => _send(child, contact),
+        ),
+      ]),
+    );
+  }
+
+  void _showDetails(ParentChild child, ParentContact contact) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 4, 24, 28),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            ChatAvatar(name: contact.name, size: 68),
+            const SizedBox(height: 10),
+            Text(contact.name, style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text('${contact.subject} - ${child.name}',
+                style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 18),
+            const Row(children: [
+              Icon(Icons.lock_outline_rounded, size: 19),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                    'This private conversation is limited to authorized school contacts.'),
+              ),
+            ]),
+          ]),
+        ),
       ),
     );
   }
-}
 
-class _MessageEmpty extends StatelessWidget {
-  const _MessageEmpty({
-    required this.icon,
-    required this.title,
-    required this.message,
-  });
-  final IconData icon;
-  final String title;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: TmsSpace.lg),
-        child: Column(children: [
-          Icon(icon, size: 38, color: kColorPrimary),
-          const SizedBox(height: TmsSpace.xs),
-          Text(title, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 3),
-          Text(message,
-              textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: kColorMutedText)),
-        ]),
+  Widget _empty(IconData icon, String title, String message) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 38, color: kColorPrimary),
+            const SizedBox(height: 10),
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(message,
+                textAlign: TextAlign.center,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: kColorMutedText)),
+          ]),
+        ),
       );
 }

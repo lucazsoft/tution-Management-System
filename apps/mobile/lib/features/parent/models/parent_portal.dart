@@ -137,7 +137,9 @@ class ParentAppointmentItem {
       required this.subject,
       required this.requestedTime,
       required this.state,
+      this.scheduledAt,
       this.alternativeTime,
+      this.alternativeAt,
       this.proposalFrom,
       this.responseMessage,
       this.participants = const [],
@@ -150,7 +152,9 @@ class ParentAppointmentItem {
           subject: _str(json['subject']),
           requestedTime: _str(json['requestedTime']),
           state: _str(json['state']),
+          scheduledAt: DateTime.tryParse(_str(json['scheduledAt'])),
           alternativeTime: json['alternativeTime']?.toString(),
+          alternativeAt: DateTime.tryParse(_str(json['alternativeAt'])),
           proposalFrom: json['proposalFrom']?.toString(),
           responseMessage: json['responseMessage']?.toString(),
           isGroup: json['group'] == true,
@@ -165,7 +169,9 @@ class ParentAppointmentItem {
   final String subject;
   final String requestedTime;
   final String state;
+  final DateTime? scheduledAt;
   final String? alternativeTime;
+  final DateTime? alternativeAt;
   final String? proposalFrom;
   final String? responseMessage;
   final List<ParentAppointmentParticipant> participants;
