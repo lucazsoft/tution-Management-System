@@ -21,7 +21,18 @@ import { invoiceLineItems } from '../utils/invoice-document';
 import { normalizeSchedule } from '../utils/schedule';
 import { parseStrictKeys, parseStrictObject, readFiniteNumber, readTrimmedString } from '../utils/request-validation';
 import { salaryStructureFor, type SupportedContractType } from '../services/payroll-service';
-import { getAdmissionTenure } from '../utils/nepali';
+import { bsToAdInstant, toBsDateString } from '../utils/nepali';
+import {
+  createAdmissionRecords,
+  findConflictingAccount,
+  generateTempPassword,
+  loadAdmissionPlacement,
+  normalizeEmail,
+  validateAdmissionDetails,
+  validateIdentityFields,
+  type AdmissionDetails,
+  type AdmissionSettlement,
+} from '../services/admission-service';
 import { privateImageUrl, storePrivateBytes } from '../services/object-storage';
 import { normalizeStudentPhoto } from '../services/student-photo';
 import { classAverageByAssessment, classAverageOnScale, type PublishedScoreLike } from '../utils/result-averages';
@@ -41,15 +52,6 @@ function branchAdminScopes(user: UserPayload): string[] {
   return user.roles
     .filter((r) => r.roleName === 'Branch Admin' && r.branchId)
     .map((r) => r.branchId as string);
-}
-
-function generateTempPassword(): string {
-  // Satisfies the shared password policy: length, upper, lower, digit, special.
-  return `Tms!${crypto.randomBytes(6).toString('hex')}A9`;
-}
-
-function normalizeEmail(value: unknown): string {
-  return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
 // Verify the target branch exists AND belongs to the caller's tenant.
@@ -153,57 +155,6 @@ async function provisionUser(params: {
   });
 
   return { userId: user.id, email: user.email, temporaryPassword };
-}
-
-function validateNewUserBody(body: any): { firstName: string; lastName: string; email: string; phone: string } | null {
-  const parsed = parseStrictObject<{ firstName: string; lastName: string; email: string; phone: string }>(body, {
-    fields: {
-      firstName: { required: true, maxLength: 100, normalize: (value) => value.trim(), message: 'A valid first name is required.' },
-      lastName: { required: true, maxLength: 100, normalize: (value) => value.trim(), message: 'A valid last name is required.' },
-      email: { required: true, maxLength: 254, pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, normalize: (value) => normalizeEmail(value), message: 'A valid email address is required.' },
-      phone: { required: false, maxLength: 30, pattern: /^[0-9+()\-\s]*$/, normalize: (value) => value.trim(), message: 'Phone must contain only digits and phone punctuation.' },
-    },
-  });
-  if (!parsed.success) return null;
-  return {
-    firstName: parsed.data.firstName,
-    lastName: parsed.data.lastName,
-    email: parsed.data.email,
-    phone: parsed.data.phone ?? '',
-  };
-}
-
-function validateAdmissionDetails(body: unknown) {
-  return parseStrictObject(body, {
-    fields: {
-      admittedAt: { required: true, maxLength: 40, message: 'Admission date and time are required.' },
-      dateOfBirth: { required: true, maxLength: 10, pattern: /^\d{4}-\d{2}-\d{2}$/, message: 'A valid student date of birth is required.' },
-      gender: { required: true, maxLength: 30, message: 'Student gender is required.' },
-      bloodGroup: { required: false, maxLength: 10, message: 'Blood group is too long.' },
-      nationality: { required: true, maxLength: 80, message: 'Student nationality is required.' },
-      permanentAddress: { required: true, maxLength: 500, message: 'Student permanent address is required.' },
-      temporaryAddress: { required: false, maxLength: 500, message: 'Student temporary address is too long.' },
-      school: { required: false, maxLength: 200, message: 'School name is too long.' },
-      medicalNotes: { required: false, maxLength: 2000, message: 'Medical notes are too long.' },
-      fatherName: { required: true, maxLength: 200, message: "Father's full name is required." },
-      fatherPhone: { required: true, maxLength: 30, pattern: /^[0-9+()\-\s]+$/, message: "A valid father's phone number is required." },
-      fatherEmail: { required: false, maxLength: 254, pattern: /^$|^[^\s@]+@[^\s@]+\.[^\s@]+$/, normalize: normalizeEmail, message: "Father's email is invalid." },
-      fatherOccupation: { required: false, maxLength: 150, message: "Father's occupation is too long." },
-      motherName: { required: true, maxLength: 200, message: "Mother's full name is required." },
-      motherPhone: { required: true, maxLength: 30, pattern: /^[0-9+()\-\s]+$/, message: "A valid mother's phone number is required." },
-      motherEmail: { required: false, maxLength: 254, pattern: /^$|^[^\s@]+@[^\s@]+\.[^\s@]+$/, normalize: normalizeEmail, message: "Mother's email is invalid." },
-      motherOccupation: { required: false, maxLength: 150, message: "Mother's occupation is too long." },
-      optionalParentName: { required: false, maxLength: 200, message: "Optional parent's name is too long." },
-      optionalParentPhone: { required: false, maxLength: 30, pattern: /^$|^[0-9+()\-\s]+$/, message: "Optional parent's phone number is invalid." },
-      optionalParentEmail: { required: false, maxLength: 254, pattern: /^$|^[^\s@]+@[^\s@]+\.[^\s@]+$/, normalize: normalizeEmail, message: "Optional parent's email is invalid." },
-      optionalParentOccupation: { required: false, maxLength: 150, message: "Optional parent's occupation is too long." },
-      optionalParentRelationship: { required: false, maxLength: 80, message: "Optional parent's relationship is too long." },
-      primaryParent: { required: true, maxLength: 30, pattern: /^(Father|Mother|Optional parent)$/, message: 'Select which recorded parent receives account credentials.' },
-      emergencyContactName: { required: true, maxLength: 200, message: 'Emergency contact name is required.' },
-      emergencyContactPhone: { required: true, maxLength: 30, pattern: /^[0-9+()\-\s]+$/, message: 'A valid emergency contact phone is required.' },
-      emergencyContactRelationship: { required: true, maxLength: 80, message: 'Emergency contact relationship is required.' },
-    },
-  });
 }
 
 // --- Caller capabilities: drives what the People UI can do ---
@@ -325,8 +276,8 @@ router.post('/admissions', authMiddleware, async (req: TenantRequest, res: Respo
     return res.status(403).json({ error: 'Only the Tenant Admin or assigned Branch Admin may create admissions.' });
   }
 
-  const studentFields = validateNewUserBody(admissionShape.data.student);
-  const parentFields = validateNewUserBody(admissionShape.data.parent);
+  const studentFields = validateIdentityFields(admissionShape.data.student);
+  const parentFields = validateIdentityFields(admissionShape.data.parent);
   const admissionDetails = validateAdmissionDetails(admissionShape.data.admissionDetails);
   if (!branchId || !gradeId || classIds.length > 20 || !studentFields || !parentFields || !admissionDetails.success) {
     return res.status(400).json({
@@ -334,137 +285,39 @@ router.post('/admissions', authMiddleware, async (req: TenantRequest, res: Respo
     });
   }
 
-  const [branch, grade, regularClasses, existing] = await Promise.all([
-    prisma.branch.findFirst({ where: { id: branchId, tenantId: req.tenantId! } }),
-    prisma.grade.findFirst({ where: { id: gradeId, tenantId: req.tenantId! } }),
-    prisma.class.findMany({ where: { id: { in: classIds }, branchId, course: { tenantId: req.tenantId!, gradeId, type: 'REGULAR', isExtraActivity: false } }, include: { course: true } }),
-    prisma.user.findFirst({
-      where: { email: { in: [studentFields.email, parentFields.email] } },
-      select: { email: true },
-    }),
-  ]);
-  if (!branch || !grade || regularClasses.length !== classIds.length) return res.status(404).json({ error: 'Branch, grade, or a matching regular class was not found in your institution.' });
-  if (grade.billingMode === 'GRADE' && regularClasses.length) return res.status(400).json({ error: 'Regular admissions are grade-based. Enroll extra classes separately after admission.' });
-  if (grade.billingMode === 'SUBJECT') {
-    if (!regularClasses.length) return res.status(400).json({ error: 'Choose at least one subject class for a subject-billed grade.' });
-    if (new Set(regularClasses.map((item) => item.courseId)).size !== regularClasses.length) return res.status(400).json({ error: 'Choose only one class for each subject.' });
-    const missingPrice = regularClasses.find((item) => Number((item.course.feeStructure as { monthlyBase?: number })?.monthlyBase ?? 0) <= 0);
-    if (missingPrice) return res.status(409).json({ error: `${missingPrice.course.name} needs a monthly price before admission.` });
-  }
+  const placement = await loadAdmissionPlacement(req.tenantId!, { branchId, gradeId, classIds });
+  if (!placement.success) return res.status(placement.status).json({ error: placement.error });
+  const { branch, grade, regularClasses } = placement.data;
   const regularClass = regularClasses[0];
+
   if (studentFields.email === parentFields.email) {
     return res.status(400).json({ error: 'Student and parent must use different email addresses.' });
   }
-  if (existing) return res.status(409).json({ error: `An account already exists for ${existing.email}.` });
+  const conflict = await findConflictingAccount([studentFields.email, parentFields.email]);
+  if (conflict) return res.status(409).json({ error: `An account already exists for ${conflict}.` });
 
-  const [studentRoleId, parentRoleId] = await Promise.all([
-    ensureTenantRole(req.tenantId!, 'Student'),
-    ensureTenantRole(req.tenantId!, 'Parent'),
-  ]);
-  const studentPassword = generateTempPassword();
-  const parentPassword = generateTempPassword();
-  const [studentPasswordHash, parentPasswordHash] = await Promise.all([
-    bcrypt.hash(studentPassword, 10),
-    bcrypt.hash(parentPassword, 10),
-  ]);
-  const now = new Date();
   const admittedAt = new Date(admissionDetails.data.admittedAt);
   if (Number.isNaN(admittedAt.getTime())) {
     return res.status(400).json({ error: 'A valid admission date and time are required.' });
   }
-  const admissionNumber = `ADM-${admittedAt.toISOString().slice(0, 10).replaceAll('-', '')}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
-  const savedAdmissionRecord = {
-    ...admissionDetails.data,
-    primaryGuardian: {
-      name: `${parentFields.firstName} ${parentFields.lastName}`.trim(),
-      email: parentFields.email,
-      phone: parentFields.phone,
-      relationship: admissionDetails.data.primaryParent,
-    },
-    admittedBy: { id: req.user!.id, name: `${req.user!.firstName} ${req.user!.lastName}`.trim() },
-    admittedAt: admittedAt.toISOString(),
-  };
-  const dueDate = new Date(now);
-  dueDate.setDate(dueDate.getDate() + 7);
-  const admissionTenure = await getAdmissionTenure(now);
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      const studentUser = await tx.user.create({
-        data: {
-          tenantId: req.tenantId!,
-          email: studentFields.email,
-          name: `${studentFields.firstName} ${studentFields.lastName}`,
-          firstName: studentFields.firstName,
-          lastName: studentFields.lastName,
-          phone: studentFields.phone,
-          passwordHash: studentPasswordHash,
-          status: 'INACTIVE',
-        },
-      });
-      await tx.account.create({
-        data: { accountId: studentUser.id, providerId: 'credential', userId: studentUser.id, password: studentPasswordHash },
-      });
-      await tx.userRole.create({ data: { userId: studentUser.id, roleId: studentRoleId, branchId } });
-      const student = await tx.student.create({
-        data: {
-          userId: studentUser.id,
-          gradeId,
-          admissionNumber,
-          admissionDate: admittedAt,
-          emergencyContact: admissionDetails.data.emergencyContactPhone,
-          admissionRecord: savedAdmissionRecord,
-          admissionStatus: branch.admissionFee > 0 ? 'PENDING_PAYMENT' : 'READY_FOR_LOGIN',
-        },
-      });
-      await tx.enrollment.createMany({ data: regularClasses.map((item) => ({ studentId: student.id, courseId: item.courseId, classId: item.id, status: 'BLOCKED' as const, admissionDate: admittedAt })) });
-
-      const parentUser = await tx.user.create({
-        data: {
-          tenantId: req.tenantId!,
-          email: parentFields.email,
-          name: `${parentFields.firstName} ${parentFields.lastName}`,
-          firstName: parentFields.firstName,
-          lastName: parentFields.lastName,
-          phone: parentFields.phone,
-          passwordHash: parentPasswordHash,
-          status: 'INACTIVE',
-        },
-      });
-      await tx.account.create({
-        data: { accountId: parentUser.id, providerId: 'credential', userId: parentUser.id, password: parentPasswordHash },
-      });
-      await tx.userRole.create({ data: { userId: parentUser.id, roleId: parentRoleId, branchId } });
-      const parent = await tx.parent.create({ data: { userId: parentUser.id } });
-      await tx.studentParent.create({ data: { studentId: student.id, parentId: parent.id } });
-
-      const tenant = await tx.tenant.findUniqueOrThrow({ where: { id: req.tenantId! } });
-      const invoice = await tx.invoice.create({
-        data: {
-          tenantId: req.tenantId!,
-          studentId: student.id,
-          branchId,
-          invoiceType: 'ADMISSION',
-          panNumberSnapshot: tenant.panNumber,
-          vatRateSnapshot: tenant.vatRate,
-          lineItemsSnapshot: [{ label: 'One-time admission fee', amount: Number(branch.admissionFee) }],
-          amount: branch.admissionFee,
-          netPayable: branch.admissionFee,
-          billingCycleStart: admissionTenure.start,
-          billingCycleEnd: admissionTenure.end,
-          dueDate,
-          status: branch.admissionFee > 0 ? 'UNPAID' : 'PAID',
-          paymentDate: branch.admissionFee > 0 ? null : now,
-        },
-      });
-      return { student, parent, invoice, tenant };
+    const result = await createAdmissionRecords({
+      tenantId: req.tenantId!,
+      placement: placement.data,
+      student: studentFields,
+      parent: parentFields,
+      details: admissionDetails.data,
+      admittedAt,
+      admittedBy: { id: req.user!.id, name: `${req.user!.firstName} ${req.user!.lastName}`.trim() },
+      settlement: 'DUE',
     });
 
-    const delivery = branch.admissionFee === 0
+    const delivery = result.readyForLogin
       ? await activateAdmissionAndSendLogins(req.tenantId!, result.student.id)
       : null;
     return res.status(201).json({
-      message: branch.admissionFee > 0
+      message: !result.readyForLogin
         ? 'Admission saved. Login IDs will be sent by SMS after payment.'
         : delivery?.delivered
           ? 'Admission completed and login IDs were sent by SMS.'
@@ -476,7 +329,7 @@ router.post('/admissions', authMiddleware, async (req: TenantRequest, res: Respo
         gradeId,
         classId: regularClass?.id ?? null,
         classIds: regularClasses.map((item) => item.id),
-        admissionNumber,
+        admissionNumber: result.admissionNumber,
         admittedAt: admittedAt.toISOString(),
         status: result.student.admissionStatus,
         invoiceId: result.invoice.id,
@@ -488,8 +341,8 @@ router.post('/admissions', authMiddleware, async (req: TenantRequest, res: Respo
           gradeName: grade.name,
           className: regularClasses.length ? regularClasses.map((item) => `${item.course.name} · ${item.name}`).join(', ') : 'Regular grade admission',
           student: { ...studentFields, ...admissionDetails.data },
-          primaryGuardian: savedAdmissionRecord.primaryGuardian,
-          admittedBy: savedAdmissionRecord.admittedBy,
+          primaryGuardian: result.admissionRecord.primaryGuardian,
+          admittedBy: result.admissionRecord.admittedBy,
         },
       },
       loginDelivery: delivery,
@@ -1520,7 +1373,7 @@ router.post('/branch-admin', authMiddleware, async (req: TenantRequest, res: Res
 
   const requestShape = parseStrictKeys(req.body, ['firstName', 'lastName', 'email', 'phone', 'branchId']);
   if (!requestShape.success) return res.status(400).json({ error: requestShape.error });
-  const fields = validateNewUserBody({
+  const fields = validateIdentityFields({
     firstName: requestShape.data.firstName,
     lastName: requestShape.data.lastName,
     email: requestShape.data.email,
@@ -1580,7 +1433,7 @@ router.post('/', authMiddleware, async (req: TenantRequest, res: Response) => {
 
   const requestShape = parseStrictKeys(req.body, ['firstName', 'lastName', 'email', 'phone', 'role', 'branchId', 'gradeId', 'studentId', 'contractType', 'baseMonthlySalary', 'hourlyRate']);
   if (!requestShape.success) return res.status(400).json({ error: requestShape.error });
-  const fields = validateNewUserBody({
+  const fields = validateIdentityFields({
     firstName: requestShape.data.firstName,
     lastName: requestShape.data.lastName,
     email: requestShape.data.email,
@@ -1694,226 +1547,376 @@ router.post('/', authMiddleware, async (req: TenantRequest, res: Response) => {
   }
 });
 
-// --- Bulk student import (from an Excel/CSV parsed to JSON on the client) ---
-interface BulkStudentRow {
-  firstName?: string;
-  lastName?: string;
-  email?: string;
-  phone?: string;
-  branchName?: string;
-  grade?: string;
-  emergencyContact?: string;
-  parentFirstName?: string;
-  parentLastName?: string;
-  parentEmail?: string;
-  parentPhone?: string;
-}
+// --- Bulk admission import (from a CSV parsed to JSON on the client) ---
+//
+// Every row runs the same path as the single-admission form: identical field
+// validation, admission number, admissionRecord JSON, placement rules, BLOCKED
+// enrolments, ADMISSION invoice, and SMS login release. The only parts specific
+// to importing are Bikram Sambat dates (admins hold BS records, not AD) and the
+// "fee already paid" flag, which lets a student admitted years ago be entered
+// now without being billed a second time.
 
-function parseBulkStudentImport(body: unknown): { success: true; data: BulkStudentRow[] } | { success: false; error: string } {
+const BULK_ADMISSION_FIELDS = [
+  'firstName', 'lastName', 'email', 'phone',
+  'admissionDateBs', 'admissionTime', 'feeAlreadyPaid',
+  'branchName', 'gradeName', 'subjects',
+  'dateOfBirthBs', 'gender', 'bloodGroup', 'nationality', 'permanentAddress', 'temporaryAddress', 'school', 'medicalNotes',
+  'fatherName', 'fatherPhone', 'fatherEmail', 'fatherOccupation',
+  'motherName', 'motherPhone', 'motherEmail', 'motherOccupation',
+  'optionalParentName', 'optionalParentPhone', 'optionalParentEmail', 'optionalParentOccupation', 'optionalParentRelationship',
+  'primaryParent',
+  'emergencyContactName', 'emergencyContactPhone', 'emergencyContactRelationship',
+] as const;
+
+type BulkAdmissionField = typeof BULK_ADMISSION_FIELDS[number];
+type BulkAdmissionRow = Partial<Record<BulkAdmissionField, string>>;
+
+// Each created row sends two SMS messages, so the batch is capped well below
+// the 500 the old student-only import allowed.
+const BULK_ADMISSION_LIMIT = 200;
+
+/**
+ * Shape-check the envelope only. Field-level problems are reported per row, so
+ * one bad address does not reject a 200-student file.
+ */
+function parseBulkAdmissionImport(body: unknown): { success: true; data: BulkAdmissionRow[] } | { success: false; error: string } {
   const request = parseStrictKeys(body, ['students']);
   if (!request.success) return request;
-  if (!Array.isArray(request.data.students) || request.data.students.length === 0 || request.data.students.length > 500) {
-    return { success: false, error: 'students must contain between 1 and 500 rows.' };
+  const rows = request.data.students;
+  if (!Array.isArray(rows) || rows.length === 0 || rows.length > BULK_ADMISSION_LIMIT) {
+    return { success: false, error: `students must contain between 1 and ${BULK_ADMISSION_LIMIT} rows.` };
   }
 
-  const fields = ['firstName', 'lastName', 'email', 'phone', 'branchName', 'grade', 'emergencyContact', 'parentFirstName', 'parentLastName', 'parentEmail', 'parentPhone'] as const;
-  const normalized: BulkStudentRow[] = [];
-  for (const [index, row] of request.data.students.entries()) {
-    const shape = parseStrictKeys(row, fields);
+  const normalized: BulkAdmissionRow[] = [];
+  for (const [index, row] of rows.entries()) {
+    const shape = parseStrictKeys(row, BULK_ADMISSION_FIELDS);
     if (!shape.success) return { success: false, error: `Row ${index + 1}: ${shape.error}` };
-    const value = (key: typeof fields[number], required = false, email = false) => readBulkField(shape.data, key, required, email);
-    const firstName = value('firstName', true);
-    const lastName = value('lastName', true);
-    const email = value('email', true, true);
-    const phone = value('phone');
-    const branchName = value('branchName');
-    const grade = value('grade');
-    const emergencyContact = value('emergencyContact');
-    const parentFirstName = value('parentFirstName');
-    const parentLastName = value('parentLastName');
-    const parentEmail = value('parentEmail', false, true);
-    const parentPhone = value('parentPhone');
-    if (!firstName.success) return { success: false, error: `Row ${index + 1}: ${firstName.error}` };
-    if (!lastName.success) return { success: false, error: `Row ${index + 1}: ${lastName.error}` };
-    if (!email.success) return { success: false, error: `Row ${index + 1}: ${email.error}` };
-    if (!phone.success) return { success: false, error: `Row ${index + 1}: ${phone.error}` };
-    if (!branchName.success) return { success: false, error: `Row ${index + 1}: ${branchName.error}` };
-    if (!grade.success) return { success: false, error: `Row ${index + 1}: ${grade.error}` };
-    if (!emergencyContact.success) return { success: false, error: `Row ${index + 1}: ${emergencyContact.error}` };
-    if (!parentFirstName.success) return { success: false, error: `Row ${index + 1}: ${parentFirstName.error}` };
-    if (!parentLastName.success) return { success: false, error: `Row ${index + 1}: ${parentLastName.error}` };
-    if (!parentEmail.success) return { success: false, error: `Row ${index + 1}: ${parentEmail.error}` };
-    if (!parentPhone.success) return { success: false, error: `Row ${index + 1}: ${parentPhone.error}` };
-    normalized.push({
-      firstName: firstName.data,
-      lastName: lastName.data,
-      email: email.data.toLowerCase(),
-      phone: phone.data,
-      branchName: branchName.data,
-      grade: grade.data,
-      emergencyContact: emergencyContact.data,
-      parentFirstName: parentFirstName.data,
-      parentLastName: parentLastName.data,
-      parentEmail: parentEmail.data.toLowerCase(),
-      parentPhone: parentPhone.data,
-    });
+    const record: BulkAdmissionRow = {};
+    for (const key of BULK_ADMISSION_FIELDS) {
+      const value = shape.data[key];
+      if (value === undefined || value === null) continue;
+      if (typeof value !== 'string') return { success: false, error: `Row ${index + 1}: ${key} must be text.` };
+      if (value.length > 2000) return { success: false, error: `Row ${index + 1}: ${key} is too long.` };
+      record[key] = value.trim();
+    }
+    normalized.push(record);
   }
   return { success: true, data: normalized };
 }
 
-function readBulkField(body: Record<string, unknown>, key: string, required = false, email = false) {
-  return readTrimmedString(body, key, {
-    required,
-    maxLength: email ? 254 : key.includes('Phone') || key === 'phone' || key === 'emergencyContact' ? 30 : 120,
-    pattern: email ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/ : key.includes('Phone') || key === 'phone' || key === 'emergencyContact' ? /^[0-9+()\-\s]*$/ : undefined,
-    message: email ? `${key} must be a valid email address.` : `${key} must be valid text.`,
-  });
+const FEE_PAID_YES = new Set(['yes', 'y', 'true', '1', 'paid']);
+const FEE_PAID_NO = new Set(['', 'no', 'n', 'false', '0', 'unpaid', 'due']);
+
+/** Split a full name into the first/last pair the account model needs. */
+function splitFullName(value: string): { firstName: string; lastName: string } {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  const firstName = parts.shift() ?? '';
+  return { firstName, lastName: parts.join(' ') || firstName };
 }
 
-router.post('/bulk-students', authMiddleware, async (req: TenantRequest, res: Response) => {
+interface BulkAdmissionResult {
+  row: number;
+  name: string;
+  email: string;
+  status: 'created' | 'error';
+  admissionNumber?: string;
+  admissionDateBs?: string;
+  admissionStatus?: string;
+  invoiceId?: string;
+  admissionFee?: number;
+  feeSettled?: boolean;
+  tenureYear?: number;
+  loginsSent?: boolean;
+  warning?: string;
+  error?: string;
+}
+
+router.post('/admissions/bulk', authMiddleware, async (req: TenantRequest, res: Response) => {
   const caller = req.user as UserPayload;
   const tenantAdmin = isTenantAdmin(caller);
   const scopes = branchAdminScopes(caller);
   if (!tenantAdmin && scopes.length === 0) {
-    return res.status(403).json({ error: 'You do not have permission to import students.' });
+    return res.status(403).json({ error: 'Only the Tenant Admin or an assigned Branch Admin may import admissions.' });
   }
 
-  const input = parseBulkStudentImport(req.body);
+  const input = parseBulkAdmissionImport(req.body);
   if (!input.success) return res.status(400).json({ error: input.error });
   const rows = input.data;
 
-  // Resolve the tenant's branches once, scoped for branch admins.
-  const branches = await prisma.branch.findMany({
-    where: { tenantId: req.tenantId!, ...(tenantAdmin ? {} : { id: { in: scopes } }) },
-    select: { id: true, name: true },
-  });
-  const branchByName = new Map(branches.map((b) => [b.name.trim().toLowerCase(), b]));
+  // Resolve the names a CSV can refer to once, scoped for branch admins.
+  const [branches, gradeList, classList] = await Promise.all([
+    prisma.branch.findMany({
+      where: { tenantId: req.tenantId!, ...(tenantAdmin ? {} : { id: { in: scopes } }) },
+      select: { id: true, name: true },
+    }),
+    prisma.grade.findMany({ where: { tenantId: req.tenantId! }, select: { id: true, name: true, billingMode: true } }),
+    prisma.class.findMany({
+      where: { course: { tenantId: req.tenantId!, type: 'REGULAR', isExtraActivity: false } },
+      select: { id: true, branchId: true, course: { select: { name: true, gradeId: true } } },
+      orderBy: { name: 'asc' },
+    }),
+  ]);
+  const branchByName = new Map(branches.map((branch) => [branch.name.trim().toLowerCase(), branch]));
   const soleBranch = branches.length === 1 ? branches[0] : null;
+  const gradeByName = new Map(gradeList.map((grade) => [grade.name.trim().toLowerCase(), grade]));
 
-  // Resolve the tenant's grades once, matched by name.
-  const gradeList = await prisma.grade.findMany({ where: { tenantId: req.tenantId! }, select: { id: true, name: true } });
-  const gradeByName = new Map(gradeList.map((g) => [g.name.trim().toLowerCase(), g]));
+  // First class per branch + grade + subject, matching how the admission form
+  // defaults a chosen subject to its first available class.
+  const classBySubject = new Map<string, string>();
+  for (const item of classList) {
+    const key = `${item.branchId}:${item.course.gradeId}:${item.course.name.trim().toLowerCase()}`;
+    if (!classBySubject.has(key)) classBySubject.set(key, item.id);
+  }
 
-  // Emails seen within this batch, to catch in-file duplicates.
+  const admittedBy = { id: req.user!.id, name: `${req.user!.firstName} ${req.user!.lastName}`.trim() };
   const seenEmails = new Set<string>();
-  const results: Array<{ row: number; name: string; email: string; status: 'created' | 'error'; temporaryPassword?: string; parentEmail?: string; parentTemporaryPassword?: string; error?: string }> = [];
+  const results: BulkAdmissionResult[] = [];
+  const now = new Date();
 
-  for (let i = 0; i < rows.length; i++) {
-    const raw = rows[i];
-    const rowNo = i + 1;
-    const firstName = typeof raw.firstName === 'string' ? raw.firstName.trim() : '';
-    const lastName = typeof raw.lastName === 'string' ? raw.lastName.trim() : '';
-    const email = normalizeEmail(raw.email);
-    const phone = typeof raw.phone === 'string' ? raw.phone.trim() : '';
-    const emergencyContact = typeof raw.emergencyContact === 'string' ? raw.emergencyContact.trim() : '';
+  for (let index = 0; index < rows.length; index++) {
+    const raw = rows[index];
+    const rowNo = index + 1;
+    const field = (key: BulkAdmissionField) => raw[key] ?? '';
+    const rowName = `${field('firstName')} ${field('lastName')}`.trim();
+    const rowEmail = normalizeEmail(field('email'));
+    const fail = (error: string) => {
+      results.push({ row: rowNo, name: rowName, email: rowEmail, status: 'error', error });
+    };
 
-    const fail = (error: string) => results.push({ row: rowNo, name: `${firstName} ${lastName}`.trim(), email, status: 'error', error });
-
-    if (!firstName || !lastName || !email) {
-      fail('First name, last name, and email are required.');
+    // 1. Branch and grade, referenced by name.
+    const branchKey = field('branchName').toLowerCase();
+    const branchRef = branchKey ? branchByName.get(branchKey) : soleBranch;
+    if (!branchRef) {
+      fail(branchKey
+        ? `Branch "${field('branchName')}" was not found or is outside your access.`
+        : 'Branch is required when the institution has more than one branch.');
       continue;
     }
-    if (seenEmails.has(email)) {
-      fail('Duplicate email within this file.');
+    const gradeKey = field('gradeName').toLowerCase();
+    const gradeRef = gradeKey ? gradeByName.get(gradeKey) : undefined;
+    if (!gradeRef) {
+      fail(gradeKey ? `Grade "${field('gradeName')}" does not exist. Create it under Grades first.` : 'Grade is required.');
       continue;
     }
 
-    // Resolve branch: by name, or the sole branch if the column was left blank.
-    const branchKey = typeof raw.branchName === 'string' ? raw.branchName.trim().toLowerCase() : '';
-    const branch = branchKey ? branchByName.get(branchKey) : soleBranch;
-    if (!branch) {
-      fail(branchKey ? `Branch "${raw.branchName}" not found or outside your access.` : 'Branch is required (multiple branches exist).');
+    // 2. Subjects, which only subject-billed grades (Class 11-12) carry.
+    const subjectNames = field('subjects').split(';').map((name) => name.trim()).filter(Boolean);
+    if (gradeRef.billingMode === 'GRADE' && subjectNames.length) {
+      fail(`${gradeRef.name} is billed per grade. Leave Subjects empty and enroll extra classes after admission.`);
+      continue;
+    }
+    if (gradeRef.billingMode === 'SUBJECT' && !subjectNames.length) {
+      fail(`${gradeRef.name} is billed per subject. List the subjects separated by semicolons, for example "Physics;Chemistry;Maths".`);
+      continue;
+    }
+    const classIds: string[] = [];
+    const unknownSubject = subjectNames.find((name) => {
+      const classId = classBySubject.get(`${branchRef.id}:${gradeRef.id}:${name.toLowerCase()}`);
+      if (!classId) return true;
+      if (!classIds.includes(classId)) classIds.push(classId);
+      return false;
+    });
+    if (unknownSubject) {
+      fail(`Subject "${unknownSubject}" has no class for ${gradeRef.name} at ${branchRef.name}. Create the course and its class first.`);
+      continue;
+    }
+    if (classIds.length !== subjectNames.length) {
+      fail('The same subject is listed more than once.');
       continue;
     }
 
-    // Resolve grade by name (optional). Unknown grade names are reported.
-    const gradeKey = typeof raw.grade === 'string' ? raw.grade.trim().toLowerCase() : '';
-    const grade = gradeKey ? gradeByName.get(gradeKey) : null;
-    if (gradeKey && !grade) {
-      fail(`Grade "${raw.grade}" does not exist. Create it under Grades first.`);
+    // 3. Bikram Sambat admission date and date of birth.
+    const admissionDateBs = field('admissionDateBs');
+    if (!admissionDateBs) {
+      fail('Admission Date (BS) is required, written as YYYY-MM-DD in Bikram Sambat.');
+      continue;
+    }
+    const admittedAt = await bsToAdInstant(admissionDateBs, field('admissionTime') || '10:00');
+    if (!admittedAt) {
+      fail(`"${admissionDateBs}"${field('admissionTime') ? ` ${field('admissionTime')}` : ''} is not a real Bikram Sambat date and Nepal time. Use YYYY-MM-DD and HH:mm, for example 2080-03-15 and 10:00.`);
+      continue;
+    }
+    if (admittedAt.getTime() > now.getTime()) {
+      fail('Admission Date (BS) cannot be in the future.');
+      continue;
+    }
+    const dateOfBirthBs = field('dateOfBirthBs');
+    // Anchored at midday so the Nepal-time offset cannot roll the AD calendar
+    // date back a day when it is stored as a plain YYYY-MM-DD string.
+    const dateOfBirth = dateOfBirthBs ? await bsToAdInstant(dateOfBirthBs, '12:00') : null;
+    if (!dateOfBirth) {
+      fail(dateOfBirthBs
+        ? `"${dateOfBirthBs}" is not a real Bikram Sambat date of birth. Use YYYY-MM-DD.`
+        : 'Date of Birth (BS) is required, written as YYYY-MM-DD in Bikram Sambat.');
+      continue;
+    }
+    if (dateOfBirth.getTime() > now.getTime()) {
+      fail('Date of Birth (BS) cannot be in the future.');
+      continue;
+    }
+
+    // 4. Was the admission fee already collected off-system?
+    const feeFlag = field('feeAlreadyPaid').toLowerCase();
+    if (!FEE_PAID_YES.has(feeFlag) && !FEE_PAID_NO.has(feeFlag)) {
+      fail('Fee Already Paid must be "yes" or "no".');
+      continue;
+    }
+    const settlement: AdmissionSettlement = FEE_PAID_YES.has(feeFlag) ? 'ALREADY_PAID' : 'DUE';
+
+    // 5. The recorded primary guardian receives the parent login, as in the form.
+    const primaryParent = field('primaryParent');
+    const guardian = primaryParent === 'Father'
+      ? { name: field('fatherName'), email: field('fatherEmail'), phone: field('fatherPhone') }
+      : primaryParent === 'Mother'
+        ? { name: field('motherName'), email: field('motherEmail'), phone: field('motherPhone') }
+        : primaryParent === 'Optional parent'
+          ? { name: field('optionalParentName'), email: field('optionalParentEmail'), phone: field('optionalParentPhone') }
+          : null;
+    if (!guardian) {
+      fail('Primary Parent must be "Father", "Mother", or "Optional parent".');
+      continue;
+    }
+    if (!guardian.email) {
+      fail(`${primaryParent} is the primary parent, so their email is required to create the parent login.`);
+      continue;
+    }
+
+    // 6. Hand the assembled row to the admission form's own validators.
+    const details: Record<string, string> = {
+      admittedAt: admittedAt.toISOString(),
+      dateOfBirth: dateOfBirth.toISOString().slice(0, 10),
+      gender: field('gender'),
+      bloodGroup: field('bloodGroup'),
+      nationality: field('nationality') || 'Nepali',
+      permanentAddress: field('permanentAddress'),
+      temporaryAddress: field('temporaryAddress'),
+      school: field('school'),
+      medicalNotes: field('medicalNotes'),
+      fatherName: field('fatherName'),
+      fatherPhone: field('fatherPhone'),
+      fatherEmail: field('fatherEmail'),
+      fatherOccupation: field('fatherOccupation'),
+      motherName: field('motherName'),
+      motherPhone: field('motherPhone'),
+      motherEmail: field('motherEmail'),
+      motherOccupation: field('motherOccupation'),
+      optionalParentName: field('optionalParentName'),
+      optionalParentPhone: field('optionalParentPhone'),
+      optionalParentEmail: field('optionalParentEmail'),
+      optionalParentOccupation: field('optionalParentOccupation'),
+      optionalParentRelationship: field('optionalParentRelationship'),
+      primaryParent,
+      emergencyContactName: field('emergencyContactName'),
+      emergencyContactPhone: field('emergencyContactPhone'),
+      emergencyContactRelationship: field('emergencyContactRelationship'),
+    };
+    const admissionDetails = validateAdmissionDetails(details);
+    if (!admissionDetails.success) {
+      fail(admissionDetails.error);
+      continue;
+    }
+
+    const studentFields = validateIdentityFields({
+      firstName: field('firstName'), lastName: field('lastName'), email: field('email'), phone: field('phone'),
+    });
+    if (!studentFields || !studentFields.phone) {
+      fail('First Name, Last Name, a valid Email, and Phone are required for the student.');
+      continue;
+    }
+    const guardianName = splitFullName(guardian.name);
+    const parentFields = validateIdentityFields({
+      firstName: guardianName.firstName, lastName: guardianName.lastName, email: guardian.email, phone: guardian.phone,
+    });
+    if (!parentFields || !parentFields.phone) {
+      fail(`${primaryParent} needs a name, a valid email, and a phone number to receive the parent login.`);
+      continue;
+    }
+    if (studentFields.email === parentFields.email) {
+      fail('The student and the primary parent must use different email addresses.');
+      continue;
+    }
+
+    // 7. Authoritative placement check — the same one the single form runs.
+    const placement = await loadAdmissionPlacement(req.tenantId!, { branchId: branchRef.id, gradeId: gradeRef.id, classIds });
+    if (!placement.success) {
+      fail(placement.error);
+      continue;
+    }
+
+    // 8. Email collisions, inside this file and against existing accounts.
+    if (seenEmails.has(studentFields.email) || seenEmails.has(parentFields.email)) {
+      fail('Duplicate email address within this file.');
+      continue;
+    }
+    const conflict = await findConflictingAccount([studentFields.email, parentFields.email]);
+    if (conflict) {
+      fail(`An account already exists for ${conflict}.`);
       continue;
     }
 
     try {
-      const existing = await prisma.user.findUnique({ where: { email } });
-      if (existing) {
-        fail('A user with this email already exists.');
-        continue;
-      }
-
-      seenEmails.add(email);
-      const created = await provisionUser({
+      const created = await createAdmissionRecords({
         tenantId: req.tenantId!,
-        firstName,
-        lastName,
-        email,
-        phone: phone || emergencyContact,
-        roleName: 'Student',
-        branchId: branch.id,
-        gradeId: grade?.id ?? null,
+        placement: placement.data,
+        student: studentFields,
+        parent: parentFields,
+        details: admissionDetails.data as AdmissionDetails,
+        admittedAt,
+        admittedBy,
+        settlement,
+        recordExtras: {
+          admissionDateBs: await toBsDateString(admittedAt),
+          dateOfBirthBs: await toBsDateString(dateOfBirth),
+          importedAt: now.toISOString(),
+          importSource: 'CSV bulk admission import',
+        },
+        now,
       });
+      seenEmails.add(studentFields.email);
+      seenEmails.add(parentFields.email);
 
-      const result: (typeof results)[number] = {
+      const result: BulkAdmissionResult = {
         row: rowNo,
-        name: `${firstName} ${lastName}`,
-        email,
+        name: `${studentFields.firstName} ${studentFields.lastName}`,
+        email: studentFields.email,
         status: 'created',
-        temporaryPassword: created.temporaryPassword,
+        admissionNumber: created.admissionNumber,
+        admissionDateBs: await toBsDateString(admittedAt),
+        admissionStatus: created.student.admissionStatus,
+        invoiceId: created.invoice.id,
+        admissionFee: Number(created.invoice.netPayable),
+        feeSettled: created.invoice.status === 'PAID',
+        // Which admission year the student is in today: 1 for a new admission,
+        // 3 for someone admitted two BS years ago.
+        tenureYear: (created.accessWindow?.yearsElapsed ?? 0) + 1,
       };
 
-      // Optional emergency contact on the Student record.
-      if (emergencyContact) {
-        await prisma.student.updateMany({ where: { userId: created.userId }, data: { emergencyContact } });
-      }
-
-      // Optional parent: create-or-link and connect to this student.
-      const parentEmail = normalizeEmail(raw.parentEmail);
-      if (parentEmail) {
-        const student = await prisma.student.findUnique({ where: { userId: created.userId } });
-        let parentRecord = await prisma.parent.findFirst({
-          where: { user: { email: parentEmail, tenantId: req.tenantId! } },
-        });
-
-        if (!parentRecord) {
-          const existingParentUser = await prisma.user.findUnique({ where: { email: parentEmail } });
-          if (existingParentUser) {
-            result.error = 'Parent email belongs to a non-parent account; student created without parent link.';
+      // Logins go out by SMS exactly as for a walk-in admission: now when
+      // nothing is owed, otherwise when the admission invoice is paid.
+      if (created.readyForLogin) {
+        try {
+          const delivery = await activateAdmissionAndSendLogins(req.tenantId!, created.student.id);
+          result.loginsSent = delivery.delivered;
+          if (delivery.delivered) {
+            result.admissionStatus = 'ACTIVE';
           } else {
-            const parentProvision = await provisionUser({
-              tenantId: req.tenantId!,
-              firstName: (typeof raw.parentFirstName === 'string' && raw.parentFirstName.trim()) || firstName,
-              lastName: (typeof raw.parentLastName === 'string' && raw.parentLastName.trim()) || lastName,
-              email: parentEmail,
-              phone: typeof raw.parentPhone === 'string' ? raw.parentPhone.trim() : '',
-              roleName: 'Parent',
-              branchId: branch.id,
-            });
-            parentRecord = await prisma.parent.findUnique({ where: { userId: parentProvision.userId } });
-            result.parentEmail = parentEmail;
-            result.parentTemporaryPassword = parentProvision.temporaryPassword;
+            result.warning = `Admission saved, but SMS delivery is incomplete: ${delivery.failures.join(' ') || 'queued for retry.'}`;
           }
-        } else {
-          result.parentEmail = parentEmail;
+        } catch (error: unknown) {
+          result.loginsSent = false;
+          result.warning = `Admission saved, but the login SMS could not be queued: ${error instanceof Error ? error.message : 'delivery is unavailable.'}`;
         }
-
-        if (student && parentRecord) {
-          const linked = await prisma.studentParent.findUnique({
-            where: { studentId_parentId: { studentId: student.id, parentId: parentRecord.id } },
-          }).catch(() => null);
-          if (!linked) {
-            await prisma.studentParent.create({ data: { studentId: student.id, parentId: parentRecord.id } });
-          }
-        }
+      } else {
+        result.loginsSent = false;
+        result.warning = 'Login IDs will be sent by SMS once the admission fee is paid.';
       }
-
       results.push(result);
     } catch (error: any) {
-      seenEmails.delete(email);
-      fail(error.code === 'P2002' ? 'A user with this email already exists.' : 'Failed to create student.');
+      fail(error?.code === 'P2002' ? 'The student or parent email already exists.' : 'Failed to create this admission.');
     }
   }
 
-  const createdCount = results.filter((r) => r.status === 'created').length;
+  const createdCount = results.filter((result) => result.status === 'created').length;
   return res.json({ createdCount, errorCount: results.length - createdCount, results });
 });
 

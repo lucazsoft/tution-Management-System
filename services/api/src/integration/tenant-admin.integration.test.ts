@@ -1876,18 +1876,105 @@ async function main(): Promise<void> {
       baseMonthlySalary: 28000,
     });
     assert.equal(response.status, 404);
-    response = await request('POST', '/api/users/bulk-students', adminACookie, {
-      students: [{
-        firstName: 'Bulk',
-        lastName: 'Student',
-        email: 'bulk-student@integration.tms.local',
-        phone: '9800000024',
-        branchName: branchA.name,
-        grade: 'Class 10 Integration',
-      }],
+    // Bulk admission import: a backdated student whose fee was collected
+    // off-system, a new student who still owes the branch fee, and a row with
+    // a Bikram Sambat date that does not exist.
+    const bulkRow = {
+      phone: '9800000024',
+      gradeName: 'Class 10 Integration',
+      branchName: branchA.name,
+      dateOfBirthBs: '2065-05-10',
+      gender: 'Male',
+      nationality: 'Nepali',
+      permanentAddress: 'Damak-5, Jhapa, Koshi',
+      fatherName: 'Bulk Father',
+      fatherPhone: '9800000025',
+      fatherEmail: 'bulk-father@integration.tms.local',
+      motherName: 'Bulk Mother',
+      motherPhone: '9800000026',
+      primaryParent: 'Father',
+      emergencyContactName: 'Bulk Emergency',
+      emergencyContactPhone: '9800000027',
+      emergencyContactRelationship: 'Uncle',
+    };
+    response = await request('POST', '/api/users/admissions/bulk', adminACookie, {
+      students: [
+        {
+          ...bulkRow,
+          firstName: 'Legacy', lastName: 'Student',
+          email: 'legacy-student@integration.tms.local',
+          admissionDateBs: '2080-03-15',
+          feeAlreadyPaid: 'yes',
+        },
+        {
+          ...bulkRow,
+          firstName: 'Fresh', lastName: 'Student',
+          email: 'fresh-student@integration.tms.local',
+          fatherEmail: 'fresh-father@integration.tms.local',
+          admissionDateBs: '2083-01-10',
+          feeAlreadyPaid: 'no',
+        },
+        {
+          ...bulkRow,
+          firstName: 'Broken', lastName: 'Student',
+          email: 'broken-student@integration.tms.local',
+          fatherEmail: 'broken-father@integration.tms.local',
+          admissionDateBs: '2080-09-30',
+          feeAlreadyPaid: 'yes',
+        },
+      ],
     });
     assert.equal(response.status, 200);
-    assert.equal(response.body.createdCount, 1);
+    assert.equal(response.body.createdCount, 2, 'the two valid rows are admitted');
+    assert.equal(response.body.errorCount, 1, 'an impossible BS date fails only its own row');
+    const [legacyResult, freshResult, brokenResult] = response.body.results;
+
+    assert.equal(legacyResult.status, 'created');
+    assert.equal(legacyResult.admissionDateBs, '2080-03-15', 'the BS admission date is preserved');
+    assert.equal(legacyResult.feeSettled, true, 'an off-system fee is not charged again');
+    assert.equal(legacyResult.admissionStatus, 'ACTIVE', 'logins are released immediately');
+    assert.equal(legacyResult.loginsSent, true);
+    assert.ok(legacyResult.tenureYear > 1, 'a 2080 admission is past its first tenure year');
+    assert.ok(/^ADM-\d{8}-[0-9A-F]{8}$/.test(legacyResult.admissionNumber), 'imports get real admission numbers');
+
+    assert.equal(freshResult.status, 'created');
+    assert.equal(freshResult.feeSettled, false);
+    assert.equal(freshResult.admissionStatus, 'PENDING_PAYMENT', 'an unpaid import waits for the fee');
+    assert.equal(freshResult.loginsSent, false);
+    assert.equal(freshResult.tenureYear, 1);
+
+    assert.equal(brokenResult.status, 'error');
+    assert.match(brokenResult.error, /Bikram Sambat/, 'the row names the calendar problem');
+    assert.equal(
+      await prisma.user.count({ where: { email: 'broken-student@integration.tms.local' } }),
+      0,
+      'a rejected row creates no accounts',
+    );
+
+    const legacyStudent = await prisma.student.findFirstOrThrow({
+      where: { user: { tenantId: tenantA.id, email: 'legacy-student@integration.tms.local' } },
+      include: { invoices: true, studentParents: true },
+    });
+    assert.equal(legacyStudent.admissionNumber, legacyResult.admissionNumber);
+    assert.equal(legacyStudent.studentParents.length, 1, 'the primary parent is created and linked');
+    assert.equal((legacyStudent.admissionRecord as Record<string, unknown>).admissionDateBs, '2080-03-15');
+    assert.equal((legacyStudent.admissionRecord as Record<string, unknown>).importSource, 'CSV bulk admission import');
+    assert.equal((legacyStudent.admissionRecord as Record<string, unknown>).primaryParent, 'Father');
+    const legacyInvoice = legacyStudent.invoices.find((invoice) => invoice.invoiceType === 'ADMISSION');
+    assert.ok(legacyInvoice, 'an imported admission still writes an ADMISSION invoice');
+    assert.equal(legacyInvoice!.status, 'PAID');
+    assert.equal(
+      legacyInvoice!.paymentDate?.getTime(),
+      legacyStudent.admissionDate.getTime(),
+      'the fee is recorded as settled on the admission date, not today',
+    );
+
+    response = await request('POST', '/api/users/admissions/bulk', branchAdminCookie, {
+      students: [{ ...bulkRow, firstName: 'Foreign', lastName: 'Import', email: 'foreign-import@integration.tms.local', branchName: branchB.name, admissionDateBs: '2080-03-15', feeAlreadyPaid: 'yes' }],
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.body.createdCount, 0, 'a branch admin cannot import into another branch');
+    assert.match(response.body.results[0].error, /outside your access/);
     response = await request('PUT', `/api/users/${createdUserId}`, adminACookie, {
       firstName: 'Updated Reception',
       status: 'SUSPENDED',

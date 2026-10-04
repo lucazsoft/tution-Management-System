@@ -492,12 +492,20 @@ export const api = {
         body: JSON.stringify(payload),
       });
     },
-    bulkCreateStudents: async (students: Array<Record<string, string>>) => {
+    // Each row is a complete admission, so the response carries admission
+    // numbers and fee/SMS state rather than temporary passwords — those are
+    // delivered by SMS, as they are for a walk-in admission.
+    bulkAdmitStudents: async (students: Array<Record<string, string>>) => {
       return request<{
         createdCount: number;
         errorCount: number;
-        results: Array<{ row: number; name: string; email: string; status: 'created' | 'error'; temporaryPassword?: string; parentEmail?: string; parentTemporaryPassword?: string; error?: string }>;
-      }>('/users/bulk-students', {
+        results: Array<{
+          row: number; name: string; email: string; status: 'created' | 'error';
+          admissionNumber?: string; admissionDateBs?: string; admissionStatus?: string;
+          invoiceId?: string; admissionFee?: number; feeSettled?: boolean;
+          tenureYear?: number; loginsSent?: boolean; warning?: string; error?: string;
+        }>;
+      }>('/users/admissions/bulk', {
         method: 'POST',
         body: JSON.stringify({ students }),
       });

@@ -1,4 +1,4 @@
-import { MONTH_EN, NepaliDate } from 'nepali-date-library';
+import { MONTH_EN, NEPALI_DATE_MAP, NepaliDate } from 'nepali-date-library';
 
 export interface BsDateParts { year: number; month: number; day: number; monthName: string }
 export type CalendarSystem = 'AD' | 'BS';
@@ -95,4 +95,26 @@ export function toDualDateLabel(adInput: string | Date | null | undefined, optio
     const date = calendarDate(adInput);
     return `${date.toLocaleDateString('en-GB', { ...options, timeZone: 'UTC' })} AD · ${toBsLabel(adInput)}`;
   } catch { return '—'; }
+}
+
+/**
+ * Parse a `YYYY-MM-DD` Bikram Sambat date typed into a spreadsheet. BS months
+ * run 29-32 days and the length varies by year, so the day is only valid
+ * against that year's own month. Mirrors `parseBsDate` on the API, letting the
+ * bulk import preview reject a bad row before anything is uploaded.
+ */
+export function parseBsDateString(value: string): { adKey: string; label: string } | null {
+  const match = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(value.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1) return null;
+  const yearRow = NEPALI_DATE_MAP.find((row) => row.year === year);
+  if (!yearRow || day > yearRow.days[month - 1]) return null;
+  try {
+    const ad = new NepaliDate(year, month - 1, day).getEnglishDate();
+    const adKey = `${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`;
+    return { adKey, label: `${MONTH_EN[month - 1]} ${day}, ${year} BS` };
+  } catch { return null; }
 }
