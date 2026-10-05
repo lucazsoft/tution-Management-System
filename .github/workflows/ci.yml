@@ -107,3 +107,14 @@ jobs:
 
       - name: Run tests
         run: flutter test
+
+  # Production deploy, gated on validate only. The mobile job ships a separately
+  # released Flutter app, so a failure there must not block a web/API deploy —
+  # which is why this is a `needs:` dependency rather than a workflow_run gate
+  # on the whole run's conclusion.
+  deploy:
+    name: Deploy to Coolify
+    needs: [validate]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit

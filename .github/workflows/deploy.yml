@@ -1,15 +1,15 @@
 name: Deploy to Coolify
 
-# Runs only after TMS CI finishes on main. Previously this triggered on the
-# same push event as CI, so the two raced and a commit whose build or tests
-# failed still reached production.
+# Called by TMS CI once the validate job passes on main, so a commit whose
+# build or tests failed cannot reach production. Previously this triggered on
+# the same push event as CI, and the two raced.
+#
+# Deliberately gated on validate alone rather than the whole CI run: the mobile
+# job builds a separately released Flutter app, and a red analyze there must
+# not hold back a web/API deploy.
 on:
-  workflow_run:
-    workflows: ["TMS CI"]
-    types: [completed]
-    branches: [main]
-  # Kept so a deploy can still be forced from the Actions tab when CI is
-  # unavailable or a rollback has to go out immediately.
+  workflow_call:
+  # Kept so a deploy or rollback can still be forced from the Actions tab.
   workflow_dispatch:
 
 permissions: {}
@@ -21,17 +21,13 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # workflow_dispatch has no originating run, so treat it as authorised.
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Report what triggered this deploy
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "Manual deploy requested by ${{ github.actor }}."
           else
-            echo "CI run ${{ github.event.workflow_run.id }} succeeded on ${{ github.event.workflow_run.head_sha }}."
+            echo "Validate passed on ${{ github.sha }}; deploying."
           fi
       - name: Trigger Coolify production deploy
         run: |
