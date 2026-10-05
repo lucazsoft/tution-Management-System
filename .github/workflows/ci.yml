@@ -9,6 +9,12 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # Supersede stale pull-request runs, but let every branch push finish: the
+  # deploy workflow gates on this run's conclusion.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   validate:
     name: Build, lint, schema, and authorization checks
@@ -54,44 +60,20 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tms?schema=public
         run: npx prisma validate --schema services/api/prisma/schema.prisma
 
-      - name: Authorization scope tests
-        run: npx ts-node services/api/src/utils/access-control.test.ts
+      - name: API test suites
+        # Runs every `test:*` script in services/api via scripts/run-tests.js,
+        # so a new suite needs no workflow change. Suites needing Postgres are
+        # skipped until CI has a database service.
+        run: npm test --workspace=@tms/api
 
-      - name: Phase 1 security regression tests
-        run: npm run test:phase-one-security --workspace=@tms/api
-
-      - name: Phase 2 billing and attendance regression tests
-        run: npm run test:phase-two-billing --workspace=@tms/api
-
-      - name: Phase 3 workflow regression tests
-        run: npm run test:phase-three-workflows --workspace=@tms/api
-
-      - name: Account profile ownership regression tests
-        run: npm run test:account-profile --workspace=@tms/api
-
-      - name: Two-step setup security regression
-        run: npm run test:two-step-setup --workspace=@tms/api
-
-      - name: Account contact security regression tests
-        run: npm run test:account-contact --workspace=@tms/api
-
-      - name: User management authorization regression tests
-        run: npm run test:user-management-access --workspace=@tms/api
-
-      - name: Mobile recovery regression tests
-        run: npm run test:mobile-recovery --workspace=@tms/api
-
-      - name: Authentication SMS regression tests
-        run: npm run test:auth-sms --workspace=@tms/api
-
-      - name: Branch payment regression tests
-        run: npm run test:phase-four-branch-payment --workspace=@tms/api
-
-      - name: Private media regression tests
-        run: npm run test:private-media --workspace=@tms/api
-
-      - name: Certificate rendering tests
-        run: npm run test:certificates --workspace=@tms/api
+      - name: Upload web build artifact
+        uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          name: web-dist-${{ github.sha }}
+          path: apps/web/dist/
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Secret and fixed-identifier scan
         shell: bash
@@ -125,11 +107,3 @@ jobs:
 
       - name: Run tests
         run: flutter test
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        if: github.ref == 'refs/heads/main'
-        with:
-          name: dist-${{ github.sha }}
-          path: apps/web/dist/
-          retention-days: 7
