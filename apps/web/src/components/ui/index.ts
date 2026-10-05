@@ -3,6 +3,7 @@ export * from './Button';
 export * from './Card';
 export * from './CountdownTimer';
 export * from './KPICard';
+export * from './LucideIcon';
 export * from './OTPInput';
 export * from './PasswordStrengthBar';
 export * from './ProgressRing';

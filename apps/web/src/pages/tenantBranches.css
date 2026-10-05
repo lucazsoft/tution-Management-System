@@ -1,0 +1,158 @@
+/* Tenant -> Branches. Every colour resolves through a theme token so the cards
+   hold up in dark mode; the old card mixed hardcoded amber rgba with the blue
+   brand and lost its surfaces on the dark page. */
+
+.branches-page { display: flex; flex-direction: column; gap: 24px; }
+
+.branches-header { padding: 20px 24px !important; }
+.branches-header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.branches-header h2 { margin: 0; font-family: var(--font-display); font-size: 21px; font-weight: 600; color: var(--color-text); }
+.branches-header p { margin: 6px 0 0; font-size: 13px; color: var(--text-muted-foreground); max-width: 56ch; }
+.branches-header-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.branches-header-actions button { height: 40px; }
+
+.branches-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; align-items: start; }
+
+/* ---- Branch card ------------------------------------------------------- */
+
+.branch-card { padding: 0 !important; overflow: hidden; display: flex; flex-direction: column; }
+
+.branch-card-head { display: flex; align-items: flex-start; gap: 14px; padding: 20px 20px 16px; }
+.branch-card-mark {
+  display: grid; place-items: center; flex: 0 0 auto; width: 42px; height: 42px;
+  border-radius: 12px; background: var(--color-primary-soft); color: var(--color-primary-strong);
+}
+.branch-card-ident { min-width: 0; flex: 1; }
+.branch-card-ident h3 {
+  margin: 0; font-family: var(--font-display); font-size: 18px; font-weight: 600;
+  color: var(--color-text); overflow-wrap: anywhere;
+}
+.branch-card-address {
+  display: flex; align-items: center; gap: 6px; margin: 5px 0 0;
+  font-size: 13px; color: var(--text-muted-foreground); overflow-wrap: anywhere;
+}
+.branch-card-address svg { flex: 0 0 auto; }
+.branch-card-head > .status-badge { flex: 0 0 auto; margin-top: 2px; }
+
+/* ---- Geofence strip ---------------------------------------------------- */
+
+.branch-geofence {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: 0 20px; padding: 12px 14px; border-radius: 12px;
+  background: var(--color-primary-soft); border: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
+}
+.branch-geofence-main { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.branch-geofence-icon {
+  display: grid; place-items: center; flex: 0 0 auto; width: 34px; height: 34px;
+  border-radius: 50%; background: var(--panel-bg); color: var(--color-primary);
+}
+.branch-geofence-label { display: block; font-size: 12px; font-weight: 700; color: var(--color-text); }
+.branch-geofence-value {
+  display: block; margin-top: 2px; font-size: 11.5px; color: var(--text-muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+.branch-geofence-radius {
+  flex: 0 0 auto; padding: 5px 10px; border-radius: var(--radius-full);
+  background: var(--panel-bg); border: 1px solid color-mix(in srgb, var(--color-primary) 22%, transparent);
+  color: var(--color-primary-strong); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+
+/* Lat/long still at 0,0 means attendance can never match, so the strip says so
+   instead of printing coordinates that look configured. */
+.branch-geofence.is-unset { background: var(--color-warning-soft); border-color: color-mix(in srgb, var(--color-warning-strong) 22%, transparent); }
+.branch-geofence.is-unset .branch-geofence-icon { color: var(--color-warning-strong); }
+.branch-geofence.is-unset .branch-geofence-radius { color: var(--color-warning-strong); border-color: color-mix(in srgb, var(--color-warning-strong) 26%, transparent); }
+
+/* ---- Metrics ----------------------------------------------------------- */
+
+.branch-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 16px 20px 0; }
+.branch-metric {
+  display: flex; flex-direction: column; gap: 4px; padding: 11px 12px;
+  border-radius: 10px; background: var(--bg-subtle); border: 1px solid var(--color-border);
+}
+.branch-metric-label {
+  display: flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted-foreground);
+}
+.branch-metric-label svg { flex: 0 0 auto; }
+.branch-metric-value { font-size: 15px; font-weight: 700; color: var(--color-text); font-variant-numeric: tabular-nums; }
+.branch-metric-unit { font-size: 11px; font-weight: 600; color: var(--text-muted-foreground); margin-left: 3px; }
+
+.branch-fee {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: 12px 20px 0; padding: 12px 14px; border-radius: 10px;
+  background: var(--bg-subtle); border: 1px solid var(--color-border);
+}
+.branch-fee-label { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--text-muted-foreground); }
+.branch-fee-amount { font-family: var(--font-display); font-size: 18px; font-weight: 600; color: var(--color-text); font-variant-numeric: tabular-nums; }
+
+/* ---- Footer actions ---------------------------------------------------- */
+
+.branch-card-actions {
+  display: flex; align-items: center; gap: 10px; margin-top: auto;
+  padding: 16px 20px; border-top: 1px solid var(--color-border);
+}
+.branch-card-actions > button { flex: 1; }
+.branch-payment-link {
+  display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
+  min-height: 40px; padding: 0 12px; border-radius: var(--radius-sm);
+  color: var(--color-primary); font-size: 13px; font-weight: 600; text-decoration: none;
+  transition: background var(--duration-fast) var(--ease-default), color var(--duration-fast) var(--ease-default);
+}
+.branch-payment-link:hover { background: var(--color-primary-soft); color: var(--color-primary-strong); }
+.branch-payment-link svg:last-child { opacity: .7; }
+
+/* ---- Empty and loading ------------------------------------------------- */
+
+.branches-empty { display: grid; justify-items: center; gap: 10px; padding: 44px 24px !important; text-align: center; }
+.branches-empty-mark { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 14px; background: var(--color-primary-soft); color: var(--color-primary); }
+.branches-empty h3 { margin: 0; font-family: var(--font-display); font-size: 17px; font-weight: 600; color: var(--color-text); }
+.branches-empty p { margin: 0; font-size: 13px; color: var(--text-muted-foreground); max-width: 40ch; }
+
+.branch-card-skeleton { display: grid; gap: 12px; }
+.branch-card-skeleton span { display: block; border-radius: 10px; background: var(--bg-muted); animation: branch-skeleton-pulse 1.4s var(--ease-silk) infinite; }
+.branch-card-skeleton span:nth-child(1) { height: 42px; width: 62%; }
+.branch-card-skeleton span:nth-child(2) { height: 58px; }
+.branch-card-skeleton span:nth-child(3) { height: 64px; }
+.branch-card-skeleton span:nth-child(4) { height: 40px; }
+
+@keyframes branch-skeleton-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+
+/* ---- Branch form ------------------------------------------------------- */
+
+.branch-form-card h3 { margin: 0 0 18px; font-family: var(--font-display); font-size: 18px; font-weight: 600; color: var(--color-text); }
+.branch-form { display: flex; flex-direction: column; gap: 18px; }
+.branch-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.branch-form-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.branch-form-field label { font-size: 13px; font-weight: 700; color: var(--color-text); }
+.branch-form-field input {
+  width: 100%; min-height: 44px; padding: 11px 14px; box-sizing: border-box;
+  border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  background: var(--panel-bg); color: var(--color-text); font: inherit;
+  transition: border-color var(--duration-fast) var(--ease-default), box-shadow var(--duration-fast) var(--ease-default);
+}
+.branch-form-field input:focus-visible {
+  outline: none; border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+.branch-form-field small { font-size: 11.5px; color: var(--text-muted-foreground); }
+.branch-form-note {
+  display: flex; align-items: flex-start; gap: 9px; margin: 0; padding: 12px 14px;
+  border-radius: var(--radius-md); background: var(--color-info-soft);
+  font-size: 12.5px; color: var(--color-info-strong);
+}
+.branch-form-note svg { flex: 0 0 auto; margin-top: 1px; }
+.branch-form-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+
+@media (max-width: 640px) {
+  .branches-grid { grid-template-columns: 1fr; }
+  .branch-metrics { grid-template-columns: 1fr 1fr; }
+  .branch-metrics .branch-metric:last-child { grid-column: 1 / -1; }
+  .branches-header-actions { width: 100%; }
+  .branches-header-actions button { flex: 1; }
+  .branch-card-actions { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .branch-card-skeleton span { animation: none; }
+}
