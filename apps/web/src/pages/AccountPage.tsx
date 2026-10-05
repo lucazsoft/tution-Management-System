@@ -61,7 +61,7 @@ export function AccountPage({ passwordPath }: { passwordPath?: string }) {
         </dl>
         {!editing && <div className="account-security-actions">{account.capabilities.manageSecurityMobile && <MobileChangeForm allowVerify={account.mobileVerified === false && Boolean(account.phone)} />}{passwordPath ? <Link to={passwordPath}>Change password</Link> : <details><summary>Change password</summary><ChangePasswordForm /></details>}</div>}
       </AccountSection>
-      {!editing && account.capabilities.manageInstitution && <aside className="account-institution"><h2>Managing the institution?</h2><p>Institution policies and branch payment accounts have their own settings.</p><div className="account-actions"><Link to="/tenant/settings">Institution settings</Link><Link to="/tenant/payment-settings">Branch payment settings</Link></div></aside>}
+      {!editing && account.capabilities.manageInstitution && <aside className="account-institution"><h2>Managing the institution?</h2><p>Institution policies and branch payment accounts have their own settings.</p><div className="account-actions"><Link to="/tenant/control-center">Control Center</Link><Link to="/tenant/payment-settings">Branch payment settings</Link></div></aside>}
     </>}
   </AccountLayout>;
 }

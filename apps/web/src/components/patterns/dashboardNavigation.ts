@@ -47,7 +47,6 @@ export const DASHBOARD_NAVIGATION: Record<DashboardRole, DashboardNavItem[]> = {
     { section: 'Operations', label: 'Resource Logs', icon: 'inventory_2', path: '/tenant/resource-logs' },
     { section: 'Operations', label: 'Certificates', icon: 'workspace_premium', path: '/tenant/certificates' },
     { section: 'Operations', label: 'Academic Calendar', icon: 'date_range', path: '/tenant/academic-calendar' },
-    { section: 'Settings', label: 'Institution settings', icon: 'settings', path: '/tenant/settings' },
   ],
   'branch-admin': [
     { section: 'Main', label: 'Dashboard', icon: 'dashboard', path: '/branch/dashboard' },
