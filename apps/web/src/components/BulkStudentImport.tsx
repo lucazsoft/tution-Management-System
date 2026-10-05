@@ -4,6 +4,7 @@ import { StatusBadge } from './ui/StatusBadge';
 import { useToast } from './ui/Toast';
 import { api } from '../services/api';
 import { parseBsDateString } from '../utils/nepaliDate';
+import './admissionImport.css';
 
 interface BulkStudentImportProps {
   branches: Array<{ id: string; name: string }>;
@@ -63,6 +64,9 @@ const COLUMNS: Column[] = [
 
 const ROW_LIMIT = 200;
 const BS_DATE_KEYS = ['admissionDateBs', 'dateOfBirthBs'] as const;
+const FEE_PAID_VALUES = ['yes', 'y', 'true', '1', 'paid'];
+const FEE_DUE_VALUES = ['no', 'n', 'false', '0', 'unpaid', 'due'];
+const PRIMARY_PARENTS = ['Father', 'Mother', 'Optional parent'];
 
 type RowRecord = Record<string, string>;
 
@@ -83,6 +87,14 @@ interface ImportResult {
 }
 
 const csvCell = (value: string) => `"${value.replace(/"/g, '""')}"`;
+const isFeePaid = (value: string) => FEE_PAID_VALUES.includes(value.trim().toLowerCase());
+
+/** The email column that must be filled for the chosen primary parent. */
+function primaryParentEmailKey(primaryParent: string): string {
+  if (primaryParent === 'Mother') return 'motherEmail';
+  if (primaryParent === 'Optional parent') return 'optionalParentEmail';
+  return 'fatherEmail';
+}
 
 /**
  * Split one CSV line, honouring quoted fields. Addresses routinely contain
@@ -242,28 +254,28 @@ export function BulkStudentImport({ branches, grades = [], onClose, onImported }
       }
     });
 
-    const feePaid = (row.feeAlreadyPaid ?? '').toLowerCase();
-    if (feePaid && !['yes', 'y', 'true', '1', 'paid', 'no', 'n', 'false', '0', 'unpaid', 'due'].includes(feePaid)) {
+    const feePaid = (row.feeAlreadyPaid ?? '').trim().toLowerCase();
+    if (feePaid && !FEE_PAID_VALUES.includes(feePaid) && !FEE_DUE_VALUES.includes(feePaid)) {
       problems.push('Fee Already Paid must be yes or no');
     }
 
-    const primary = row.primaryParent ?? '';
-    if (primary && !['Father', 'Mother', 'Optional parent'].includes(primary)) {
+    const primary = (row.primaryParent ?? '').trim();
+    if (primary && !PRIMARY_PARENTS.includes(primary)) {
       problems.push('Primary Parent must be Father, Mother, or Optional parent');
     } else if (primary) {
-      const emailKey = primary === 'Father' ? 'fatherEmail' : primary === 'Mother' ? 'motherEmail' : 'optionalParentEmail';
-      if (!row[emailKey]) problems.push(`${primary} is the primary parent, so their email is required`);
-    }
-
-    if (row.email && row.email.trim().toLowerCase() === (row[primary === 'Mother' ? 'motherEmail' : primary === 'Optional parent' ? 'optionalParentEmail' : 'fatherEmail'] ?? '').trim().toLowerCase()) {
-      problems.push('The student and the primary parent need different email addresses');
+      const guardianEmail = (row[primaryParentEmailKey(primary)] ?? '').trim();
+      if (!guardianEmail) {
+        problems.push(`${primary} is the primary parent, so their email is required`);
+      } else if (guardianEmail.toLowerCase() === (row.email ?? '').trim().toLowerCase()) {
+        problems.push('The student and the primary parent need different email addresses');
+      }
     }
 
     return problems;
   }), [rows, branches.length]);
 
   const blockedRows = preflight.filter((problems) => problems.length).length;
-  const settledRows = rows.filter((row) => ['yes', 'y', 'true', '1', 'paid'].includes((row.feeAlreadyPaid ?? '').toLowerCase())).length;
+  const settledRows = rows.filter((row) => isFeePaid(row.feeAlreadyPaid ?? '')).length;
 
   const submit = async () => {
     if (!rows.length || blockedRows) return;
@@ -320,11 +332,11 @@ export function BulkStudentImport({ branches, grades = [], onClose, onImported }
   return (
     <>
       <div className="people-drawer-overlay" onClick={onClose} />
-      <aside className="people-drawer" role="dialog" aria-modal="true" style={{ width: 'min(680px, 100vw)' }}>
+      <aside className="people-drawer" role="dialog" aria-modal="true" aria-labelledby="admission-import-title" style={{ width: 'min(700px, 100vw)' }}>
         <div className="people-drawer-head">
           <div>
-            <h2>Bulk Admission Import</h2>
-            <p>Each row is a full admission: admission number, admission record, invoice, and login SMS — the same as the admission form.</p>
+            <h2 id="admission-import-title">Bulk Admission Import</h2>
+            <p>Each row is a full admission — admission number, record, invoice, and login SMS, the same as the admission form.</p>
           </div>
           <button type="button" className="people-drawer-close" onClick={onClose} aria-label="Close">
             <span className="material-symbols-outlined">close</span>
@@ -332,161 +344,196 @@ export function BulkStudentImport({ branches, grades = [], onClose, onImported }
         </div>
 
         <div className="people-drawer-body">
-          {!results ? (
-            <>
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                <Button variant="outline" onClick={downloadTemplate} style={{ flex: 1, minWidth: '200px' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>download</span>
-                  Download CSV Template
-                </Button>
-                <Button onClick={() => fileRef.current?.click()} disabled={isParsing} style={{ flex: 1, minWidth: '160px' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>upload_file</span>
-                  {isParsing ? 'Reading…' : 'Choose File'}
-                </Button>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values"
-                  style={{ display: 'none' }}
-                  onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleFile(file); event.target.value = ''; }}
-                />
-              </div>
+          <div className="admission-import">
+            {!results ? (
+              <>
+                <div className="admission-import-actions">
+                  <Button variant="outline" onClick={downloadTemplate}>
+                    <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: '18px' }}>download</span>
+                    Download CSV Template
+                  </Button>
+                  <Button onClick={() => fileRef.current?.click()} disabled={isParsing}>
+                    <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: '18px' }}>upload_file</span>
+                    {isParsing ? 'Reading…' : 'Choose File'}
+                  </Button>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values"
+                    style={{ display: 'none' }}
+                    onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleFile(file); event.target.value = ''; }}
+                  />
+                </div>
 
-              <div style={{ fontSize: '12.5px', color: 'var(--text-muted)', lineHeight: 1.7 }}>
-                <p style={{ margin: '0 0 8px' }}>
-                  <strong>Dates are Bikram Sambat</strong>, written as <code>YYYY-MM-DD</code> — <code>2080-03-15</code> is Asar 15, 2080.
-                  Both the admission date and the date of birth use BS, and the preview shows the AD date each one converts to.
-                </p>
-                <p style={{ margin: '0 0 8px' }}>
-                  <strong>Fee Already Paid = yes</strong> is for students admitted before the system went live. Their admission fee is
-                  recorded as settled on the admission date, they become active straight away, and their login IDs are sent by SMS.
-                  Leave it <strong>no</strong> for a new admission: the branch fee is invoiced and logins follow the payment.
-                </p>
-                <p style={{ margin: 0 }}>
-                  {subjectGrades.length
-                    ? <>Fill <strong>Subjects</strong> only for subject-billed grades ({subjectGrades.join(', ')}), separated by semicolons. Every other grade is admitted at grade level.</>
-                    : <>Leave <strong>Subjects</strong> empty — every grade here is billed at grade level.</>}
-                  {' '}Occupations, school, blood group, medical notes, and the optional guardian can be left blank and edited in the student&apos;s profile later.
-                </p>
-              </div>
-
-              {rows.length > 0 ? (
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 700 }}>{fileName} — {rows.length} student{rows.length === 1 ? '' : 's'}</span>
-                    <span style={{ display: 'flex', gap: 6 }}>
-                      {blockedRows
-                        ? <StatusBadge variant="error">{blockedRows} need{blockedRows === 1 ? 's' : ''} fixing</StatusBadge>
-                        : <StatusBadge variant="success">Ready</StatusBadge>}
-                      {settledRows ? <StatusBadge variant="info">{settledRows} already paid</StatusBadge> : null}
+                <div className="admission-import-guide">
+                  <p className="admission-import-guide__item">
+                    <span className="material-symbols-outlined" aria-hidden="true">event</span>
+                    <span>
+                      <strong>Dates are Bikram Sambat.</strong> Write them as <code>YYYY-MM-DD</code> — <code>2080-03-15</code> is
+                      Asar 15, 2080. The admission date and the date of birth both use BS, and the preview shows the AD date each converts to.
                     </span>
-                  </div>
-                  <div className="people-table-wrap">
-                    <div className="people-table-scroll" style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                      <table className="people-table" style={{ minWidth: '600px' }}>
-                        <thead>
-                          <tr><th>#</th><th>Student</th><th>Grade</th><th>Admitted (BS)</th><th>Fee</th><th>Check</th></tr>
-                        </thead>
-                        <tbody>
-                          {rows.map((row, index) => {
-                            const problems = preflight[index];
-                            const admitted = parseBsDateString(row.admissionDateBs ?? '');
-                            return (
-                              <tr key={index}>
-                                <td style={{ color: 'var(--text-muted)' }}>{index + 1}</td>
-                                <td>
-                                  <div style={{ fontWeight: 600 }}>{`${row.firstName ?? ''} ${row.lastName ?? ''}`.trim() || '—'}</div>
-                                  <div className="people-person-email">{row.email || '—'}</div>
-                                </td>
-                                <td style={{ fontSize: '12.5px' }}>
-                                  {row.gradeName || '—'}
-                                  {row.subjects ? <div style={{ color: 'var(--text-muted)', fontSize: '11.5px' }}>{row.subjects.split(';').filter(Boolean).join(', ')}</div> : null}
-                                </td>
-                                <td style={{ fontSize: '12.5px' }}>
-                                  {row.admissionDateBs || '—'}
-                                  {admitted ? <div style={{ color: 'var(--text-muted)', fontSize: '11.5px' }}>{admitted.adKey} AD</div> : null}
-                                </td>
-                                <td style={{ fontSize: '12.5px' }}>
-                                  {['yes', 'y', 'true', '1', 'paid'].includes((row.feeAlreadyPaid ?? '').toLowerCase()) ? 'Already paid' : 'Due now'}
-                                </td>
-                                <td style={{ fontSize: '11.5px' }}>
-                                  {problems.length
-                                    ? <span style={{ color: 'var(--color-error)' }}>{problems.join('. ')}</span>
-                                    : <span style={{ color: 'var(--text-muted)' }}>OK</span>}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                  </p>
+                  <p className="admission-import-guide__item admission-import-guide__item--paid">
+                    <span className="material-symbols-outlined" aria-hidden="true">price_check</span>
+                    <span>
+                      <strong>Fee Already Paid = yes</strong> is for students admitted before this system. Their admission fee is recorded
+                      as settled on the admission date, they become active straight away, and their login IDs go out by SMS. Leave it
+                      <strong> no</strong> for a new admission: the branch fee is invoiced and logins follow the payment.
+                    </span>
+                  </p>
+                  <p className="admission-import-guide__item admission-import-guide__item--optional">
+                    <span className="material-symbols-outlined" aria-hidden="true">tune</span>
+                    <span>
+                      {subjectGrades.length
+                        ? <>Fill <strong>Subjects</strong> only for subject-billed grades ({subjectGrades.join(', ')}), separated by semicolons. Every other grade is admitted at grade level. </>
+                        : <>Leave <strong>Subjects</strong> empty — every grade here is billed at grade level. </>}
+                      Occupations, school, blood group, medical notes, and the optional guardian can stay blank and be edited in the
+                      student&apos;s profile later.
+                    </span>
+                  </p>
+                </div>
+
+                {rows.length > 0 ? (
+                  <div>
+                    <div className="admission-import-filebar">
+                      <span className="admission-import-filename">
+                        <span className="material-symbols-outlined" aria-hidden="true">description</span>
+                        <span>{fileName}</span>
+                      </span>
+                      <span className="admission-import-badges">
+                        <StatusBadge variant="info">{rows.length} student{rows.length === 1 ? '' : 's'}</StatusBadge>
+                        {settledRows ? <StatusBadge variant="success">{settledRows} already paid</StatusBadge> : null}
+                        {blockedRows
+                          ? <StatusBadge variant="error">{blockedRows} need{blockedRows === 1 ? 's' : ''} fixing</StatusBadge>
+                          : <StatusBadge variant="success">Ready to import</StatusBadge>}
+                      </span>
                     </div>
+
+                    <div className="people-table-wrap">
+                      <div className="people-table-scroll" style={{ maxHeight: '320px', overflowY: 'auto' }}>
+                        <table className="admission-import-table">
+                          <thead>
+                            <tr><th>#</th><th>Student</th><th>Grade</th><th>Admitted (BS)</th><th>Fee</th><th>Check</th></tr>
+                          </thead>
+                          <tbody>
+                            {rows.map((row, index) => {
+                              const problems = preflight[index];
+                              const admitted = parseBsDateString(row.admissionDateBs ?? '');
+                              const feeSettled = isFeePaid(row.feeAlreadyPaid ?? '');
+                              return (
+                                <tr key={index} className={problems.length ? 'is-blocked' : undefined}>
+                                  <td className="admission-import-rownum">{index + 1}</td>
+                                  <td>
+                                    <div className="admission-import-name">
+                                      {`${row.firstName ?? ''} ${row.lastName ?? ''}`.trim()
+                                        || <span className="admission-import-missing">Name missing</span>}
+                                    </div>
+                                    <div className="admission-import-sub">{row.email || '—'}</div>
+                                  </td>
+                                  <td>
+                                    {row.gradeName || <span className="admission-import-missing">—</span>}
+                                    {row.subjects
+                                      ? <div className="admission-import-sub">{row.subjects.split(';').filter(Boolean).join(', ')}</div>
+                                      : null}
+                                  </td>
+                                  <td>
+                                    {row.admissionDateBs || <span className="admission-import-missing">—</span>}
+                                    {admitted ? <div className="admission-import-ad">{admitted.adKey} AD</div> : null}
+                                  </td>
+                                  <td>
+                                    <span className={`admission-import-fee admission-import-fee--${feeSettled ? 'settled' : 'due'}`}>
+                                      {feeSettled ? 'Already paid' : 'Due now'}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    {problems.length
+                                      ? <span className="admission-import-problem">{problems.join('. ')}</span>
+                                      : <span className="admission-import-ok">
+                                          <span className="material-symbols-outlined" aria-hidden="true">check_circle</span>Ready
+                                        </span>}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {blockedRows ? (
+                      <p className="admission-import-alert" role="alert">
+                        <span className="material-symbols-outlined" aria-hidden="true">error</span>
+                        <span>
+                          Fix the {blockedRows} flagged row{blockedRows === 1 ? '' : 's'} in your spreadsheet and upload it again.
+                          Nothing is imported until every row passes.
+                        </span>
+                      </p>
+                    ) : null}
                   </div>
-                  {blockedRows ? (
-                    <p role="alert" style={{ fontSize: '12.5px', color: 'var(--color-error)', marginTop: 8 }}>
-                      Fix the {blockedRows} flagged row{blockedRows === 1 ? '' : 's'} in your spreadsheet and upload it again. Nothing is imported until every row passes.
-                    </p>
-                  ) : null}
+                ) : null}
+              </>
+            ) : (
+              <>
+                <div className="admission-import-badges">
+                  <StatusBadge variant="success">{createdCount} admitted</StatusBadge>
+                  {skippedCount ? <StatusBadge variant="error">{skippedCount} skipped</StatusBadge> : null}
                 </div>
-              ) : null}
-            </>
-          ) : (
-            <>
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                <StatusBadge variant="success">{createdCount} admitted</StatusBadge>
-                {skippedCount ? <StatusBadge variant="error">{skippedCount} skipped</StatusBadge> : null}
-              </div>
-              <div className="people-table-wrap">
-                <div className="people-table-scroll" style={{ maxHeight: '380px', overflowY: 'auto' }}>
-                  <table className="people-table" style={{ minWidth: '560px' }}>
-                    <thead>
-                      <tr><th>#</th><th>Student</th><th>Result</th></tr>
-                    </thead>
-                    <tbody>
-                      {results.map((result) => (
-                        <tr key={result.row}>
-                          <td style={{ color: 'var(--text-muted)' }}>{result.row}</td>
-                          <td>
-                            <div style={{ fontWeight: 600 }}>{result.name || result.email}</div>
-                            <div className="people-person-email">{result.email}</div>
-                          </td>
-                          <td>
-                            {result.status === 'created' ? (
-                              <div>
-                                <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                                  <StatusBadge variant={result.admissionStatus === 'ACTIVE' ? 'success' : 'warning'}>
-                                    {result.admissionStatus === 'ACTIVE' ? 'Active' : 'Payment pending'}
-                                  </StatusBadge>
-                                  {result.loginsSent ? <StatusBadge variant="info">Logins sent</StatusBadge> : null}
-                                </span>
-                                <div style={{ fontFamily: 'monospace', fontSize: '12px', marginTop: '4px', color: 'var(--color-primary-light)' }}>
-                                  {result.admissionNumber}
+
+                <div className="people-table-wrap">
+                  <div className="people-table-scroll" style={{ maxHeight: '390px', overflowY: 'auto' }}>
+                    <table className="admission-import-table" style={{ minWidth: '520px' }}>
+                      <thead>
+                        <tr><th>#</th><th>Student</th><th>Result</th></tr>
+                      </thead>
+                      <tbody>
+                        {results.map((result) => (
+                          <tr key={result.row}>
+                            <td className="admission-import-rownum">{result.row}</td>
+                            <td>
+                              <div className="admission-import-name">{result.name || result.email}</div>
+                              <div className="admission-import-sub">{result.email}</div>
+                            </td>
+                            <td>
+                              {result.status === 'created' ? (
+                                <div className="admission-import-result">
+                                  <span className="admission-import-badges">
+                                    <StatusBadge variant={result.admissionStatus === 'ACTIVE' ? 'success' : 'warning'}>
+                                      {result.admissionStatus === 'ACTIVE' ? 'Active' : 'Payment pending'}
+                                    </StatusBadge>
+                                    {result.loginsSent ? <StatusBadge variant="info">Logins sent</StatusBadge> : null}
+                                  </span>
+                                  <span className="admission-import-code">{result.admissionNumber}</span>
+                                  <span className="admission-import-sub">
+                                    Admitted {result.admissionDateBs} BS
+                                    {result.tenureYear && result.tenureYear > 1 ? ` · admission year ${result.tenureYear}` : ''}
+                                    {result.feeSettled ? ' · fee settled' : ` · NPR ${Number(result.admissionFee ?? 0).toLocaleString('en-NP')} due`}
+                                  </span>
+                                  {result.warning ? <span className="admission-import-warning">{result.warning}</span> : null}
                                 </div>
-                                <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                                  Admitted {result.admissionDateBs} BS
-                                  {result.tenureYear && result.tenureYear > 1 ? ` · admission year ${result.tenureYear}` : ''}
-                                  {result.feeSettled ? ' · fee settled' : ` · NPR ${Number(result.admissionFee ?? 0).toLocaleString('en-NP')} due`}
+                              ) : (
+                                <div className="admission-import-result">
+                                  <span className="admission-import-badges"><StatusBadge variant="error">Skipped</StatusBadge></span>
+                                  <span className="admission-import-problem">{result.error}</span>
                                 </div>
-                                {result.warning ? <div style={{ fontSize: '11px', color: 'var(--color-warning)', marginTop: '2px' }}>{result.warning}</div> : null}
-                              </div>
-                            ) : (
-                              <div>
-                                <StatusBadge variant="error">Skipped</StatusBadge>
-                                <div style={{ fontSize: '11.5px', color: 'var(--color-error)', marginTop: '2px' }}>{result.error}</div>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                Temporary passwords are never shown here — they go straight to the student and parent phone numbers by SMS, exactly as
-                they do for a walk-in admission. Students still owing the admission fee receive theirs once the invoice is paid.
-              </p>
-            </>
-          )}
+
+                <p className="admission-import-footnote">
+                  <span className="material-symbols-outlined" aria-hidden="true">sms</span>
+                  <span>
+                    Temporary passwords are never shown here — they go straight to the student and parent phone numbers by SMS, exactly
+                    as for a walk-in admission. Students still owing the admission fee receive theirs once the invoice is paid.
+                  </span>
+                </p>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="people-drawer-foot">
@@ -500,7 +547,7 @@ export function BulkStudentImport({ branches, grades = [], onClose, onImported }
           ) : (
             <>
               <Button onClick={downloadReport} style={{ flex: 1 }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>download</span>
+                <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: '18px' }}>download</span>
                 Download Import Report
               </Button>
               <Button variant="outline" onClick={onClose}>Done</Button>

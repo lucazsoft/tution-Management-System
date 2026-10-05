@@ -1975,6 +1975,30 @@ async function main(): Promise<void> {
     assert.equal(response.status, 200);
     assert.equal(response.body.createdCount, 0, 'a branch admin cannot import into another branch');
     assert.match(response.body.results[0].error, /outside your access/);
+
+    // Importing admissions is limited to the Tenant Admin and assigned Branch
+    // Admins; every other signed-in role is refused before any row is read.
+    const refusedRoles = [
+      ['accountant', accountantA.email],
+      ['teacher', staffUser.email],
+      ['student', studentUserA2.email],
+    ] as const;
+    for (const [role, email] of refusedRoles) {
+      const cookie = await signIn(email);
+      const refused = await request('POST', '/api/users/admissions/bulk', cookie, {
+        students: [{ ...bulkRow, firstName: 'Unauthorized', lastName: 'Import', email: `unauthorized-${role}@integration.tms.local`, admissionDateBs: '2080-03-15', feeAlreadyPaid: 'yes' }],
+      });
+      assert.equal(refused.status, 403, `a ${role} must not import admissions`);
+      assert.equal(
+        await prisma.user.count({ where: { email: `unauthorized-${role}@integration.tms.local` } }),
+        0,
+        `a refused ${role} import must not create accounts`,
+      );
+    }
+    const unauthenticatedImport = await request('POST', '/api/users/admissions/bulk', undefined, {
+      students: [{ ...bulkRow, firstName: 'Anonymous', lastName: 'Import', email: 'anonymous-import@integration.tms.local', admissionDateBs: '2080-03-15', feeAlreadyPaid: 'yes' }],
+    });
+    assert.equal(unauthenticatedImport.status, 401, 'importing admissions requires a session');
     response = await request('PUT', `/api/users/${createdUserId}`, adminACookie, {
       firstName: 'Updated Reception',
       status: 'SUSPENDED',

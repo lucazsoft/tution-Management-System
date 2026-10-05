@@ -12,8 +12,6 @@ export function Card({ hoverable = true, className, children, ...props }: CardPr
       className={cn('tms-panel', className)}
       style={{
         background: 'var(--panel-bg)',
-        backdropFilter: 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
         border: '1px solid var(--border)',
         boxShadow: 'var(--shadow-card)',
         borderRadius: '16px',

@@ -1,0 +1,301 @@
+/* ---------------------------------------------------------------------------
+   Bulk admission import drawer
+   Every colour here resolves through the themed tokens in index.css, so the
+   panel reads the same way on a white card and a dark one. Nothing is a
+   hardcoded hex or rgba.
+--------------------------------------------------------------------------- */
+
+.admission-import {
+  display: grid;
+  gap: var(--sp-5);
+}
+
+/* --- Step 1: get the template, then pick a file --- */
+
+.admission-import-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--sp-3);
+}
+
+.admission-import-actions > button {
+  width: 100%;
+}
+
+/* --- The rules that matter, as a scannable list rather than a wall --- */
+
+.admission-import-guide {
+  display: grid;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+.admission-import-guide__item {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: var(--sp-3);
+  align-items: start;
+  margin: 0;
+  font-size: 12.75px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.admission-import-guide__item > .material-symbols-outlined {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: var(--color-info-soft);
+  color: var(--color-info-strong);
+  font-size: 17px;
+}
+
+.admission-import-guide__item strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.admission-import-guide__item code {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-card);
+  color: var(--color-primary-strong);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.75px;
+  white-space: nowrap;
+}
+
+.admission-import-guide__item--paid > .material-symbols-outlined {
+  background: var(--color-success-soft);
+  color: var(--color-success-strong);
+}
+
+.admission-import-guide__item--optional > .material-symbols-outlined {
+  background: var(--bg-muted);
+  color: var(--text-muted);
+}
+
+/* --- File summary: counts at a glance before committing --- */
+
+.admission-import-filebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3);
+}
+
+.admission-import-filename {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.admission-import-filename > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admission-import-filename .material-symbols-outlined {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 18px;
+}
+
+.admission-import-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* --- Preview table --- */
+
+.admission-import-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 12.75px;
+}
+
+.admission-import-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.admission-import-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: top;
+}
+
+.admission-import-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.admission-import-table tbody tr.is-blocked {
+  background: var(--color-error-soft);
+}
+
+.admission-import-rownum {
+  width: 34px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.admission-import-name {
+  font-weight: 650;
+  color: var(--text);
+}
+
+.admission-import-sub {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 11.75px;
+  overflow-wrap: anywhere;
+}
+
+.admission-import-ad {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 11.25px;
+  font-variant-numeric: tabular-nums;
+}
+
+.admission-import-problem {
+  color: var(--color-error-strong);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.admission-import-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-success-strong);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.admission-import-ok .material-symbols-outlined {
+  font-size: 15px;
+}
+
+.admission-import-missing {
+  color: var(--color-error-strong);
+  font-weight: 650;
+}
+
+/* --- Fee column: a tint rather than bare words --- */
+
+.admission-import-fee {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: var(--radius-full);
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.admission-import-fee--settled {
+  background: var(--color-success-soft);
+  color: var(--color-success-strong);
+}
+
+.admission-import-fee--due {
+  background: var(--color-warning-soft);
+  color: var(--color-warning-strong);
+}
+
+/* --- Blocking notice --- */
+
+.admission-import-alert {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: var(--sp-3);
+  align-items: start;
+  margin: var(--sp-3) 0 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid color-mix(in srgb, var(--color-error-strong) 30%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--color-error-soft);
+  color: var(--color-error-strong);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.admission-import-alert .material-symbols-outlined {
+  font-size: 20px;
+}
+
+/* --- Results --- */
+
+.admission-import-result {
+  display: grid;
+  gap: 5px;
+}
+
+.admission-import-code {
+  color: var(--color-primary-strong);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.75px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.admission-import-warning {
+  color: var(--color-warning-strong);
+  font-size: 11.25px;
+  line-height: 1.5;
+}
+
+.admission-import-footnote {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: var(--sp-3);
+  align-items: start;
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.admission-import-footnote .material-symbols-outlined {
+  color: var(--color-info-strong);
+  font-size: 18px;
+}
+
+@media (max-width: 560px) {
+  .admission-import-table { min-width: 520px; }
+  .admission-import-guide { padding: var(--sp-3); }
+}

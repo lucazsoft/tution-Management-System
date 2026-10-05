@@ -46,8 +46,13 @@
   --warning-gradient: linear-gradient(135deg, #F3B54B 0%, var(--color-warning) 100%);
 
   --bg: var(--color-bg);
-  --panel-bg: rgba(255, 255, 255, 0.88);
+  /* Page sits a shade below the cards so a white card reads as raised. Cards
+     were previously rgba(255,255,255,.88) on a #FFFFFF page — a 1.00 contrast
+     ratio, so only the border separated them. */
+  --bg-page: var(--color-surface);
+  --panel-bg: #FFFFFF;
   --border: rgba(226, 232, 240, 0.8);
+  --border-strong: rgba(148, 163, 184, 0.55);
   --text: var(--color-text);
   --text-muted: #475569;
   --text-light: #FFFFFF;
@@ -66,6 +71,33 @@
 
   --color-gold-bg: rgba(161, 112, 0, 0.09);
   --color-gold-text: #A17000;
+
+  /* Status surfaces. `-soft` is the tint a card or badge sits on; `-strong` is
+     text that clears WCAG AA (4.5:1) on both that tint and the card surface.
+     The base --color-* tokens stay the saturated fill colour used behind white
+     text, which is a different job and a different contrast requirement. */
+  --color-primary-soft: #E8F0FC;
+  --color-primary-strong: #0F4C97;
+  --color-success-soft: #E0F6EC;
+  --color-success-strong: #047250;
+  --color-warning-soft: #FCF1DA;
+  --color-warning-strong: #8A5A06;
+  --color-error-soft: #FDE9EB;
+  --color-error-strong: #B01E2A;
+  --color-info-soft: #E8F0FC;
+  --color-info-strong: #0F4C97;
+
+  /* Aliases several stylesheets already referenced but nothing defined. */
+  --color-background: var(--bg-page);
+  --color-border: var(--border);
+  --color-primary-foreground: #FFFFFF;
+  --bg-subtle: var(--color-surface);
+  --bg-muted: #EDF1F7;
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 12px -2px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 12px 28px -8px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(15, 23, 42, 0.05);
+  --shadow-xl: 0 24px 56px -16px rgba(15, 23, 42, 0.20), 0 4px 10px rgba(15, 23, 42, 0.06);
 }
 
 [data-theme="dark"] {
@@ -73,8 +105,11 @@
   --color-surface: #162235;
   --color-text: #EEF4FB;
   --bg: var(--color-bg);
-  --panel-bg: rgba(22, 34, 53, 0.85);
+  /* Lifted a step above the #0F1724 page for a visible card edge. */
+  --panel-bg: #1A2740;
+  --bg-page: var(--color-bg);
   --border: rgba(255, 255, 255, 0.12);
+  --border-strong: rgba(255, 255, 255, 0.24);
   --text: var(--color-text);
   --text-muted: rgba(238, 244, 251, 0.68);
   --shadow: var(--shadow-card);
@@ -90,6 +125,31 @@
 
   --color-gold-bg: rgba(255, 211, 110, 0.14);
   --color-gold-text: #FFD36E;
+
+  /* Dark tints are darkened hues, not the light theme's pale ones: a 14%-alpha
+     light tint over a dark card is invisible. Each `-strong` clears AA on its
+     own tint and on the card. */
+  --color-primary-soft: #1B3357;
+  --color-primary-strong: #9CC5F0;
+  --color-success-soft: #0F3B2C;
+  --color-success-strong: #4ADE98;
+  --color-warning-soft: #3E2F0B;
+  --color-warning-strong: #FBBF24;
+  --color-error-soft: #44212B;
+  --color-error-strong: #FF8A94;
+  --color-info-soft: #15305A;
+  --color-info-strong: #9CC5F0;
+
+  --color-background: var(--bg-page);
+  --color-border: var(--border);
+  --color-primary-foreground: #0B1220;
+  --bg-subtle: #121D2E;
+  --bg-muted: #1F2D49;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 16px -4px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 14px 32px -10px rgba(0, 0, 0, 0.6);
+  --shadow-xl: 0 26px 60px -18px rgba(0, 0, 0, 0.7);
 }
 
 html {
@@ -114,7 +174,7 @@ body {
   font-family: var(--font-ui);
   font-size: 16px;
   line-height: 1.5;
-  background: var(--bg);
+  background: var(--bg-page);
   color: var(--text);
   min-height: 100vh;
   transition: background-color 240ms var(--ease-silk), color 240ms var(--ease-silk);
@@ -2906,3 +2966,29 @@ h1, h2, h3, h4 {
     padding: 16px;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Status badges
+   Rendered by components/ui/StatusBadge.tsx. Tint and text are themed tokens,
+   so the same markup stays legible on a white card and a dark one.
+--------------------------------------------------------------------------- */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 3px 11px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.status-badge--success { background: var(--color-success-soft); color: var(--color-success-strong); border-color: color-mix(in srgb, var(--color-success-strong) 22%, transparent); }
+.status-badge--warning { background: var(--color-warning-soft); color: var(--color-warning-strong); border-color: color-mix(in srgb, var(--color-warning-strong) 22%, transparent); }
+.status-badge--error   { background: var(--color-error-soft);   color: var(--color-error-strong);   border-color: color-mix(in srgb, var(--color-error-strong) 22%, transparent); }
+.status-badge--info    { background: var(--color-info-soft);    color: var(--color-info-strong);    border-color: color-mix(in srgb, var(--color-info-strong) 22%, transparent); }
+.status-badge--gold    { background: var(--color-gold-bg);      color: var(--color-gold-text);      border-color: color-mix(in srgb, var(--color-gold-text) 26%, transparent); }
