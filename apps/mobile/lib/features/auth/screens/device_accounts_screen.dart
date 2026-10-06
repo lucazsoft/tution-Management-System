@@ -21,6 +21,8 @@ class DeviceAccountsScreen extends ConsumerStatefulWidget {
 class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
   final _vault = DeviceAccountVault();
   late Future<List<DeviceAccount>> _accounts;
+  bool _managing = false;
+  final Set<String> _selectedAccountIds = {};
 
   @override
   void initState() {
@@ -29,6 +31,47 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
   }
 
   void _reload() => _accounts = _vault.accounts();
+
+  Future<void> _deleteSelected() async {
+    if (_selectedAccountIds.isEmpty) return;
+    final count = _selectedAccountIds.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete $count saved account${count == 1 ? '' : 's'}?'),
+        content: const Text(
+          'This removes the selected credentials and MPIN from this device. It does not delete the institution account.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    for (final userId in _selectedAccountIds) {
+      await _vault.remove(userId);
+    }
+    if (!mounted) return;
+    setState(() {
+      _selectedAccountIds.clear();
+      _managing = false;
+      _reload();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '$count saved account${count == 1 ? '' : 's'} removed.',
+        ),
+      ),
+    );
+  }
 
   Future<void> _addOrProtectCurrent({bool addAnother = false}) async {
     TextInput.finishAutofillContext(shouldSave: false);
@@ -371,7 +414,17 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
       appBar: AppBar(
           title: Text(widget.loginMode
               ? 'Log into a saved account'
-              : 'Accounts on this device')),
+              : 'Accounts on this device'),
+          actions: [
+            if (!widget.loginMode)
+              TextButton(
+                onPressed: () => setState(() {
+                  _managing = !_managing;
+                  _selectedAccountIds.clear();
+                }),
+                child: Text(_managing ? 'Done' : 'Manage'),
+              ),
+          ]),
       body: FutureBuilder<List<DeviceAccount>>(
         future: _accounts,
         builder: (context, snapshot) {
@@ -397,25 +450,53 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
               for (final account in accounts)
                 Card(
                     child: ListTile(
-                  leading: CircleAvatar(
-                      child: Text(account.name.isEmpty
-                          ? '?'
-                          : account.name[0].toUpperCase())),
+                  leading: _managing
+                      ? Checkbox(
+                          value: _selectedAccountIds.contains(account.userId),
+                          onChanged: (selected) => setState(() {
+                            if (selected == true) {
+                              _selectedAccountIds.add(account.userId);
+                            } else {
+                              _selectedAccountIds.remove(account.userId);
+                            }
+                          }),
+                        )
+                      : CircleAvatar(
+                          child: Text(account.name.isEmpty
+                              ? '?'
+                              : account.name[0].toUpperCase())),
                   title: Text(account.name),
                   subtitle: Text(
                       '${account.email}\n${account.role.replaceAll('_', ' ')}'),
                   isThreeLine: true,
-                  trailing: !widget.loginMode && account.userId == currentId
-                      ? const Chip(label: Text('Current'))
-                      : const Icon(Icons.chevron_right_rounded),
-                  onTap: !widget.loginMode && account.userId == currentId
+                  trailing: _managing
                       ? null
-                      : () => _switch(account),
+                      : !widget.loginMode && account.userId == currentId
+                          ? const Chip(label: Text('Current'))
+                          : const Icon(Icons.chevron_right_rounded),
+                  onTap: _managing
+                      ? () => setState(() {
+                            if (!_selectedAccountIds.add(account.userId)) {
+                              _selectedAccountIds.remove(account.userId);
+                            }
+                          })
+                      : !widget.loginMode && account.userId == currentId
+                          ? null
+                          : () => _switch(account),
                 )),
               const SizedBox(height: 12),
+              if (_managing)
+                FilledButton.icon(
+                  onPressed:
+                      _selectedAccountIds.isEmpty ? null : _deleteSelected,
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  label: Text(_selectedAccountIds.isEmpty
+                      ? 'Select accounts to delete'
+                      : 'Delete selected (${_selectedAccountIds.length})'),
+                ),
               if (!widget.loginMode)
                 FilledButton.icon(
-                    onPressed: currentSaved
+                    onPressed: !_managing && currentSaved
                         ? () => context.push(
                             '${GoRouterState.of(context).matchedLocation}/add')
                         : null,

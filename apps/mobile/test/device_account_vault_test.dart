@@ -98,4 +98,39 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('removes only the selected saved account', () async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final vault = DeviceAccountVault();
+    const parent = AuthUser(
+      id: 'parent-1',
+      email: 'parent@example.com',
+      firstName: 'Parent',
+      lastName: 'User',
+      role: 'PARENT',
+    );
+    const teacher = AuthUser(
+      id: 'teacher-1',
+      email: 'teacher@example.com',
+      firstName: 'Teacher',
+      lastName: 'User',
+      role: 'TEACHER',
+    );
+    await vault.saveAccount(
+      user: parent,
+      password: 'parent-password',
+      mpin: '1234',
+    );
+    await vault.saveAccount(
+      user: teacher,
+      password: 'teacher-password',
+      mpin: '5678',
+    );
+
+    await vault.remove(parent.id);
+
+    final accounts = await vault.accounts();
+    expect(accounts, hasLength(1));
+    expect(accounts.single.userId, teacher.id);
+  });
 }

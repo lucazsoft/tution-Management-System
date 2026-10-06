@@ -668,13 +668,16 @@ void main() {
       await tester.tap(find.text('Today'));
       await tester.pumpAndSettle();
       expect(find.text('Algebra'), findsOneWidget);
-      expect(find.text('09:00-10:00'), findsOneWidget);
+      expect(find.text('09:00'), findsOneWidget);
+      expect(find.text('10:00'), findsOneWidget);
 
       await tester.tap(find.text('Sun'));
       await tester.pumpAndSettle();
       expect(find.text('Grade 8 - A • Baneshwor'), findsNWidgets(2));
-      expect(find.text('09:00-10:00'), findsOneWidget);
-      expect(find.text('13:00-14:00'), findsOneWidget);
+      expect(find.text('09:00'), findsOneWidget);
+      expect(find.text('10:00'), findsOneWidget);
+      expect(find.text('13:00'), findsOneWidget);
+      expect(find.text('14:00'), findsOneWidget);
       expect(find.text('Geometry workshop'), findsOneWidget);
 
       await tester.tap(find.text('Mon'));

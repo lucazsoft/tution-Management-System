@@ -303,37 +303,34 @@ class StudentHomeScreen extends ConsumerWidget {
   }
 
   Widget _buildTimetableSection(BuildContext context, StudentPortal portal) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _SectionHeader(
-          title: "Today's timetable",
-          action: 'Full timetable',
-          onTap: () => context.go('/student/timetable'),
-        ),
-        const SizedBox(height: TmsSpace.sm),
-        if (portal.todaySessions.isEmpty)
-          const Card(
-            child: Padding(
-              padding: EdgeInsets.all(TmsSpace.md),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.event_busy_outlined,
-                    color: StudentColors.mutedText,
-                  ),
-                  SizedBox(width: TmsSpace.sm),
-                  Expanded(child: Text('No sessions scheduled for today.')),
-                ],
-              ),
-            ),
-          )
-        else
-          for (final session in portal.todaySessions.take(2)) ...[
-            _SessionTile(session: session),
-            const SizedBox(height: TmsSpace.sm),
-          ],
-      ],
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(TmsSpace.md),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text("Today's timetable", style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 2),
+              Text('${portal.todaySessions.length} scheduled sessions', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: StudentColors.mutedText)),
+            ])),
+            TextButton(onPressed: () => context.go('/student/timetable'), child: const Text('Full timetable')),
+          ]),
+          const SizedBox(height: TmsSpace.sm),
+          if (portal.todaySessions.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: TmsSpace.md),
+              child: Row(children: [
+                Icon(Icons.event_busy_outlined, color: StudentColors.mutedText),
+                SizedBox(width: TmsSpace.sm),
+                Expanded(child: Text('No sessions scheduled for today.')),
+              ]),
+            )
+          else
+            for (final session in portal.todaySessions.take(4))
+              _StudentSessionRow(session: session),
+        ]),
+      ),
     );
   }
 
@@ -907,6 +904,31 @@ class _SessionTile extends StatelessWidget {
       ),
     );
   }
+}
+
+class _StudentSessionRow extends StatelessWidget {
+  const _StudentSessionRow({required this.session});
+  final PortalSession session;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        child: Row(children: [
+          SizedBox(
+            width: 58,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(session.time, style: const TextStyle(fontWeight: FontWeight.w800)),
+              Text(session.endTime, style: Theme.of(context).textTheme.bodySmall),
+            ]),
+          ),
+          Container(width: 3, height: 42, color: StudentColors.primary),
+          const SizedBox(width: TmsSpace.sm),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(session.subject, style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text('${session.teacher} · ${session.room}', maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
+          ])),
+        ]),
+      );
 }
 
 class _QuickAction extends StatelessWidget {

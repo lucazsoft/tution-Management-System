@@ -15,6 +15,7 @@ import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_models.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_portal_dto.dart';
 import 'package:tms_mobile/features/teacher/screens/geo_attendance_screen.dart';
+import 'package:tms_mobile/features/teacher/utils/teacher_schedule_days.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_class_detail_screen.dart';
 import 'package:tms_mobile/features/teacher/viewmodels/teacher_portal_viewmodel.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_record_states.dart';
@@ -289,25 +290,66 @@ class _TodayTab extends StatelessWidget {
           onResults: onEnterResults,
         ),
         const SizedBox(height: 24),
-        Row(children: [
-          Expanded(
-              child: Text('Today\'s timetable',
-                  style: Theme.of(context).textTheme.titleLarge)),
-          TextButton(
-              onPressed: () => context.push('/teacher/timetable'),
-              child: const Text('Full timetable'))
-        ]),
-        const SizedBox(height: 4),
-        if (items.isEmpty)
-          const TeacherEmptyView(
-            icon: Icons.event_available_rounded,
-            title: 'No classes today',
-            message: 'Enjoy the day - nothing scheduled.',
-          )
-        else
-          for (final item in items)
-            _ClassCard(item: item, onTap: () => onAttendClass(item)),
+        Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Today\'s timetable', style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 2),
+                    Text('${items.length} scheduled sessions', style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                )),
+                TextButton(onPressed: () => context.push('/teacher/timetable'), child: const Text('Full timetable')),
+              ]),
+              const SizedBox(height: 8),
+              if (items.isEmpty)
+                const TeacherEmptyView(icon: Icons.event_available_rounded, title: 'No classes today', message: 'Enjoy the day - nothing scheduled.')
+              else
+                for (final item in items.take(4))
+                  _TeacherSessionRow(item: item, onTap: () => onAttendClass(item)),
+            ]),
+          ),
+        ),
       ],
+    );
+  }
+}
+
+class _TeacherSessionRow extends StatelessWidget {
+  const _TeacherSessionRow({required this.item, required this.onTap});
+  final TeacherTodayClass item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = (item.scheduleLabel ?? '').split(RegExp(r'\s*[-–]\s*'));
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        child: Row(children: [
+          SizedBox(
+            width: 64,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(parts.firstOrNull ?? '', style: const TextStyle(fontWeight: FontWeight.w800)),
+              if (parts.length > 1) Text(parts[1], style: Theme.of(context).textTheme.bodySmall),
+            ]),
+          ),
+          Container(width: 3, height: 42, color: Theme.of(context).colorScheme.secondary),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(item.courseName, style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text('${item.className}${item.branchName == null ? '' : ' · ${item.branchName}'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
+          ])),
+          Icon(item.dailyUpdateSubmitted ? Icons.check_circle : Icons.chevron_right_rounded, size: 20, color: item.dailyUpdateSubmitted ? Colors.green : null),
+        ]),
+      ),
     );
   }
 }
@@ -320,14 +362,15 @@ class _ClassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final todaySchedule = teacherTodayScheduleLabel(item, DateTime.now());
     return Card(
       child: ListTile(
         title: Text(item.courseName,
             style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(
-          '${item.className}${item.branchName == null ? '' : ' - ${item.branchName}'}${item.scheduleLabel == null ? '' : '\n${item.scheduleLabel}'}',
+          '${item.className}${item.branchName == null ? '' : ' - ${item.branchName}'}${todaySchedule.isEmpty ? '' : '\nToday - $todaySchedule'}',
         ),
-        isThreeLine: item.scheduleLabel != null,
+        isThreeLine: todaySchedule.isNotEmpty,
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -905,7 +948,7 @@ class _QuickActions extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            for (final action in actions) SizedBox(width: width, child: action),
+            for (final action in actions) SizedBox(width: width, height: 58, child: action),
           ],
         );
       },
@@ -928,8 +971,12 @@ class _QuickActionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return OutlinedButton.icon(
       onPressed: onTap,
-      icon: Icon(icon),
-      label: Text(label),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        alignment: Alignment.centerLeft,
+      ),
+      icon: Icon(icon, size: 22),
+      label: Expanded(child: Text(label, maxLines: 2)),
     );
   }
 }

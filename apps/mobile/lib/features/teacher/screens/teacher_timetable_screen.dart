@@ -12,10 +12,11 @@ import 'package:tms_mobile/core/sync/sync.dart';
 
 import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_portal_dto.dart';
+import 'package:tms_mobile/features/teacher/utils/teacher_schedule_days.dart';
 import 'package:tms_mobile/features/teacher/viewmodels/teacher_portal_viewmodel.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_record_states.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_navigation.dart';
-import 'package:tms_mobile/core/theme/app_tokens.dart';
+import 'package:tms_mobile/shared/widgets/daily_timetable_widgets.dart';
 
 class TeacherTimetableScreen extends ConsumerStatefulWidget {
   const TeacherTimetableScreen({super.key});
@@ -28,13 +29,14 @@ class TeacherTimetableScreen extends ConsumerStatefulWidget {
 class _TeacherTimetableScreenState extends ConsumerState<TeacherTimetableScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-  static const _days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  late final List<String> _days;
 
   @override
   void initState() {
     super.initState();
+    _days = rollingTeacherWeekdays(DateTime.now());
     _tabController = TabController(
-      length: _days.length + 1,
+      length: _days.length,
       vsync: this,
       // Always open the live Today view. Weekday tabs remain available for
       // planning, but stale tab state must never make Classes default to a
@@ -70,17 +72,9 @@ class _TeacherTimetableScreenState extends ConsumerState<TeacherTimetableScreen>
           indicatorColor: kColorAccent,
           labelColor: kColorPrimary,
           unselectedLabelColor: kColorText.withValues(alpha: 0.55),
-          tabs: const [
-            Tab(text: 'Today'),
-            ...[
-              Tab(text: 'Sun'),
-              Tab(text: 'Mon'),
-              Tab(text: 'Tue'),
-              Tab(text: 'Wed'),
-              Tab(text: 'Thu'),
-              Tab(text: 'Fri'),
-              Tab(text: 'Sat')
-            ]
+          tabs: [
+            const Tab(text: 'Today'),
+            for (final day in _days.skip(1)) Tab(text: day),
           ],
         ),
       ),
@@ -124,7 +118,8 @@ class _TeacherTimetableScreenState extends ConsumerState<TeacherTimetableScreen>
       controller: _tabController,
       children: [
         _TodayList(today: workspace.todayClasses),
-        for (final day in _days) _DayList(day: day, classes: workspace.classes),
+        for (final day in _days.skip(1))
+          _DayList(day: day, classes: workspace.classes),
       ],
     );
   }
@@ -260,7 +255,7 @@ class _DayRow {
 }
 
 List<_TodayRow> _todayRows(List<TeacherTodayClass> items) {
-  final day = _teacherDayKey(DateTime.now().weekday);
+  final day = teacherDayKey(DateTime.now());
   final rows = <_TodayRow>[];
   for (final item in items) {
     final matching = item.slots.where((slot) => slot.matchesDay(day)).toList();
@@ -293,9 +288,6 @@ int _compareSlotTimes(TeacherScheduleSlot? a, TeacherScheduleSlot? b) {
   return (a?.end ?? '').compareTo(b?.end ?? '');
 }
 
-String _teacherDayKey(int weekday) =>
-    const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][weekday - 1];
-
 class _TimetableCard extends StatelessWidget {
   const _TimetableCard({
     required this.title,
@@ -311,54 +303,15 @@ class _TimetableCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              width: 4,
-              height: 56,
-              decoration: BoxDecoration(
-                color: kColorAccent,
-                borderRadius: BorderRadius.circular(TmsRadius.r2),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  Text(subtitle),
-                  if (meta.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(meta, style: Theme.of(context).textTheme.bodySmall),
-                  ],
-                ],
-              ),
-            ),
-            Flexible(
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: kColorPrimary.withValues(alpha: .08),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(trailing,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelSmall
-                        ?.copyWith(color: kColorPrimary)),
-              ),
-            ),
-          ],
-        ),
-      ),
+    final timeRange = RegExp(
+      r'(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})',
+    ).firstMatch(meta);
+    return TimetableSessionCard(
+      startTime: timeRange?.group(1) ?? meta,
+      endTime: timeRange?.group(2) ?? '',
+      title: title,
+      primaryDetail: subtitle,
+      badge: trailing,
     );
   }
 }

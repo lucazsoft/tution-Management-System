@@ -1385,7 +1385,7 @@ class _InsightsViewState extends State<_InsightsView> {
     final insights = state.detail?.insights.isNotEmpty == true
         ? state.detail!.insights
         : state.insights;
-    if (insights.isEmpty) {
+    if (insights.isEmpty && state.results.isEmpty) {
       return const StudentEmptyView(
         icon: Icons.insights_outlined,
         title: 'No insights yet',
@@ -1399,6 +1399,11 @@ class _InsightsViewState extends State<_InsightsView> {
         .toList()
       ..sort((a, b) => b.compareTo(a));
     final assessments = state.results.map((item) => item.assessment).toSet();
+    final subjects = <String>{
+      for (final result in state.results) result.subject,
+      for (final insight in insights) insight.subject,
+    }.where((subject) => subject.isNotEmpty).toList()
+      ..sort();
     final periodOptions = <String, String>{
       'all': 'All published',
       for (final assessment in assessments)
@@ -1437,10 +1442,10 @@ class _InsightsViewState extends State<_InsightsView> {
     final weakest = [...periodAverages]
       ..sort((a, b) => a.average.compareTo(b.average));
     if (_selectedSubject != 'Overall' &&
-        !insights.any((item) => item.subject == _selectedSubject)) {
+        !subjects.contains(_selectedSubject)) {
       _selectedSubject = 'Overall';
     }
-    final chartResults = visibleMarks
+    final matchingChartResults = visibleMarks
         .where((item) =>
             _selectedSubject == 'Overall' || item.subject == _selectedSubject)
         .toList()
@@ -1450,6 +1455,9 @@ class _InsightsViewState extends State<_InsightsView> {
         if (b.testDate == null) return 1;
         return a.testDate!.compareTo(b.testDate!);
       });
+    final chartResults = matchingChartResults.length <= 5
+        ? matchingChartResults
+        : matchingChartResults.sublist(matchingChartResults.length - 5);
     final chartValues = chartResults.map((item) => item.percentage).toList();
     final chartTrend =
         chartValues.length < 2 ? 0.0 : chartValues.last - chartValues.first;
@@ -1520,10 +1528,10 @@ class _InsightsViewState extends State<_InsightsView> {
                             value: 'Overall',
                             child: Text('Overall'),
                           ),
-                          for (final insight in insights)
+                          for (final subject in subjects)
                             DropdownMenuItem(
-                              value: insight.subject,
-                              child: Text(insight.subject),
+                              value: subject,
+                              child: Text(subject),
                             ),
                         ],
                         onChanged: (value) {
@@ -1593,12 +1601,10 @@ class _InsightsViewState extends State<_InsightsView> {
                   SizedBox(
                     height: 190,
                     width: double.infinity,
-                    child: chartValues.length < 2
-                        ? Center(
+                    child: chartValues.isEmpty
+                        ? const Center(
                             child: Text(
-                              chartValues.isEmpty
-                                  ? 'No published evaluations match these filters.'
-                                  : 'At least two published evaluations are needed for a trend.',
+                              'No published evaluations match these filters.',
                               textAlign: TextAlign.center,
                             ),
                           )
@@ -1615,7 +1621,7 @@ class _InsightsViewState extends State<_InsightsView> {
                       spacing: TmsSpace.xs,
                       runSpacing: TmsSpace.xs,
                       children: [
-                        for (final result in chartResults.take(4))
+                        for (final result in chartResults)
                           Chip(
                             avatar: const Icon(Icons.event_outlined, size: 16),
                             label: Text(
@@ -1626,7 +1632,9 @@ class _InsightsViewState extends State<_InsightsView> {
                     ),
                   const SizedBox(height: TmsSpace.xs),
                   Text(
-                    'Based only on teacher-published evaluations and marksheets.',
+                    chartValues.length == 1
+                        ? 'Only the current published result is available for this selection.'
+                        : 'Showing the latest ${chartValues.length} published results in this trend.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
@@ -1853,22 +1861,26 @@ class _PerformanceLineChartPainter extends CustomPainter {
     final path = Path();
     final points = <Offset>[];
     for (var index = 0; index < values.length; index++) {
-      final x = left + chartWidth * index / (values.length - 1);
+      final x = values.length == 1
+          ? left + chartWidth / 2
+          : left + chartWidth * index / (values.length - 1);
       final value = values[index].clamp(0, 100).toDouble();
       final y = top + chartHeight * (1 - value / 100);
       final point = Offset(x, y);
       points.add(point);
       index == 0 ? path.moveTo(x, y) : path.lineTo(x, y);
     }
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = color
-        ..strokeWidth = 3
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
+    if (values.length > 1) {
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = color
+          ..strokeWidth = 3
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      );
+    }
     for (final point in points) {
       canvas.drawCircle(point, 4, Paint()..color = color);
       canvas.drawCircle(point, 2, Paint()..color = Colors.white);

@@ -18,12 +18,15 @@ class ParentMessagesScreen extends ConsumerStatefulWidget {
 
 class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
   final _text = TextEditingController();
+  final _search = TextEditingController();
   String? _contactId;
   bool _sending = false;
+  bool _showConversation = false;
 
   @override
   void dispose() {
     _text.dispose();
+    _search.dispose();
     super.dispose();
   }
 
@@ -69,6 +72,12 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
             final sourceContacts = portal.contacts;
             final contacts = [...sourceContacts]
               ..sort((a, b) => a.role.compareTo(b.role));
+            final query = _search.text.trim().toLowerCase();
+            final visibleContacts = query.isEmpty
+                ? contacts
+                : contacts.where((item) =>
+                    item.name.toLowerCase().contains(query) ||
+                    item.subject.toLowerCase().contains(query)).toList();
             final selected =
                 sourceContacts.where((item) => item.id == _contactId);
             final contact = selected.isNotEmpty
@@ -87,13 +96,18 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
                   children: [
                     const ChildSwitcherBar(),
                     const SizedBox(height: TmsSpace.md),
-                    _PrivacyNotice(child: child),
-                    const SizedBox(height: TmsSpace.md),
                     LayoutBuilder(builder: (context, constraints) {
                       final contactList = _ContactList(
-                        contacts: contacts,
+                        contacts: visibleContacts,
+                        messages: portal.messages,
                         selectedId: contact?.id,
-                        onSelect: (id) => setState(() => _contactId = id),
+                        searchController: _search,
+                        onSearchChanged: (_) => setState(() {}),
+                        onNewChat: () => _showNewChat(contacts),
+                        onSelect: (id) => setState(() {
+                          _contactId = id;
+                          _showConversation = true;
+                        }),
                       );
                       final conversation = _Conversation(
                         child: child,
@@ -106,11 +120,17 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
                             : () => _send(child, contact),
                       );
                       if (constraints.maxWidth < 760) {
-                        return Column(children: [
-                          contactList,
-                          const SizedBox(height: TmsSpace.md),
-                          conversation,
-                        ]);
+                        if (_showConversation && contact != null) {
+                          return Column(children: [
+                            Align(alignment: Alignment.centerLeft, child: TextButton.icon(
+                              onPressed: () => setState(() => _showConversation = false),
+                              icon: const Icon(Icons.arrow_back_rounded),
+                              label: const Text('Recent chats'),
+                            )),
+                            conversation,
+                          ]);
+                        }
+                        return contactList;
                       }
                       return Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -128,60 +148,73 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
           },
         ),
       );
-}
 
-class _PrivacyNotice extends StatelessWidget {
-  const _PrivacyNotice({required this.child});
-  final ParentChild child;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(TmsSpace.md),
-        decoration: BoxDecoration(
-          color: kColorPrimary.withValues(alpha: .07),
-          borderRadius: BorderRadius.circular(TmsRadius.card),
+  Future<void> _showNewChat(List<ParentContact> contacts) async {
+    final selected = await showModalBottomSheet<ParentContact>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          children: [
+            Text('New chat', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            for (final contact in contacts)
+              ListTile(
+                leading: CircleAvatar(child: Text(contact.initials.isEmpty ? (contact.name.isEmpty ? '?' : contact.name[0]) : contact.initials)),
+                title: Text(contact.name),
+                subtitle: Text(contact.subject),
+                onTap: () => Navigator.pop(context, contact),
+              ),
+          ],
         ),
-        child: Row(children: [
-          const Icon(Icons.shield_outlined, color: kColorPrimary),
-          const SizedBox(width: TmsSpace.sm),
-          Expanded(
-            child: Text(
-              'Privacy scoped to ${child.name}. Only authorized teaching, accounts, and branch staff are available; sibling conversations stay separate.',
-            ),
-          ),
-        ]),
-      );
+      ),
+    );
+    if (selected != null && mounted) {
+      setState(() {
+        _contactId = selected.id;
+        _showConversation = true;
+      });
+    }
+  }
 }
 
 class _ContactList extends StatelessWidget {
   const _ContactList({
     required this.contacts,
+    required this.messages,
     required this.selectedId,
+    required this.searchController,
+    required this.onSearchChanged,
+    required this.onNewChat,
     required this.onSelect,
   });
   final List<ParentContact> contacts;
+  final List<ParentMessageItem> messages;
   final String? selectedId;
+  final TextEditingController searchController;
+  final ValueChanged<String> onSearchChanged;
+  final VoidCallback onNewChat;
   final ValueChanged<String> onSelect;
 
   @override
   Widget build(BuildContext context) {
-    final teachers = contacts.where((item) => item.role == 'TEACHER').length;
-    final admins = contacts.where((item) => item.role == 'BRANCH_ADMIN').length;
-    final staff = contacts.where((item) => item.role == 'STAFF').length;
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(TmsSpace.md),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Authorized contacts',
-              style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 3),
-          Text(
-              '$teachers assigned teacher${teachers == 1 ? '' : 's'} · $staff staff · $admins branch support',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: kColorMutedText)),
+          Row(children: [
+            Expanded(child: Text('Recent chats', style: Theme.of(context).textTheme.titleLarge)),
+            FilledButton.tonalIcon(onPressed: onNewChat, icon: const Icon(Icons.edit_square, size: 18), label: const Text('New chat')),
+          ]),
+          const SizedBox(height: TmsSpace.sm),
+          TextField(
+            controller: searchController,
+            onChanged: onSearchChanged,
+            decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search chats', isDense: true, border: OutlineInputBorder()),
+          ),
           const SizedBox(height: TmsSpace.sm),
           if (contacts.isEmpty)
             const _MessageEmpty(
@@ -192,7 +225,10 @@ class _ContactList extends StatelessWidget {
             )
           else
             for (final contact in contacts)
-              Material(
+              Builder(builder: (context) {
+                final thread = messages.where((message) => message.teacherId == contact.id).toList();
+                final latest = thread.isEmpty ? null : thread.last;
+                return Material(
                 color: contact.id == selectedId
                     ? kColorPrimary.withValues(alpha: .07)
                     : Colors.transparent,
@@ -207,15 +243,12 @@ class _ContactList extends StatelessWidget {
                         : contact.initials),
                   ),
                   title: Text(contact.name),
-                  subtitle: Text(contact.role == 'BRANCH_ADMIN'
-                      ? 'Branch support'
-                      : contact.role == 'STAFF'
-                          ? contact.subject
-                          : 'Assigned teacher · ${contact.subject}'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
+                  subtitle: Text(latest?.text ?? contact.subject, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  trailing: latest == null ? const Icon(Icons.chevron_right_rounded) : Text(latest.time, style: Theme.of(context).textTheme.bodySmall),
                   onTap: () => onSelect(contact.id),
                 ),
-              ),
+              );
+              }),
         ]),
       ),
     );

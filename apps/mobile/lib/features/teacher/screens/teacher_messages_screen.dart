@@ -19,11 +19,13 @@ class TeacherMessagesScreen extends ConsumerStatefulWidget {
 class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
   final _repository = TeacherPortalRepository();
   final _controller = TextEditingController();
+  final _searchController = TextEditingController();
   List<TeacherMessageContact>? _contacts;
   List<TeacherMessageItem>? _messages;
   TeacherMessageContact? _selected;
   String? _error;
   bool _sending = false;
+  bool _showConversation = false;
   Timer? _refreshTimer;
 
   @override
@@ -40,6 +42,7 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
   void dispose() {
     _refreshTimer?.cancel();
     _controller.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -122,12 +125,6 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
           onRefresh: _loadContacts,
           child:
               ListView(padding: const EdgeInsets.all(TmsSpace.md), children: [
-            Text('Parent communication',
-                style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 4),
-            const Text(
-                'Private conversations are grouped by student so every message keeps the right context.'),
-            const SizedBox(height: TmsSpace.md),
             if (_contacts == null)
               const Center(
                   child: Padding(
@@ -141,11 +138,16 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
                 final contacts = _contactCard();
                 final thread = _threadCard();
                 return box.maxWidth < 760
-                    ? Column(children: [
-                        contacts,
-                        const SizedBox(height: 16),
-                        thread
-                      ])
+                    ? (_showConversation
+                        ? Column(children: [
+                            Align(alignment: Alignment.centerLeft, child: TextButton.icon(
+                              onPressed: () => setState(() => _showConversation = false),
+                              icon: const Icon(Icons.arrow_back_rounded),
+                              label: const Text('Recent chats'),
+                            )),
+                            thread,
+                          ])
+                        : contacts)
                     : Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -169,17 +171,71 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
           padding: const EdgeInsets.all(12),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Parents', style: Theme.of(context).textTheme.titleLarge),
+            Row(children: [
+              Expanded(child: Text('Recent chats', style: Theme.of(context).textTheme.titleLarge)),
+              FilledButton.tonalIcon(
+                onPressed: _showNewChat,
+                icon: const Icon(Icons.edit_square, size: 18),
+                label: const Text('New chat'),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _searchController,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: 'Search chats',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
             for (final contact in _contacts!)
+              if (_searchController.text.trim().isEmpty ||
+                  contact.parentName.toLowerCase().contains(_searchController.text.trim().toLowerCase()) ||
+                  contact.studentName.toLowerCase().contains(_searchController.text.trim().toLowerCase()))
               ListTile(
                 selected: contact == _selected,
                 leading: const CircleAvatar(child: Icon(Icons.person_outline)),
                 title: Text(contact.parentName),
                 subtitle: Text('${contact.studentName} · ${contact.gradeName}',
                     maxLines: 2, overflow: TextOverflow.ellipsis),
-                onTap: () => _select(contact),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () {
+                  _select(contact);
+                  setState(() => _showConversation = true);
+                },
               ),
           ])));
+
+  Future<void> _showNewChat() async {
+    final selected = await showModalBottomSheet<TeacherMessageContact>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          children: [
+            Text('New chat', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            for (final contact in _contacts!)
+              ListTile(
+                leading: const CircleAvatar(child: Icon(Icons.person_outline)),
+                title: Text(contact.parentName),
+                subtitle: Text('${contact.studentName} · ${contact.gradeName}'),
+                onTap: () => Navigator.pop(context, contact),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected != null && mounted) {
+      await _select(selected);
+      if (mounted) setState(() => _showConversation = true);
+    }
+  }
 
   Widget _threadCard() {
     final contact = _selected!;
