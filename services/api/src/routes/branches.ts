@@ -3,6 +3,7 @@ import prisma from '../utils/db';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware, hasPermission } from '../middleware/auth';
 import { isTenantAdmin, managedBranchIds } from '../utils/access-control';
+import { parseGeofenceConfig, readGeofenceNumber } from '../utils/geo';
 
 const router = Router();
 
@@ -70,10 +71,16 @@ router.post('/', authMiddleware, hasPermission('manage_branches'), async (req: T
     return res.status(400).json({ error: 'Branch name and address are required.' });
   }
 
-  const lat = Number(latitude);
-  const lng = Number(longitude);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return res.status(400).json({ error: 'Valid latitude and longitude are required for the attendance geofence.' });
+  const geofence = parseGeofenceConfig({ latitude, longitude, radiusMeters });
+  if (!geofence.success) {
+    return res.status(400).json({ error: geofence.error });
+  }
+
+  let grace = 15;
+  if (gracePeriodMinutes !== undefined && gracePeriodMinutes !== null && gracePeriodMinutes !== '') {
+    const parsed = readGeofenceNumber(gracePeriodMinutes, 'gracePeriodMinutes');
+    if (!parsed.success) return res.status(400).json({ error: parsed.error });
+    grace = Math.round(parsed.data);
   }
 
   try {
@@ -82,11 +89,10 @@ router.post('/', authMiddleware, hasPermission('manage_branches'), async (req: T
         tenantId: req.tenantId!,
         name: String(name).trim(),
         address: String(address).trim(),
-        latitude: lat,
-        longitude: lng,
-        radiusMeters: Number.isFinite(Number(radiusMeters)) && Number(radiusMeters) > 0 ? Number(radiusMeters) : 100,
-        gracePeriodMinutes:
-          Number.isFinite(Number(gracePeriodMinutes)) && Number(gracePeriodMinutes) >= 0 ? Number(gracePeriodMinutes) : 15,
+        latitude: geofence.data.latitude,
+        longitude: geofence.data.longitude,
+        radiusMeters: geofence.data.radiusMeters,
+        gracePeriodMinutes: grace,
         admissionFee: Number.isFinite(Number(admissionFee)) && Number(admissionFee) >= 0 ? Math.round(Number(admissionFee)) : 0,
       },
     });
@@ -111,13 +117,20 @@ router.put('/:id', authMiddleware, hasPermission('manage_branches'), async (req:
     const data: Record<string, unknown> = {};
     if (typeof name === 'string' && name.trim()) data.name = name.trim();
     if (typeof address === 'string' && address.trim()) data.address = address.trim();
-    if (latitude !== undefined && Number.isFinite(Number(latitude))) data.latitude = Number(latitude);
-    if (longitude !== undefined && Number.isFinite(Number(longitude))) data.longitude = Number(longitude);
-    if (radiusMeters !== undefined && Number.isFinite(Number(radiusMeters)) && Number(radiusMeters) > 0) {
-      data.radiusMeters = Number(radiusMeters);
-    }
-    if (gracePeriodMinutes !== undefined && Number.isFinite(Number(gracePeriodMinutes)) && Number(gracePeriodMinutes) >= 0) {
-      data.gracePeriodMinutes = Number(gracePeriodMinutes);
+    // Geofence fields are rejected rather than skipped when invalid: silently
+    // dropping an out-of-range coordinate reported "Branch updated." while
+    // leaving the fence where it was, which is indistinguishable from success.
+    const geofenceFields = [
+      ['latitude', latitude],
+      ['longitude', longitude],
+      ['radiusMeters', radiusMeters],
+      ['gracePeriodMinutes', gracePeriodMinutes],
+    ] as const;
+    for (const [field, value] of geofenceFields) {
+      if (value === undefined) continue;
+      const parsed = readGeofenceNumber(value, field);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error });
+      data[field] = field === 'gracePeriodMinutes' ? Math.round(parsed.data) : parsed.data;
     }
     if (admissionFee !== undefined && Number.isFinite(Number(admissionFee)) && Number(admissionFee) >= 0) {
       data.admissionFee = Math.round(Number(admissionFee));
