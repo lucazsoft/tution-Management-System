@@ -7,6 +7,8 @@ import 'package:tms_mobile/features/student/student_design.dart';
 import 'package:tms_mobile/features/student/viewmodels/student_timetable_viewmodel.dart';
 import 'package:tms_mobile/features/student/widgets/student_scaffold.dart';
 import 'package:tms_mobile/shared/widgets/academic_calendar.dart';
+import 'package:tms_mobile/shared/widgets/timetable_session_card.dart';
+import 'package:tms_mobile/shared/widgets/timetable_day_navigator.dart';
 
 class StudentTimetableScreen extends ConsumerStatefulWidget {
   const StudentTimetableScreen({super.key});
@@ -28,29 +30,6 @@ class _StudentTimetableScreenState
   DateTime get _selectedDate => _today.add(Duration(days: _dayOffset));
 
   static const _dayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-  static const _dayNames = [
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
-    'Sunday',
-  ];
-  static const _months = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
 
   bool _sameDay(DateTime first, DateTime second) =>
       first.year == second.year &&
@@ -138,80 +117,20 @@ class _StudentTimetableScreenState
                         'You are offline. Showing the last loaded timetable.'),
                   ),
                 ),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: TmsSpace.sm,
-                    vertical: TmsSpace.md,
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton.filledTonal(
-                        tooltip: 'Previous day',
-                        onPressed: _dayOffset <= -7
-                            ? null
-                            : () => setState(() => _dayOffset--),
-                        icon: const Icon(Icons.chevron_left_rounded),
-                      ),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            Text(
-                              _dayOffset == 0
-                                  ? 'Today · ${_dayNames[date.weekday - 1]}'
-                                  : _dayNames[date.weekday - 1],
-                              style: Theme.of(context).textTheme.titleLarge,
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              '${date.day} ${_months[date.month - 1]} ${date.year}',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(
-                                    color: kColorMutedText,
-                                  ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton.filledTonal(
-                        tooltip: 'Next day',
-                        onPressed: _dayOffset >= 7
-                            ? null
-                            : () => setState(() => _dayOffset++),
-                        icon: const Icon(Icons.chevron_right_rounded),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: TmsSpace.sm),
-                child: Text(
-                  'You can review up to one week before or after today.',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+              TimetableDayNavigator(
+                date: date,
+                isToday: _dayOffset == 0,
+                onPrevious: _dayOffset <= -7
+                    ? null
+                    : () => setState(() => _dayOffset--),
+                onNext:
+                    _dayOffset >= 7 ? null : () => setState(() => _dayOffset++),
               ),
               if (holidays.isNotEmpty)
                 ...holidays.map((holiday) => _HolidayCard(event: holiday))
               else if (sessions.isEmpty)
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(TmsSpace.lg),
-                    child: Column(
-                      children: [
-                        Icon(Icons.event_available_outlined,
-                            size: 42, color: kColorMutedText),
-                        SizedBox(height: TmsSpace.sm),
-                        Text('No classes scheduled for this day.'),
-                      ],
-                    ),
-                  ),
-                )
+                const TimetableEmptyCard(
+                    message: 'No classes scheduled for this day.')
               else ...[
                 Text(
                   '${sessions.length} session${sessions.length == 1 ? '' : 's'}',
@@ -219,7 +138,17 @@ class _StudentTimetableScreenState
                 ),
                 const SizedBox(height: TmsSpace.sm),
                 for (final session in sessions) ...[
-                  _SessionCard(session: session),
+                  TimetableSessionCard(
+                    startTime: session.time,
+                    endTime: session.endTime,
+                    subject: session.subject,
+                    primaryDetail: session.teacher,
+                    secondaryDetail: session.room,
+                    footer: Text(session.typeLabel,
+                        style: const TextStyle(
+                            color: StudentColors.info,
+                            fontWeight: FontWeight.w600)),
+                  ),
                   const SizedBox(height: TmsSpace.sm),
                 ],
               ],
@@ -262,60 +191,6 @@ class _HolidayCard extends StatelessWidget {
                 const SizedBox(height: TmsSpace.xs),
                 Text(event.details, textAlign: TextAlign.center),
               ],
-            ],
-          ),
-        ),
-      );
-}
-
-class _SessionCard extends StatelessWidget {
-  const _SessionCard({required this.session});
-  final PortalSession session;
-
-  @override
-  Widget build(BuildContext context) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(TmsSpace.md),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 76,
-                padding: const EdgeInsets.symmetric(vertical: TmsSpace.sm),
-                decoration: BoxDecoration(
-                  color: kColorPrimary.withValues(alpha: .08),
-                  borderRadius: BorderRadius.circular(TmsRadius.r10),
-                ),
-                child: Column(
-                  children: [
-                    Text(session.time,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w800, color: kColorPrimary)),
-                    Text(session.endTime,
-                        style: Theme.of(context).textTheme.bodySmall),
-                  ],
-                ),
-              ),
-              const SizedBox(width: TmsSpace.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(session.subject,
-                        style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: TmsSpace.xs),
-                    Text(session.teacher),
-                    if (session.room.isNotEmpty)
-                      Text(session.room,
-                          style: Theme.of(context).textTheme.bodySmall),
-                    const SizedBox(height: TmsSpace.xs),
-                    Text(session.typeLabel,
-                        style: const TextStyle(
-                            color: StudentColors.info,
-                            fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ),
             ],
           ),
         ),

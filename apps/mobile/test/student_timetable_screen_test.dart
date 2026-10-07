@@ -200,7 +200,7 @@ void main() {
         await tester.tap(find.byTooltip(arrow));
         await tester.pump();
       }
-      expect(find.text('Wednesday'), findsOneWidget);
+      expect(find.textContaining('Wednesday'), findsOneWidget);
       expect(find.text('Science Revision'), findsOneWidget);
       expect(find.text('Short-Term'), findsOneWidget);
 

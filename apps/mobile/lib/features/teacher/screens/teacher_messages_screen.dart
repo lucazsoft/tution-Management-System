@@ -157,8 +157,7 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
                     const SizedBox(height: 8),
                     Expanded(
                       child: filtered.isEmpty
-                          ? const Center(
-                              child: Text('No eligible teachers found.'))
+                          ? const Center(child: Text('No contacts found.'))
                           : ListView.builder(
                               itemCount: filtered.length,
                               itemBuilder: (_, index) {
@@ -245,13 +244,13 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
           child: Column(children: [
             Row(children: [
               Expanded(
-                child: Text('Conversations',
+                child: Text('Recent chats',
                     style: Theme.of(context).textTheme.titleLarge),
               ),
-              IconButton.filledTonal(
-                tooltip: 'New chat',
+              FilledButton.tonalIcon(
                 onPressed: _startNewChat,
-                icon: const Icon(Icons.edit_rounded),
+                icon: const Icon(Icons.edit_rounded, size: 18),
+                label: const Text('New chat'),
               ),
             ]),
             const SizedBox(height: 8),
@@ -363,7 +362,7 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
               ? const Center(child: CircularProgressIndicator())
               : messages.isEmpty
                   ? _empty(Icons.waving_hand_outlined, 'Say hello',
-                      'Start a private conversation with ${contact.parentName}.')
+                      'Send your first message to ${contact.parentName}.')
                   : ListView.builder(
                       reverse: true,
                       padding: const EdgeInsets.fromLTRB(14, 18, 14, 12),

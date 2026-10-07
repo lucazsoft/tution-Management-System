@@ -659,27 +659,32 @@ void main() {
       final repository = _FakeRepository(
         workspaces: [TeacherWorkspace.fromJson(body)],
       );
+      await tester.binding.setSurfaceSize(const Size(900, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       await _pumpWithRepository(
         tester,
         const TeacherTimetableScreen(),
         repository,
       );
 
-      await tester.tap(find.text('Today'));
-      await tester.pumpAndSettle();
-      expect(find.text('Algebra'), findsOneWidget);
-      expect(find.text('09:00-10:00'), findsOneWidget);
+      expect(find.text('Mathematics'), findsOneWidget);
 
-      await tester.tap(find.text('Sun'));
-      await tester.pumpAndSettle();
-      expect(find.text('Grade 8 - A • Baneshwor'), findsNWidgets(2));
-      expect(find.text('09:00-10:00'), findsOneWidget);
-      expect(find.text('13:00-14:00'), findsOneWidget);
+      final sundayOffset = (DateTime.sunday - DateTime.now().weekday) % 7;
+      final daysUntilSunday = sundayOffset == 0 ? 7 : sundayOffset;
+      for (var day = 0; day < daysUntilSunday; day++) {
+        await tester.tap(find.byTooltip('Next day'));
+        await tester.pumpAndSettle();
+      }
+      expect(find.text('Grade 8 - A'), findsNWidgets(2));
+      expect(find.text('09:00'), findsOneWidget);
+      expect(find.text('10:00'), findsOneWidget);
+      expect(find.text('13:00'), findsOneWidget);
+      expect(find.text('14:00'), findsOneWidget);
       expect(find.text('Geometry workshop'), findsOneWidget);
 
-      await tester.tap(find.text('Mon'));
+      await tester.tap(find.byTooltip('Next day'));
       await tester.pumpAndSettle();
-      expect(find.text('No classes on Mon'), findsOneWidget);
+      expect(find.text('Nothing scheduled for this day.'), findsOneWidget);
     });
 
     testWidgets('renders leave status from the refreshed workspace',

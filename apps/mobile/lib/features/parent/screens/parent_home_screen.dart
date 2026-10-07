@@ -8,6 +8,7 @@ import 'package:tms_mobile/features/parent/widgets/parent_navigation.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_portal_state_view.dart';
 import 'package:tms_mobile/features/student/widgets/nepal_date_time.dart';
 import 'package:tms_mobile/shared/widgets/academic_calendar.dart';
+import 'package:tms_mobile/shared/widgets/today_timetable_tile.dart';
 
 class ParentHomeScreen extends ConsumerWidget {
   const ParentHomeScreen({super.key});
@@ -70,7 +71,7 @@ class _PageHeading extends StatelessWidget {
               style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: TmsSpace.xxs),
           Text(
-            'A private, child-specific view of today\'s priorities for ${child.name}.',
+            'Today\'s priorities for ${child.name}.',
             style: Theme.of(context)
                 .textTheme
                 .bodyMedium
@@ -356,39 +357,11 @@ class _SessionRow extends StatelessWidget {
   final ParentSession session;
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 9),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 58,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(session.time,
-                      style: const TextStyle(fontWeight: FontWeight.w800)),
-                  Text(session.endTime,
-                      style: Theme.of(context).textTheme.bodySmall),
-                ],
-              ),
-            ),
-            Container(width: 3, height: 42, color: kColorAccent),
-            const SizedBox(width: TmsSpace.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(session.subject,
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
-                  Text('${session.teacher} · ${session.room}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall),
-                ],
-              ),
-            ),
-          ],
-        ),
+  Widget build(BuildContext context) => TodayTimetableTile(
+        startTime: session.time,
+        endTime: session.endTime,
+        subject: session.subject,
+        details: '${session.teacher} · ${session.room}',
       );
 }
 
@@ -586,28 +559,28 @@ class _UpcomingEvents extends StatelessWidget {
       ..sort((a, b) => parsePortalEventDate(a.date)!
           .compareTo(parsePortalEventDate(b.date)!));
     return InkWell(
-        borderRadius: BorderRadius.circular(TmsRadius.card),
-        onTap: () => context.push('/parent/calendar'),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text('Upcoming events',
-                      style: Theme.of(context).textTheme.titleLarge),
-                ),
-                TextButton(
-                  onPressed: () => context.push('/parent/calendar'),
-                  child: const Text('View all'),
-                ),
-              ],
-            ),
-            const SizedBox(height: TmsSpace.sm),
-            if (upcoming.isEmpty)
-              const Text('No upcoming events.')
-            else
-              for (final event in upcoming.take(3))
+      borderRadius: BorderRadius.circular(TmsRadius.card),
+      onTap: () => context.push('/parent/calendar'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('Upcoming events',
+                    style: Theme.of(context).textTheme.titleLarge),
+              ),
+              TextButton(
+                onPressed: () => context.push('/parent/calendar'),
+                child: const Text('View all'),
+              ),
+            ],
+          ),
+          const SizedBox(height: TmsSpace.sm),
+          if (upcoming.isEmpty)
+            const Text('No upcoming events.')
+          else
+            for (final event in upcoming.take(3))
               Card(
                 margin: const EdgeInsets.only(bottom: TmsSpace.sm),
                 child: ListTile(
@@ -622,9 +595,9 @@ class _UpcomingEvents extends StatelessWidget {
                   trailing: const Icon(Icons.event_outlined),
                 ),
               ),
-          ],
-        ),
-      );
+        ],
+      ),
+    );
   }
 }
 

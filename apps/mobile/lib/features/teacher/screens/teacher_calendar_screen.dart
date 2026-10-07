@@ -31,9 +31,10 @@ class _TeacherCalendarScreenState extends State<TeacherCalendarScreen> {
           future: _events,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done &&
-                !snapshot.hasData)
+                !snapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
-            if (snapshot.hasError)
+            }
+            if (snapshot.hasError) {
               return Center(
                   child: Padding(
                       padding: const EdgeInsets.all(24),
@@ -46,6 +47,7 @@ class _TeacherCalendarScreenState extends State<TeacherCalendarScreen> {
                         FilledButton(
                             onPressed: _refresh, child: const Text('Retry'))
                       ])));
+            }
             final events = snapshot.data ?? const <TeacherAcademicEvent>[];
             return RefreshIndicator(
               onRefresh: _refresh,

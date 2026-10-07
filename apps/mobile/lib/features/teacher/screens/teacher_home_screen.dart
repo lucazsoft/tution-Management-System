@@ -20,6 +20,7 @@ import 'package:tms_mobile/features/teacher/viewmodels/teacher_portal_viewmodel.
 import 'package:tms_mobile/features/teacher/widgets/teacher_record_states.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_navigation.dart';
 import 'package:tms_mobile/features/student/widgets/nepal_date_time.dart';
+import 'package:tms_mobile/shared/widgets/today_timetable_tile.dart';
 
 class TeacherHomeScreen extends ConsumerStatefulWidget {
   const TeacherHomeScreen({super.key, this.initialTab = 0});
@@ -355,77 +356,22 @@ class _TodayTimetableTable extends StatelessWidget {
   Widget build(BuildContext context) {
     final rows = _rows;
     return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        LayoutBuilder(builder: (context, constraints) {
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minWidth: constraints.maxWidth),
-              child: DataTable(
-                headingRowColor: WidgetStatePropertyAll(
-                  Theme.of(context).colorScheme.surfaceContainerLow,
-                ),
-                horizontalMargin: 16,
-                columnSpacing: 24,
-                columns: const [
-                  DataColumn(label: Text('Time')),
-                  DataColumn(label: Text('Subject')),
-                  DataColumn(label: Text('Class')),
-                  DataColumn(label: Text('Room')),
-                  DataColumn(label: Text('Update')),
-                  DataColumn(label: Text('Action')),
-                ],
-                rows: [
-                  for (final row in rows)
-                    DataRow(cells: [
-                      DataCell(Text(
-                        row.slot?.timeLabel.isNotEmpty == true
-                            ? row.slot!.timeLabel
-                            : 'Time not set',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      )),
-                      DataCell(SizedBox(
-                        width: 120,
-                        child: Text(row.item.courseName,
-                            maxLines: 2, overflow: TextOverflow.ellipsis),
-                      )),
-                      DataCell(SizedBox(
-                        width: 120,
-                        child: Text(row.item.className,
-                            maxLines: 2, overflow: TextOverflow.ellipsis),
-                      )),
-                      DataCell(Text(
-                        row.slot?.room?.trim().isNotEmpty == true
-                            ? row.slot!.room!
-                            : 'Not assigned',
-                      )),
-                      DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(
-                          row.item.dailyUpdateSubmitted
-                              ? Icons.check_circle
-                              : Icons.pending_outlined,
-                          color: row.item.dailyUpdateSubmitted
-                              ? Colors.green
-                              : Colors.orange,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(row.item.dailyUpdateSubmitted
-                            ? 'Submitted'
-                            : 'Pending'),
-                      ])),
-                      DataCell(FilledButton.tonal(
-                        onPressed: () => onAttendClass(row.item),
-                        child: const Text('Attend'),
-                      )),
-                    ]),
-                ],
-              ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Column(children: [
+          for (final row in rows)
+            TodayTimetableTile(
+              startTime: row.slot?.start.isNotEmpty == true
+                  ? row.slot!.start
+                  : 'Today',
+              endTime: row.slot?.end ?? '',
+              subject: row.item.courseName,
+              details:
+                  '${row.item.className} · ${row.slot?.room?.trim().isNotEmpty == true ? row.slot!.room : row.item.branchName ?? 'Room not assigned'}',
+              onTap: () => onAttendClass(row.item),
             ),
-          );
-        }),
-      ]),
+        ]),
+      ),
     );
   }
 }
@@ -1008,10 +954,16 @@ class _QuickActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onTap,
-      icon: Icon(icon),
-      label: Text(label),
+    return SizedBox(
+      height: 62,
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 22),
+        label: Text(label, textAlign: TextAlign.center),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        ),
+      ),
     );
   }
 }

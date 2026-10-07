@@ -5,6 +5,9 @@ import 'package:tms_mobile/features/parent/widgets/child_switcher_bar.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_navigation.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_portal_state_view.dart';
 import 'package:tms_mobile/shared/widgets/academic_calendar.dart';
+import 'package:tms_mobile/core/theme/app_theme.dart';
+import 'package:tms_mobile/shared/widgets/timetable_session_card.dart';
+import 'package:tms_mobile/shared/widgets/timetable_day_navigator.dart';
 
 class ParentTimetableScreen extends ConsumerStatefulWidget {
   const ParentTimetableScreen({super.key});
@@ -34,24 +37,6 @@ class _ParentTimetableScreenState extends ConsumerState<ParentTimetableScreen> {
         'Saturday',
         'Sunday'
       ][date.weekday - 1];
-
-  String _dateLabel(DateTime date) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec'
-    ];
-    return '${_weekday(date)}, ${date.day} ${months[date.month - 1]}';
-  }
 
   bool _matchesDay(ParentSession session) {
     final value = session.day.trim().toLowerCase();
@@ -84,46 +69,19 @@ class _ParentTimetableScreenState extends ConsumerState<ParentTimetableScreen> {
                 const SizedBox(height: 16),
                 Text('${child.name}’s merged schedule',
                     style: Theme.of(context).textTheme.titleLarge),
-                const Text(
-                    'Every active class is scoped only to the selected child.'),
                 const SizedBox(height: 16),
-                Card(
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          onPressed: _canPrevious
-                              ? () => setState(() => _selected =
-                                  _selected.subtract(const Duration(days: 1)))
-                              : null,
-                          icon: const Icon(Icons.chevron_left_rounded),
-                        ),
-                        Expanded(
-                          child: Column(
-                            children: [
-                              Text(_dateLabel(_selected),
-                                  style:
-                                      Theme.of(context).textTheme.titleMedium),
-                              Text(_selected == _today
-                                  ? 'Today'
-                                  : 'Within one week of today'),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: _canNext
-                              ? () => setState(() => _selected =
-                                  _selected.add(const Duration(days: 1)))
-                              : null,
-                          icon: const Icon(Icons.chevron_right_rounded),
-                        ),
-                      ],
-                    ),
-                  ),
+                TimetableDayNavigator(
+                  date: _selected,
+                  isToday: _selected == _today,
+                  onPrevious: _canPrevious
+                      ? () => setState(() => _selected =
+                          _selected.subtract(const Duration(days: 1)))
+                      : null,
+                  onNext: _canNext
+                      ? () => setState(() =>
+                          _selected = _selected.add(const Duration(days: 1)))
+                      : null,
                 ),
-                const SizedBox(height: 12),
                 if (holiday != null)
                   Card(
                     color: Theme.of(context).colorScheme.secondaryContainer,
@@ -136,31 +94,29 @@ class _ParentTimetableScreenState extends ConsumerState<ParentTimetableScreen> {
                     ),
                   )
                 else if (sessions.isEmpty)
-                  const Card(
-                    child: ListTile(
-                      leading: Icon(Icons.event_busy_outlined),
-                      title: Text('No classes scheduled'),
-                      subtitle:
-                          Text('There is no timetable entry for this day.'),
+                  const TimetableEmptyCard(
+                      message: 'No classes scheduled for this day.')
+                else ...[
+                  Text(
+                    '${sessions.length} session${sessions.length == 1 ? '' : 's'}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: TmsSpace.sm),
+                  for (final session in sessions) ...[
+                    TimetableSessionCard(
+                      startTime: session.time,
+                      endTime: session.endTime,
+                      subject: session.subject,
+                      primaryDetail: session.teacher,
+                      secondaryDetail: session.room,
+                      footer: Text(session.type,
+                          style: const TextStyle(
+                              color: kColorPrimary,
+                              fontWeight: FontWeight.w600)),
                     ),
-                  )
-                else
-                  for (final session in sessions)
-                    Card(
-                      child: ListTile(
-                        leading: SizedBox(
-                          width: 58,
-                          child: Text(session.time,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w800)),
-                        ),
-                        title: Text(session.subject),
-                        subtitle: Text(
-                            '${session.teacher}\n${session.room} · ${session.time}–${session.endTime}'),
-                        isThreeLine: true,
-                        trailing: const Icon(Icons.school_outlined),
-                      ),
-                    ),
+                    const SizedBox(height: TmsSpace.sm),
+                  ],
+                ],
               ],
             );
           },

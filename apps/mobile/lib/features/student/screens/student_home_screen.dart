@@ -10,6 +10,7 @@ import '../viewmodels/student_home_viewmodel.dart';
 import '../widgets/student_scaffold.dart';
 import '../widgets/nepal_date_time.dart';
 import '../../../shared/widgets/academic_calendar.dart';
+import '../../../shared/widgets/today_timetable_tile.dart';
 
 List<PortalEvent> _upcomingEvents(StudentPortal portal) {
   final now = DateTime.now();
@@ -329,10 +330,22 @@ class StudentHomeScreen extends ConsumerWidget {
             ),
           )
         else
-          for (final session in portal.todaySessions.take(2)) ...[
-            _SessionTile(session: session),
-            const SizedBox(height: TmsSpace.sm),
-          ],
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: TmsSpace.md),
+              child: Column(
+                children: [
+                  for (final session in portal.todaySessions.take(4))
+                    TodayTimetableTile(
+                      startTime: session.time,
+                      endTime: session.endTime,
+                      subject: session.subject,
+                      details: '${session.teacher} · ${session.room}',
+                    ),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -838,73 +851,6 @@ class _SectionHeader extends StatelessWidget {
         ),
         TextButton(onPressed: onTap, child: Text(action)),
       ],
-    );
-  }
-}
-
-class _SessionTile extends StatelessWidget {
-  const _SessionTile({required this.session});
-
-  final PortalSession session;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(TmsSpace.md),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 64,
-              child: Column(
-                children: [
-                  Text(
-                    session.time,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(color: StudentColors.primaryDark),
-                    textAlign: TextAlign.center,
-                  ),
-                  Text(
-                    session.endTime,
-                    style: Theme.of(context).textTheme.bodySmall,
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              width: 3,
-              height: 48,
-              margin: const EdgeInsets.symmetric(horizontal: TmsSpace.sm),
-              decoration: BoxDecoration(
-                color: StudentColors.primary,
-                borderRadius: BorderRadius.circular(TmsRadius.pill),
-              ),
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(session.subject,
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: TmsSpace.xxs),
-                  Text(
-                    '${session.teacher} · ${session.room}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-            StudentStatusPill(
-              label: session.typeLabel,
-              icon: Icons.school_outlined,
-              color: StudentColors.info,
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

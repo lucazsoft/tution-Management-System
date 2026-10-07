@@ -21,7 +21,7 @@ class UnsupportedRoleScreen extends ConsumerWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Icon(
+                const Icon(
                   Icons.block_outlined,
                   size: 96,
                   color: kColorWarning,

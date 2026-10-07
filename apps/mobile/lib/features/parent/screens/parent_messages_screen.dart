@@ -54,6 +54,65 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
     }
   }
 
+  Future<void> _startNewChat(List<ParentContact> contacts) async {
+    var query = '';
+    final selected = await showModalBottomSheet<ParentContact>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final filtered = contacts.where((contact) {
+            final value = '${contact.name} ${contact.subject}'.toLowerCase();
+            return value.contains(query.toLowerCase());
+          }).toList();
+          return SafeArea(
+            child: SizedBox(
+              height: MediaQuery.sizeOf(context).height * .65,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                child: Column(children: [
+                  Text('New chat',
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 12),
+                  TextField(
+                    autofocus: true,
+                    onChanged: (value) => setSheetState(() => query = value),
+                    decoration: const InputDecoration(
+                      hintText: 'Search contacts',
+                      prefixIcon: Icon(Icons.search_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? const Center(child: Text('No contacts found.'))
+                        : ListView.builder(
+                            itemCount: filtered.length,
+                            itemBuilder: (context, index) {
+                              final contact = filtered[index];
+                              return ListTile(
+                                leading: ChatAvatar(name: contact.name),
+                                title: Text(contact.name),
+                                subtitle: Text(contact.subject),
+                                onTap: () =>
+                                    Navigator.pop(sheetContext, contact),
+                              );
+                            },
+                          ),
+                  ),
+                ]),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    if (selected != null && mounted) {
+      setState(() => _contactId = selected.id);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         drawer: ParentNavigation.drawer(context),
@@ -170,8 +229,17 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
           padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Authorized contacts',
-                style: Theme.of(context).textTheme.titleLarge),
+            Row(children: [
+              Expanded(
+                child: Text('Recent chats',
+                    style: Theme.of(context).textTheme.titleLarge),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: () => _startNewChat(contacts),
+                icon: const Icon(Icons.edit_rounded, size: 18),
+                label: const Text('New chat'),
+              ),
+            ]),
             const SizedBox(height: 10),
             TextField(
               controller: _search,
@@ -260,11 +328,6 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
                 ],
               ),
             ),
-            IconButton(
-              tooltip: 'Conversation details',
-              onPressed: () => _showDetails(child, contact),
-              icon: const Icon(Icons.info_outline_rounded),
-            ),
           ]),
         ),
         Expanded(
@@ -300,35 +363,6 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
           onSend: () => _send(child, contact),
         ),
       ]),
-    );
-  }
-
-  void _showDetails(ParentChild child, ParentContact contact) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 4, 24, 28),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            ChatAvatar(name: contact.name, size: 68),
-            const SizedBox(height: 10),
-            Text(contact.name, style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 4),
-            Text('${contact.subject} - ${child.name}',
-                style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 18),
-            const Row(children: [
-              Icon(Icons.lock_outline_rounded, size: 19),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                    'This private conversation is limited to authorized school contacts.'),
-              ),
-            ]),
-          ]),
-        ),
-      ),
     );
   }
 

@@ -912,10 +912,12 @@ void main() {
       _FakeParentPortalRepository(),
     );
 
-    expect(find.text('Authorized contacts'), findsOneWidget);
+    expect(find.text('Recent chats'), findsOneWidget);
+    expect(find.text('New chat'), findsOneWidget);
+    expect(find.byIcon(Icons.search_rounded), findsOneWidget);
     expect(find.text('Teacher API'), findsWidgets);
     expect(find.text('Branch Support'), findsOneWidget);
-    expect(find.text('API message about your child'), findsOneWidget);
+    expect(find.text('API message about your child'), findsWidgets);
     expect(find.text('Message about API Child One'), findsOneWidget);
   });
 
