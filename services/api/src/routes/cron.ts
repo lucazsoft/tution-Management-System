@@ -11,6 +11,7 @@ import { reconcilePendingConnectIps } from '../utils/connectips';
 import { generateDailyTeacherSessions } from '../services/timetable-service';
 import { markOverdueInvoices } from '../services/billing-access';
 import { recoverAdmissionDeliveries } from '../services/admission-delivery';
+import { runAutoCheckout } from '../services/auto-checkout';
 import { runBranchExpenseAnomalyAlerts } from '../services/financial-anomaly-alerts';
 import { executeDueSocialPosts, MissingCredentialsAdapter } from '../services/social-publishing';
 import { prismaSocialPublishingRepository } from '../services/social-publishing-store';
@@ -109,6 +110,9 @@ router.post(
       } else if (taskName === 'daily-teacher-sessions') {
         const result = await generateDailyTeacherSessions({ tenantId: req.tenantId! });
         logs.push(`Generated ${result.created} teacher session(s) for ${result.day}; ${result.eligible} scheduled class(es) were eligible.`);
+      } else if (taskName === 'auto-checkout-teachers') {
+        const result = await runAutoCheckout({ tenantId: req.tenantId! });
+        logs.push(`Auto-checkout for ${result.day}: examined ${result.examined} teacher(s); closed ${result.closed} open day(s).`);
       } else if (taskName === 'financial-anomaly-alerts') {
         financialAnomalyAlerts = await runBranchExpenseAnomalyAlerts({ tenantId: req.tenantId! });
         const anomalyLabel = financialAnomalyAlerts.anomalies.length === 1 ? 'anomaly' : 'anomalies';
