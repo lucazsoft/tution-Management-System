@@ -108,6 +108,7 @@ enum AppointmentStatus {
   ALTERNATIVE_PROPOSED
   CONFIRMED
   CANCELLED
+  COMPLETED
 }
 
 enum PerformanceSignal {

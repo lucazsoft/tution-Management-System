@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tms_mobile/shared/widgets/meeting_schedule_fields.dart';
 
 import '../models/parent_portal.dart';
 import '../viewmodels/parent_portal_viewmodel.dart';
@@ -26,38 +27,6 @@ class _ParentAppointmentsScreenState
   void dispose() {
     _remarks.dispose();
     super.dispose();
-  }
-
-  Future<void> _chooseDateTime(int minimumHours) async {
-    final minimum = DateTime.now().add(Duration(hours: minimumHours));
-    final date = await showDatePicker(
-        context: context,
-        firstDate: DateTime(minimum.year, minimum.month, minimum.day),
-        lastDate: minimum.add(const Duration(days: 365)),
-        initialDate: minimum);
-    if (date == null || !mounted) return;
-    final time = await showTimePicker(
-        context: context, initialTime: TimeOfDay.fromDateTime(minimum));
-    if (time != null) {
-      final selected =
-          DateTime(date.year, date.month, date.day, time.hour, time.minute);
-      if (selected.isBefore(minimum)) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Choose a time at least $minimumHours hours from now.',
-              ),
-            ),
-          );
-        }
-        return;
-      }
-      setState(() {
-        _scheduled = selected;
-        _formError = null;
-      });
-    }
   }
 
   Future<void> _respond(String appointmentId, String action) async {
@@ -150,83 +119,27 @@ class _ParentAppointmentsScreenState
 
   Future<void> _editAppointment(
       ParentAppointmentItem item, int minimumHours) async {
-    var scheduled = item.scheduledAt?.toLocal() ??
+    final scheduled = item.scheduledAt?.toLocal() ??
         DateTime.now().add(Duration(hours: minimumHours));
-    final reason = TextEditingController(text: item.subject);
-    final formKey = GlobalKey<FormState>();
-    final saved = await showModalBottomSheet<bool>(
+    final edit = await showModalBottomSheet<_ParentMeetingEdit>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) => Padding(
-          padding: EdgeInsets.fromLTRB(
-              20, 0, 20, MediaQuery.viewInsetsOf(context).bottom + 20),
-          child: Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('Edit meeting request',
-                      style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 16),
-                  InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'Meeting with',
-                      prefixIcon: Icon(Icons.person_outline_rounded),
-                    ),
-                    child: Text(item.teacher),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      final next = await _pickDateTime(scheduled, minimumHours,
-                          pickerContext: sheetContext);
-                      if (next != null) {
-                        setSheetState(() => scheduled = next);
-                      }
-                    },
-                    icon: const Icon(Icons.calendar_month_rounded),
-                    label: Text(_dateTimeLabel(scheduled)),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: reason,
-                    maxLength: 2000,
-                    minLines: 3,
-                    maxLines: 5,
-                    decoration:
-                        const InputDecoration(labelText: 'Reason for meeting'),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Enter the reason for this meeting.'
-                        : null,
-                  ),
-                  FilledButton.icon(
-                    onPressed: () {
-                      if (formKey.currentState!.validate()) {
-                        Navigator.pop(sheetContext, true);
-                      }
-                    },
-                    icon: const Icon(Icons.save_outlined),
-                    label: const Text('Save changes'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+      useSafeArea: true,
+      builder: (_) => _ParentMeetingEditSheet(
+        teacher: item.teacher,
+        initialScheduled: scheduled,
+        initialReason: item.subject,
+        earliest: DateTime.now().add(Duration(hours: minimumHours)),
       ),
     );
-    final note = reason.text;
-    reason.dispose();
-    if (saved != true || !mounted) return;
+    if (edit == null || !mounted) return;
     setState(() => _sending = true);
     try {
       await ref.read(parentPortalRepositoryProvider).updateAppointment(
             appointmentId: item.id,
-            scheduledTime: scheduled,
-            remarks: note,
+            scheduledTime: edit.scheduled,
+            remarks: edit.reason,
           );
       await ref.read(parentPortalProvider.notifier).refresh();
     } catch (error) {
@@ -238,35 +151,6 @@ class _ParentAppointmentsScreenState
     } finally {
       if (mounted) setState(() => _sending = false);
     }
-  }
-
-  Future<DateTime?> _pickDateTime(DateTime initial, int minimumHours,
-      {BuildContext? pickerContext}) async {
-    final host = pickerContext ?? context;
-    final minimum = DateTime.now().add(Duration(hours: minimumHours));
-    final safeInitial = initial.isBefore(minimum) ? minimum : initial;
-    final date = await showDatePicker(
-      context: host,
-      firstDate: DateTime(minimum.year, minimum.month, minimum.day),
-      lastDate: minimum.add(const Duration(days: 365)),
-      initialDate: safeInitial,
-    );
-    if (date == null || !host.mounted) return null;
-    final time = await showTimePicker(
-      context: host,
-      initialTime: TimeOfDay.fromDateTime(safeInitial),
-    );
-    if (time == null) return null;
-    final result =
-        DateTime(date.year, date.month, date.day, time.hour, time.minute);
-    if (result.isBefore(minimum)) return null;
-    return result;
-  }
-
-  String _dateTimeLabel(DateTime value) {
-    final local = value.toLocal();
-    final minute = local.minute.toString().padLeft(2, '0');
-    return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}  ${local.hour.toString().padLeft(2, '0')}:$minute';
   }
 
   Future<void> _cancelAppointment(ParentAppointmentItem item) async {
@@ -347,6 +231,9 @@ class _ParentAppointmentsScreenState
               final selectedId = contacts.any((item) => item.id == _contactId)
                   ? _contactId
                   : (contacts.isEmpty ? null : contacts.first.id);
+              final selectedContact = selectedId == null
+                  ? null
+                  : contacts.firstWhere((item) => item.id == selectedId);
               return ListView(padding: const EdgeInsets.all(16), children: [
                 if (!_showHistory) ...[
                   Card(
@@ -439,8 +326,9 @@ class _ParentAppointmentsScreenState
                                       ? null
                                       : () => _editAppointment(
                                           item, portal.bookingWindowHours),
-                                  icon: const Icon(Icons.edit_outlined),
-                                  label: const Text('Edit request'),
+                                  icon:
+                                      const Icon(Icons.edit_calendar_outlined),
+                                  label: const Text('Reschedule'),
                                 ),
                                 OutlinedButton.icon(
                                   onPressed: _sending
@@ -452,7 +340,7 @@ class _ParentAppointmentsScreenState
                               ],
                             ),
                           ),
-                        if (!['requested', 'rejected', 'cancelled']
+                        if (!['requested', 'rejected', 'cancelled', 'completed']
                             .contains(item.state.toLowerCase()))
                           Padding(
                             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -494,112 +382,299 @@ class _ParentAppointmentsScreenState
                       ),
                     ),
                   if (contacts.isNotEmpty) ...[
-                    DropdownButtonFormField<String>(
-                      initialValue: selectedId,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Meeting with',
-                        prefixIcon: Icon(Icons.person_outline_rounded),
-                      ),
-                      items: [
-                        for (final contact in contacts)
-                          DropdownMenuItem(
-                            value: contact.id,
-                            child: Text('${contact.name} - ${contact.subject}',
-                                overflow: TextOverflow.ellipsis),
-                          ),
-                      ],
-                      onChanged: _sending
+                    InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: _sending
                           ? null
-                          : (value) => setState(() => _contactId = value),
+                          : () async {
+                              final contactId =
+                                  await showModalBottomSheet<String>(
+                                context: context,
+                                isScrollControlled: true,
+                                showDragHandle: true,
+                                useSafeArea: true,
+                                builder: (_) => _MeetingContactPicker(
+                                  contacts: contacts,
+                                  selectedId: selectedId,
+                                ),
+                              );
+                              if (contactId != null && mounted) {
+                                setState(() => _contactId = contactId);
+                              }
+                            },
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: 'Meeting with',
+                          prefixIcon: Icon(Icons.person_outline_rounded),
+                          suffixIcon: Icon(Icons.search_rounded),
+                        ),
+                        child: Text(
+                          '${selectedContact!.name} - ${selectedContact.subject}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ),
                   ],
                   const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: OutlinedButton.icon(
-                        onPressed: () =>
-                            _chooseDateTime(portal.bookingWindowHours),
-                        icon: const Icon(Icons.schedule_rounded, size: 18),
-                        label: Text(_scheduled == null
-                            ? 'Select date & time'
-                            : _dateTimeLabel(_scheduled!))),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                      controller: _remarks,
-                      onChanged: (_) {
-                        if (_formError != null) {
-                          setState(() => _formError = null);
-                        }
-                      },
-                      maxLength: 2000,
-                      minLines: 3,
-                      maxLines: 5,
-                      decoration: const InputDecoration(
-                          labelText: 'Reason for meeting')),
-                  if (_formError != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        _formError!,
-                        style: TextStyle(
-                            color: Theme.of(context).colorScheme.error),
-                      ),
-                    ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      onPressed: selectedId == null ||
-                              _scheduled == null ||
-                              _sending
-                          ? null
-                          : () async {
-                              if (_remarks.text.trim().isEmpty) {
-                                setState(() => _formError =
-                                    'Enter the reason for this meeting.');
-                                return;
+                  MeetingScheduleFields(
+                    reasonController: _remarks,
+                    scheduled: _scheduled,
+                    earliest: DateTime.now()
+                        .add(Duration(hours: portal.bookingWindowHours)),
+                    onScheduledChanged: (value) => setState(() {
+                      _scheduled = value;
+                      _formError = null;
+                    }),
+                    actionLabel: 'Book',
+                    busy: _sending,
+                    reasonError: _formError,
+                    onReasonChanged: (_) {
+                      if (_formError != null) {
+                        setState(() => _formError = null);
+                      }
+                    },
+                    onAction: selectedId == null || _scheduled == null
+                        ? null
+                        : () async {
+                            if (_remarks.text.trim().isEmpty) {
+                              setState(() => _formError =
+                                  'Enter the reason for this meeting.');
+                              return;
+                            }
+                            final contact = contacts
+                                .firstWhere((item) => item.id == selectedId);
+                            setState(() => _sending = true);
+                            try {
+                              await ref
+                                  .read(parentPortalRepositoryProvider)
+                                  .requestAppointment(
+                                      child: child,
+                                      contact: contact,
+                                      scheduledTime: _scheduled!,
+                                      remarks: _remarks.text);
+                              _remarks.clear();
+                              setState(() => _scheduled = null);
+                              await ref
+                                  .read(parentPortalProvider.notifier)
+                                  .refresh();
+                            } catch (error) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(this.context).showSnackBar(
+                                  SnackBar(
+                                      content: Text(
+                                          'Could not request appointment: $error')),
+                                );
                               }
-                              final contact = contacts
-                                  .firstWhere((item) => item.id == selectedId);
-                              setState(() => _sending = true);
-                              try {
-                                await ref
-                                    .read(parentPortalRepositoryProvider)
-                                    .requestAppointment(
-                                        child: child,
-                                        contact: contact,
-                                        scheduledTime: _scheduled!,
-                                        remarks: _remarks.text);
-                                _remarks.clear();
-                                setState(() => _scheduled = null);
-                                await ref
-                                    .read(parentPortalProvider.notifier)
-                                    .refresh();
-                              } catch (error) {
-                                if (mounted) {
-                                  ScaffoldMessenger.of(this.context)
-                                      .showSnackBar(
-                                    SnackBar(
-                                        content: Text(
-                                            'Could not request appointment: $error')),
-                                  );
-                                }
-                              } finally {
-                                if (mounted) setState(() => _sending = false);
-                              }
-                            },
-                      child: Text(_sending ? 'Booking…' : 'Book'),
-                    ),
+                            } finally {
+                              if (mounted) setState(() => _sending = false);
+                            }
+                          },
                   ),
                 ],
               ]);
             }),
+      );
+}
+
+class _ParentMeetingEdit {
+  const _ParentMeetingEdit({required this.scheduled, required this.reason});
+  final DateTime scheduled;
+  final String reason;
+}
+
+class _MeetingContactPicker extends StatefulWidget {
+  const _MeetingContactPicker({
+    required this.contacts,
+    required this.selectedId,
+  });
+
+  final List<ParentContact> contacts;
+  final String? selectedId;
+
+  @override
+  State<_MeetingContactPicker> createState() => _MeetingContactPickerState();
+}
+
+class _MeetingContactPickerState extends State<_MeetingContactPicker> {
+  final _search = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final query = _query.trim().toLowerCase();
+    final matches = widget.contacts.where((contact) {
+      if (query.isEmpty) return true;
+      return '${contact.name} ${contact.subject} ${contact.role}'
+          .toLowerCase()
+          .contains(query);
+    }).toList();
+    return FractionallySizedBox(
+      heightFactor: .72,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          0,
+          16,
+          MediaQuery.viewInsetsOf(context).bottom + 16,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Select a person',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _search,
+              autofocus: true,
+              onChanged: (value) => setState(() => _query = value),
+              decoration: InputDecoration(
+                labelText: 'Search by name, subject, or role',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: _query.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Clear search',
+                        onPressed: () {
+                          _search.clear();
+                          setState(() => _query = '');
+                        },
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: matches.isEmpty
+                  ? const Center(child: Text('No matching people found.'))
+                  : ListView.separated(
+                      itemCount: matches.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final contact = matches[index];
+                        final selected = contact.id == widget.selectedId;
+                        return ListTile(
+                          selected: selected,
+                          leading: CircleAvatar(
+                            child: Text(contact.initials.isEmpty
+                                ? (contact.name.isEmpty
+                                    ? '?'
+                                    : contact.name
+                                        .substring(0, 1)
+                                        .toUpperCase())
+                                : contact.initials),
+                          ),
+                          title: Text(contact.name),
+                          subtitle:
+                              Text('${contact.subject} · ${contact.role}'),
+                          trailing: selected
+                              ? const Icon(Icons.check_circle_rounded)
+                              : null,
+                          onTap: () => Navigator.pop(context, contact.id),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ParentMeetingEditSheet extends StatefulWidget {
+  const _ParentMeetingEditSheet({
+    required this.teacher,
+    required this.initialScheduled,
+    required this.initialReason,
+    required this.earliest,
+  });
+
+  final String teacher;
+  final DateTime initialScheduled;
+  final String initialReason;
+  final DateTime earliest;
+
+  @override
+  State<_ParentMeetingEditSheet> createState() =>
+      _ParentMeetingEditSheetState();
+}
+
+class _ParentMeetingEditSheetState extends State<_ParentMeetingEditSheet> {
+  late final TextEditingController _reason;
+  late DateTime _scheduled;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _reason = TextEditingController(text: widget.initialReason);
+    _scheduled = widget.initialScheduled.isBefore(widget.earliest)
+        ? widget.earliest
+        : widget.initialScheduled;
+  }
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    if (_reason.text.trim().isEmpty) {
+      setState(() => _error = 'Enter the reason for this meeting.');
+      return;
+    }
+    Navigator.pop(
+      context,
+      _ParentMeetingEdit(
+        scheduled: _scheduled,
+        reason: _reason.text.trim(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          0,
+          20,
+          MediaQuery.viewInsetsOf(context).bottom + 20,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Edit meeting request',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
+            InputDecorator(
+              decoration: const InputDecoration(
+                labelText: 'Meeting with',
+                prefixIcon: Icon(Icons.person_outline_rounded),
+              ),
+              child: Text(widget.teacher),
+            ),
+            const SizedBox(height: 12),
+            MeetingScheduleFields(
+              reasonController: _reason,
+              scheduled: _scheduled,
+              earliest: widget.earliest,
+              onScheduledChanged: (value) => setState(() => _scheduled = value),
+              actionLabel: 'Save',
+              onAction: _save,
+              reasonError: _error,
+              onReasonChanged: (_) {
+                if (_error != null) setState(() => _error = null);
+              },
+            ),
+          ],
+        ),
       );
 }
 

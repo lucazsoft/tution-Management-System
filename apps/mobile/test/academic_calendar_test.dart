@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nepali_utils/nepali_utils.dart';
 import 'package:tms_mobile/shared/widgets/academic_calendar.dart';
+import 'package:tms_mobile/shared/widgets/meeting_schedule_fields.dart';
 
 void main() {
   test('calendar grid fills boundary cells with adjacent Nepali dates', () {
@@ -139,5 +140,29 @@ void main() {
     expect(find.text('School ceremony'), findsOneWidget);
     expect(find.textContaining('${eventBs.year} BS'), findsWidgets);
     expect(find.textContaining('October 9, 2026'), findsNothing);
+  });
+
+  testWidgets('meeting calendar selects a Bikram Sambat day', (tester) async {
+    final firstDate = DateTime(2026, 10, 8);
+    final selectedDate = firstDate.add(const Duration(days: 1));
+    DateTime? picked;
+    final targetBs = selectedDate.toNepaliDateTime();
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: NepaliMeetingCalendar(
+          selectedDate: firstDate,
+          firstDate: firstDate,
+          lastDate: firstDate.add(const Duration(days: 365)),
+          onDateSelected: (value) => picked = value,
+        ),
+      ),
+    ));
+
+    expect(find.textContaining('BS'), findsOneWidget);
+    await tester.tap(find.byKey(ValueKey(
+      'meeting-bs-${targetBs.year}-${targetBs.month}-${targetBs.day}',
+    )));
+    expect(picked, selectedDate);
   });
 }

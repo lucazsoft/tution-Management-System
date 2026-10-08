@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_navigation.dart';
+import 'package:tms_mobile/shared/widgets/meeting_schedule_fields.dart';
 
 class TeacherMeetingsScreen extends StatefulWidget {
   const TeacherMeetingsScreen({super.key});
@@ -85,104 +86,28 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
 
   Future<void> _editMeeting(Map<String, dynamic> item) async {
     final id = '${item['id'] ?? ''}';
-    var scheduled = DateTime.tryParse(
+    final scheduled = DateTime.tryParse(
                 '${item['alternativeTime'] ?? item['scheduledTime'] ?? ''}')
             ?.toLocal() ??
         DateTime.now().add(const Duration(days: 1));
-    final note = TextEditingController(
-      text: '${item['responseRemarks'] ?? item['remarks'] ?? ''}',
-    );
-    final formKey = GlobalKey<FormState>();
-    final saved = await showModalBottomSheet<bool>(
+    final edit = await showModalBottomSheet<_MeetingEditResult>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) => Padding(
-          padding: EdgeInsets.fromLTRB(
-              20, 0, 20, MediaQuery.viewInsetsOf(context).bottom + 20),
-          child: Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('Edit meeting',
-                      style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 16),
-                  InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'Student',
-                      prefixIcon: Icon(Icons.school_outlined),
-                    ),
-                    child: Text(_studentName(item)),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      final earliest =
-                          DateTime.now().add(const Duration(hours: 1));
-                      final day = await showDatePicker(
-                        context: sheetContext,
-                        firstDate: DateTime(
-                            earliest.year, earliest.month, earliest.day),
-                        lastDate: earliest.add(const Duration(days: 365)),
-                        initialDate:
-                            scheduled.isBefore(earliest) ? earliest : scheduled,
-                      );
-                      if (day == null || !sheetContext.mounted) return;
-                      final clock = await showTimePicker(
-                        context: sheetContext,
-                        initialTime: TimeOfDay.fromDateTime(scheduled),
-                      );
-                      if (clock != null) {
-                        setSheetState(() => scheduled = DateTime(day.year,
-                            day.month, day.day, clock.hour, clock.minute));
-                      }
-                    },
-                    icon: const Icon(Icons.calendar_month_rounded),
-                    label: Text(_dateTimeLabel(scheduled)),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: note,
-                    minLines: 3,
-                    maxLines: 5,
-                    maxLength: 5000,
-                    decoration: const InputDecoration(
-                      labelText: 'Message to parent',
-                      hintText: 'Add context for the updated meeting',
-                    ),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Add a message for the parent.'
-                        : null,
-                  ),
-                  FilledButton.icon(
-                    onPressed: () {
-                      if (scheduled.isAfter(DateTime.now()) &&
-                          formKey.currentState!.validate()) {
-                        Navigator.pop(sheetContext, true);
-                      }
-                    },
-                    icon: const Icon(Icons.save_outlined),
-                    label: const Text('Save and notify parent'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+      useSafeArea: true,
+      builder: (_) => _MeetingEditSheet(
+        studentName: _studentName(item),
+        initialScheduled: scheduled,
+        initialRemarks: '${item['responseRemarks'] ?? item['remarks'] ?? ''}',
       ),
     );
-    final remarks = note.text;
-    note.dispose();
-    if (saved != true || !mounted) return;
+    if (edit == null || !mounted) return;
     setState(() => _busyId = id);
     try {
       await ApiClient.instance.dio
           .patch<dynamic>('/api/appointments/$id', data: {
-        'scheduledTime': scheduled.toUtc().toIso8601String(),
-        'remarks': remarks.trim(),
+        'scheduledTime': edit.scheduled.toUtc().toIso8601String(),
+        'remarks': edit.remarks,
       });
       await _load();
       if (mounted) {
@@ -245,17 +170,56 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
     }
   }
 
+  Future<void> _completeMeeting(Map<String, dynamic> item) async {
+    final id = '${item['id'] ?? ''}';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Complete this meeting?'),
+        content: const Text(
+          'This will mark the meeting as completed for both the teacher and parent.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Not yet'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.task_alt_rounded),
+            label: const Text('Meeting completed'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _busyId = id);
+    try {
+      await ApiClient.instance.dio
+          .post<dynamic>('/api/appointments/complete/$id');
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Meeting completed. The parent was notified.'),
+        ));
+      }
+    } on DioException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message ?? 'Update failed.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busyId = null);
+    }
+  }
+
   String _studentName(Map<String, dynamic> item) {
     final student =
         item['student'] is Map ? item['student']['user'] as Map? : null;
     return student == null
         ? 'Student'
         : '${student['firstName'] ?? ''} ${student['lastName'] ?? ''}'.trim();
-  }
-
-  String _dateTimeLabel(DateTime value) {
-    final minute = value.minute.toString().padLeft(2, '0');
-    return '${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}  ${value.hour.toString().padLeft(2, '0')}:$minute';
   }
 
   @override
@@ -310,7 +274,8 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
         status == 'ALTERNATIVE_PROPOSED' && proposalFrom == 'PARENT';
     final teacherProposed =
         status == 'ALTERNATIVE_PROPOSED' && proposalFrom == 'TEACHER';
-    final active = !['REJECTED', 'CANCELLED'].contains(status);
+    final completable = ['APPROVED', 'CONFIRMED'].contains(status);
+    final active = !['REJECTED', 'CANCELLED', 'COMPLETED'].contains(status);
     final time = DateTime.tryParse('${item['scheduledTime'] ?? ''}')?.toLocal();
     final alternative =
         DateTime.tryParse('${item['alternativeTime'] ?? ''}')?.toLocal();
@@ -375,22 +340,133 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
         if (active)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-              if (!requested && !parentProposed && !teacherProposed)
-                OutlinedButton.icon(
-                  onPressed: _busyId == id ? null : () => _editMeeting(item),
-                  icon: const Icon(Icons.edit_calendar_outlined),
-                  label: const Text('Reschedule'),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.end,
+              children: [
+                if (!requested && !parentProposed && !teacherProposed)
+                  OutlinedButton.icon(
+                    onPressed: _busyId == id ? null : () => _editMeeting(item),
+                    icon: const Icon(Icons.edit_calendar_outlined),
+                    label: const Text('Reschedule'),
+                  ),
+                TextButton.icon(
+                  onPressed: _busyId == id ? null : () => _cancelMeeting(item),
+                  icon: const Icon(Icons.cancel_outlined),
+                  label: const Text('Cancel meeting'),
                 ),
-              const SizedBox(width: 8),
-              TextButton.icon(
-                onPressed: _busyId == id ? null : () => _cancelMeeting(item),
-                icon: const Icon(Icons.cancel_outlined),
-                label: const Text('Cancel meeting'),
-              ),
-            ]),
+                if (completable)
+                  FilledButton.icon(
+                    onPressed:
+                        _busyId == id ? null : () => _completeMeeting(item),
+                    icon: const Icon(Icons.task_alt_rounded),
+                    label: const Text('Meeting completed'),
+                  ),
+              ],
+            ),
           ),
       ]),
     );
   }
+}
+
+class _MeetingEditResult {
+  const _MeetingEditResult({required this.scheduled, required this.remarks});
+
+  final DateTime scheduled;
+  final String remarks;
+}
+
+class _MeetingEditSheet extends StatefulWidget {
+  const _MeetingEditSheet({
+    required this.studentName,
+    required this.initialScheduled,
+    required this.initialRemarks,
+  });
+
+  final String studentName;
+  final DateTime initialScheduled;
+  final String initialRemarks;
+
+  @override
+  State<_MeetingEditSheet> createState() => _MeetingEditSheetState();
+}
+
+class _MeetingEditSheetState extends State<_MeetingEditSheet> {
+  late final TextEditingController _remarks;
+  late DateTime _scheduled;
+  late final DateTime _earliest;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _earliest = DateTime.now().add(const Duration(hours: 1));
+    _scheduled = widget.initialScheduled.isBefore(_earliest)
+        ? _earliest
+        : widget.initialScheduled;
+    _remarks = TextEditingController(text: widget.initialRemarks);
+  }
+
+  @override
+  void dispose() {
+    _remarks.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    if (_remarks.text.trim().isEmpty) {
+      setState(() => _error = 'Add a message for the parent.');
+      return;
+    }
+    Navigator.pop(
+      context,
+      _MeetingEditResult(
+        scheduled: _scheduled,
+        remarks: _remarks.text.trim(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          0,
+          20,
+          MediaQuery.viewInsetsOf(context).bottom + 20,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Edit meeting',
+                  style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Student',
+                  prefixIcon: Icon(Icons.school_outlined),
+                ),
+                child: Text(widget.studentName),
+              ),
+              const SizedBox(height: 12),
+              MeetingScheduleFields(
+                reasonController: _remarks,
+                scheduled: _scheduled,
+                earliest: _earliest,
+                onScheduledChanged: (value) =>
+                    setState(() => _scheduled = value),
+                actionLabel: 'Save',
+                onAction: _save,
+                reasonError: _error,
+                onReasonChanged: (_) {
+                  if (_error != null) setState(() => _error = null);
+                },
+              ),
+            ],
+          ),
+        ),
+      );
 }

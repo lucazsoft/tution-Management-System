@@ -3,6 +3,23 @@ import 'package:nepali_utils/nepali_utils.dart';
 
 import '../../core/theme/app_theme.dart';
 
+const academicNepaliMonths = <String>[
+  'वैशाख',
+  'जेठ',
+  'असार',
+  'साउन',
+  'भदौ',
+  'असोज',
+  'कात्तिक',
+  'मंसिर',
+  'पुस',
+  'माघ',
+  'फागुन',
+  'चैत',
+];
+
+const academicNepaliWeekdays = <String>['आ', 'सो', 'मं', 'बु', 'बि', 'शु', 'श'];
+
 class AcademicCalendarEvent {
   const AcademicCalendarEvent({
     required this.id,
@@ -91,7 +108,6 @@ DateTime? parsePortalEventDate(String value) {
       int.parse(match.group(3)!), month, int.parse(match.group(1)!));
 }
 
-@visibleForTesting
 List<DateTime> nepaliMonthGrid(DateTime anchor) {
   final anchorBs = anchor.toNepaliDateTime();
   final month = NepaliDateTime(anchorBs.year, anchorBs.month);
@@ -107,7 +123,6 @@ List<DateTime> nepaliMonthGrid(DateTime anchor) {
   );
 }
 
-@visibleForTesting
 DateTime shiftNepaliMonth(DateTime anchor, int offset) {
   final current = anchor.toNepaliDateTime();
   final absoluteMonth = current.year * 12 + current.month - 1 + offset;
@@ -151,22 +166,6 @@ class AcademicCalendar extends StatefulWidget {
 class _AcademicCalendarState extends State<AcademicCalendar> {
   late DateTime _selected;
   late DateTime _monthAnchor;
-
-  static const _bsMonths = <String>[
-    'वैशाख',
-    'जेठ',
-    'असार',
-    'साउन',
-    'भदौ',
-    'असोज',
-    'कात्तिक',
-    'मंसिर',
-    'पुस',
-    'माघ',
-    'फागुन',
-    'चैत',
-  ];
-  static const _weekdays = <String>['आ', 'सो', 'मं', 'बु', 'बि', 'शु', 'श'];
 
   @override
   void initState() {
@@ -236,7 +235,8 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                   final heading = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${_bsMonths[firstBs.month - 1]} ${firstBs.year} BS',
+                      Text(
+                          '${academicNepaliMonths[firstBs.month - 1]} ${firstBs.year} BS',
                           style: Theme.of(context).textTheme.titleLarge),
                       if (widget.showGregorianDates)
                         Text(
@@ -285,7 +285,7 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                   for (var i = 0; i < 7; i++)
                     Expanded(
                         child: Center(
-                            child: Text(_weekdays[i],
+                            child: Text(academicNepaliWeekdays[i],
                                 style: TextStyle(
                                     fontWeight: FontWeight.w700,
                                     color: i == 6
@@ -320,7 +320,7 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                       selected: selected,
                       label: widget.showGregorianDates
                           ? '${day.day} ${_englishMonth(day.month)}, ${events.length} events, ${attendance.length} attendance records'
-                          : '${_bsMonths[bs.month - 1]} ${bs.day}, ${bs.year} BS, ${events.length} events, ${attendance.length} attendance records',
+                          : '${academicNepaliMonths[bs.month - 1]} ${bs.day}, ${bs.year} BS, ${events.length} events, ${attendance.length} attendance records',
                       child: InkWell(
                         key: ValueKey(
                             'calendar-day-${day.year}-${day.month}-${day.day}'),
@@ -394,7 +394,7 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                 .labelLarge
                 ?.copyWith(color: kColorMutedText)),
         Text(
-            '${_selected.toNepaliDateTime().day} ${_bsMonths[_selected.toNepaliDateTime().month - 1]} ${_selected.toNepaliDateTime().year} BS',
+            '${_selected.toNepaliDateTime().day} ${academicNepaliMonths[_selected.toNepaliDateTime().month - 1]} ${_selected.toNepaliDateTime().year} BS',
             style: Theme.of(context).textTheme.titleLarge),
         Text(
             '${_englishMonth(_selected.month)} ${_selected.day}, ${_selected.year}',
@@ -525,7 +525,7 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
 
   String _nepaliDate(DateTime date) {
     final bs = date.toNepaliDateTime();
-    return '${_bsMonths[bs.month - 1]} ${bs.day}, ${bs.year} BS';
+    return '${academicNepaliMonths[bs.month - 1]} ${bs.day}, ${bs.year} BS';
   }
 }
 

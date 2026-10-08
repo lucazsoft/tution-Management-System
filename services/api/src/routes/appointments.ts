@@ -261,7 +261,7 @@ router.patch('/:appointmentId', authMiddleware, async (req: TenantRequest, res: 
       where: { id: req.params.appointmentId, tenantId: req.tenantId! },
     });
     if (!appointment) return res.status(404).json({ error: 'Appointment not found.' });
-    if (['REJECTED', 'CANCELLED'].includes(appointment.status)) {
+    if (['REJECTED', 'CANCELLED', 'COMPLETED'].includes(appointment.status)) {
       return res.status(409).json({ error: 'Closed appointments cannot be edited.' });
     }
     const participants = (Array.isArray(appointment.participantIds)
@@ -322,7 +322,7 @@ router.post('/cancel/:appointmentId', authMiddleware, async (req: TenantRequest,
       where: { id: req.params.appointmentId, tenantId: req.tenantId! },
     });
     if (!appointment) return res.status(404).json({ error: 'Appointment not found.' });
-    if (['REJECTED', 'CANCELLED'].includes(appointment.status)) {
+    if (['REJECTED', 'CANCELLED', 'COMPLETED'].includes(appointment.status)) {
       return res.status(409).json({ error: 'This appointment is already closed.' });
     }
     const participants = (Array.isArray(appointment.participantIds)
@@ -352,6 +352,44 @@ router.post('/cancel/:appointmentId', authMiddleware, async (req: TenantRequest,
     return res.json({ message: 'Appointment cancelled.', appointment: updated });
   } catch (error: any) {
     return res.status(500).json({ error: 'Failed to cancel appointment.', details: error.message });
+  }
+});
+
+router.post('/complete/:appointmentId', authMiddleware, async (req: TenantRequest, res: Response) => {
+  try {
+    const appointment = await prisma.appointment.findFirst({
+      where: { id: req.params.appointmentId, tenantId: req.tenantId! },
+    });
+    if (!appointment) return res.status(404).json({ error: 'Appointment not found.' });
+    const participants = (Array.isArray(appointment.participantIds)
+      ? appointment.participantIds
+      : [appointment.teacherId]).filter((id): id is string => typeof id === 'string');
+    if (!participants.includes(req.user!.id)) {
+      return res.status(403).json({ error: 'Only participating staff can complete this meeting.' });
+    }
+    if (!['APPROVED', 'CONFIRMED'].includes(appointment.status)) {
+      return res.status(409).json({ error: 'Only an approved meeting can be marked completed.' });
+    }
+    const updated = await prisma.appointment.update({
+      where: { id: appointment.id },
+      data: {
+        status: 'COMPLETED',
+        alternativeTime: null,
+        proposedById: null,
+        responseRemarks: 'Meeting completed.',
+      },
+    });
+    await notifyAppointmentUsers(
+      req.tenantId!,
+      [appointment.requestedById],
+      'Meeting completed',
+      'The teacher marked your meeting as completed.',
+      '/parent/appointments',
+      appointment.id,
+    );
+    return res.json({ message: 'Meeting marked completed.', appointment: updated });
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Failed to complete meeting.', details: error.message });
   }
 });
 router.get('/branch', authMiddleware, async (req: TenantRequest, res: Response) => {

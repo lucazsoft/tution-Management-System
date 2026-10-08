@@ -33,6 +33,7 @@ const appointmentState = (status: string) => ({
   ALTERNATIVE_PROPOSED: 'Alternative proposed',
   CONFIRMED: 'Confirmed',
   CANCELLED: 'Cancelled',
+  COMPLETED: 'Completed',
 }[status] ?? 'Requested');
 const leaveState = (status: string, reason: string) => reason.startsWith('Emergency Out:')
   ? 'Emergency departure'

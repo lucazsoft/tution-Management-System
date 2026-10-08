@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:nepali_utils/nepali_utils.dart';
 import 'package:tms_mobile/core/providers/feature_flags_provider.dart';
 import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/features/parent/data/parent_portal_repository.dart';
@@ -8,7 +9,9 @@ import 'package:tms_mobile/features/parent/models/parent_portal.dart';
 import 'package:tms_mobile/features/parent/viewmodels/parent_portal_viewmodel.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_navigation.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_portal_state_view.dart';
+import 'package:tms_mobile/features/student/widgets/nepal_date_time.dart';
 import 'package:tms_mobile/shared/models/app_models.dart';
+import 'package:tms_mobile/shared/widgets/academic_calendar.dart';
 import 'package:tms_mobile/shared/widgets/status_chip.dart';
 
 class ParentAcademicsScreen extends ConsumerStatefulWidget {
@@ -501,36 +504,53 @@ class _EventsTab extends StatelessWidget {
   final ParentPortal portal;
 
   @override
-  Widget build(BuildContext context) => ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          Text(
-            'Academic events',
-            style: GoogleFonts.fraunces(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final upcoming = portal.events.where((event) {
+      final date = parsePortalEventDate(event.date);
+      return date != null && !date.isBefore(today);
+    }).toList()
+      ..sort((a, b) => parsePortalEventDate(a.date)!
+          .compareTo(parsePortalEventDate(b.date)!));
+
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        Text(
+          'Upcoming academic events',
+          style: GoogleFonts.fraunces(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
           ),
-          const SizedBox(height: 12),
-          if (portal.events.isEmpty)
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: Text('No academic events are available.'),
-              ),
-            )
-          else
-            for (final event in portal.events)
-              Card(
-                child: ListTile(
-                  leading: CircleAvatar(child: Text(event.day)),
-                  title: Text(event.title),
-                  subtitle: Text('${event.date} · ${event.details}'),
-                  trailing: Text(event.kind),
+        ),
+        const SizedBox(height: 12),
+        if (upcoming.isEmpty)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Text('No upcoming academic events are available.'),
+            ),
+          )
+        else
+          for (final event in upcoming)
+            Card(
+              child: ListTile(
+                leading: CircleAvatar(
+                  child: Text(
+                    '${parsePortalEventDate(event.date)!.toNepaliDateTime().day}',
+                  ),
                 ),
+                title: Text(event.title),
+                subtitle: Text(
+                  '${nepaliDateLabel(parsePortalEventDate(event.date)!)} · ${event.details}',
+                ),
+                trailing: Text(event.kind),
               ),
-        ],
-      );
+            ),
+      ],
+    );
+  }
 }
 
 class _Summary extends StatelessWidget {
