@@ -5,15 +5,19 @@
 /// offline banner shows when connectivity drops but cached data exists.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:nepali_utils/nepali_utils.dart';
 import 'package:tms_mobile/core/sync/sync.dart';
 
 import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_models.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_portal_dto.dart';
+import 'package:tms_mobile/features/teacher/data/teacher_portal_repository.dart';
 import 'package:tms_mobile/features/teacher/screens/geo_attendance_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_class_detail_screen.dart';
 import 'package:tms_mobile/features/teacher/viewmodels/teacher_portal_viewmodel.dart';
@@ -33,11 +37,28 @@ class TeacherHomeScreen extends ConsumerStatefulWidget {
 
 class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
   late int _tab;
+  List<TeacherAcademicEvent>? _events;
+  String? _eventsError;
 
   @override
   void initState() {
     super.initState();
     _tab = widget.initialTab;
+    _loadEvents();
+  }
+
+  Future<void> _loadEvents() async {
+    try {
+      final events = await TeacherPortalRepository().fetchCalendar();
+      if (mounted) {
+        setState(() {
+          _events = events;
+          _eventsError = null;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _eventsError = 'Could not load events.');
+    }
   }
 
   @override
@@ -152,9 +173,14 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
       case 0:
       default:
         return RefreshIndicator(
-          onRefresh: vm.refresh,
+          onRefresh: () async {
+            await Future.wait([vm.refresh(), _loadEvents()]);
+          },
           child: _TodayTab(
             workspace: workspace,
+            events: _events,
+            eventsError: _eventsError,
+            onRetryEvents: _loadEvents,
             onClockAttendance: () => _openGeoForWorkspace(context, workspace),
             onAttendClass: (today) => _openGeo(context, workspace, today),
             onOpenAttendance: () => setState(() => _tab = 1),
@@ -257,6 +283,9 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
 class _TodayTab extends StatelessWidget {
   const _TodayTab({
     required this.workspace,
+    required this.events,
+    required this.eventsError,
+    required this.onRetryEvents,
     required this.onClockAttendance,
     required this.onAttendClass,
     required this.onOpenAttendance,
@@ -266,6 +295,9 @@ class _TodayTab extends StatelessWidget {
   });
 
   final TeacherWorkspace workspace;
+  final List<TeacherAcademicEvent>? events;
+  final String? eventsError;
+  final VoidCallback onRetryEvents;
   final VoidCallback onClockAttendance;
   final ValueChanged<TeacherTodayClass> onAttendClass;
   final VoidCallback onOpenAttendance;
@@ -279,8 +311,6 @@ class _TodayTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        const NepalDateTimeHeader(),
-        const SizedBox(height: 16),
         _ClockCard(workspace: workspace, onPressed: onClockAttendance),
         const SizedBox(height: 16),
         _QuickActions(
@@ -310,6 +340,12 @@ class _TodayTab extends StatelessWidget {
             items: items,
             onAttendClass: onAttendClass,
           ),
+        const SizedBox(height: 24),
+        _TeacherUpcomingEvents(
+          events: events,
+          error: eventsError,
+          onRetry: onRetryEvents,
+        ),
       ],
     );
   }
@@ -822,63 +858,258 @@ class _ClassesTab extends StatelessWidget {
   }
 }
 
-class _ClockCard extends StatelessWidget {
+class _ClockCard extends StatefulWidget {
   const _ClockCard({required this.workspace, required this.onPressed});
 
   final TeacherWorkspace workspace;
   final VoidCallback onPressed;
 
   @override
+  State<_ClockCard> createState() => _ClockCardState();
+}
+
+class _TeacherUpcomingEvents extends StatelessWidget {
+  const _TeacherUpcomingEvents({
+    required this.events,
+    required this.error,
+    required this.onRetry,
+  });
+
+  final List<TeacherAcademicEvent>? events;
+  final String? error;
+  final VoidCallback onRetry;
+
+  @override
   Widget build(BuildContext context) {
-    final nepalNow = DateTime.now().toUtc().add(const Duration(minutes: 345));
-    final time = '${_two(nepalNow.hour)}:${_two(nepalNow.minute)} Nepal time';
-    final lastStamp = workspace.lastStampAt == null
-        ? 'No attendance stamp yet'
-        : 'Last ${workspace.lastStampType ?? 'stamp'} at ${_nepalTime(workspace.lastStampAt!)}';
-    return Card(
-      color: workspace.checkedIn
-          ? Colors.green.withValues(alpha: 0.10)
-          : kColorPrimary.withValues(alpha: 0.08),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final upcoming = (events ?? const <TeacherAcademicEvent>[]).where((event) {
+      final end = (event.endDate ?? event.startDate).toLocal();
+      return !DateTime(end.year, end.month, end.day).isBefore(today);
+    }).toList()
+      ..sort((a, b) => a.startDate.compareTo(b.startDate));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                Icon(
-                  workspace.checkedIn
-                      ? Icons.how_to_reg_rounded
-                      : Icons.schedule_rounded,
-                  color: workspace.checkedIn ? Colors.green : kColorPrimary,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    workspace.checkedIn ? 'Clocked in' : 'Clock in for today',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ],
+            Expanded(
+              child: Text('Upcoming events',
+                  style: Theme.of(context).textTheme.titleLarge),
             ),
-            const SizedBox(height: 8),
-            Text(time, style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 4),
-            Text(lastStamp, style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: onPressed,
-                icon: Icon(workspace.checkedIn
-                    ? Icons.logout_rounded
-                    : Icons.login_rounded),
-                label: Text(workspace.checkedIn
-                    ? 'Open clock out'
-                    : 'Clock in with location'),
+            TextButton(
+              onPressed: () => context.push('/teacher/calendar'),
+              child: const Text('View calendar'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (events == null && error == null)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          )
+        else if (error != null && events == null)
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.event_busy_outlined),
+              title: const Text('Events unavailable'),
+              subtitle: Text(error!),
+              trailing: IconButton(
+                  onPressed: onRetry, icon: const Icon(Icons.refresh)),
+            ),
+          )
+        else if (upcoming.isEmpty)
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.event_available_outlined),
+              title: Text('No upcoming events'),
+              subtitle: Text(
+                'New calendar events will appear here when they are published.',
+              ),
+            ),
+          )
+        else
+          for (final event in upcoming.take(3))
+            Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              child: ListTile(
+                onTap: () => context.push('/teacher/calendar'),
+                leading: CircleAvatar(
+                  backgroundColor: kColorPrimary.withValues(alpha: .1),
+                  foregroundColor: kColorPrimary,
+                  child: Text('${event.startDate.toNepaliDateTime().day}'),
+                ),
+                title: Text(event.title),
+                subtitle: Text([
+                  _eventDate(event),
+                  if (event.type.isNotEmpty) event.type,
+                  if (event.description.isNotEmpty) event.description,
+                ].join(' · ')),
+                trailing: const Icon(Icons.chevron_right_rounded),
+              ),
+            ),
+      ],
+    );
+  }
+
+  String _eventDate(TeacherAcademicEvent event) {
+    final start = nepaliDateLabel(event.startDate);
+    final end = event.endDate;
+    if (end == null || _sameDay(event.startDate, end)) return start;
+    return '$start – ${nepaliDateLabel(end)}';
+  }
+
+  bool _sameDay(DateTime a, DateTime b) {
+    final first = a.toLocal();
+    final second = b.toLocal();
+    return first.year == second.year &&
+        first.month == second.month &&
+        first.day == second.day;
+  }
+}
+
+class _ClockCardState extends State<_ClockCard> {
+  late DateTime _now;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _now = DateTime.now();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lastStamp = widget.workspace.lastStampAt == null
+        ? 'No attendance stamp yet'
+        : 'Last ${widget.workspace.lastStampType ?? 'stamp'} at ${_nepalTime(widget.workspace.lastStampAt!)}';
+    return Semantics(
+      liveRegion: true,
+      label:
+          '${widget.workspace.checkedIn ? 'Clocked in' : 'Not clocked in'}. ${nepaliDateLabel(_now)}. ${nepalClockLabel(_now)} Nepal time. $lastStamp',
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF082F5B), Color(0xFF1769B0)],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF0B3969).withValues(alpha: .22),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            const Positioned(
+              right: -24,
+              top: -34,
+              child: Icon(Icons.circle, size: 142, color: Color(0x14FFFFFF)),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: .14),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(
+                          widget.workspace.checkedIn
+                              ? Icons.how_to_reg_rounded
+                              : Icons.schedule_rounded,
+                          color: widget.workspace.checkedIn
+                              ? const Color(0xFF7EE2A8)
+                              : Colors.white,
+                          size: 26,
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: .12),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0x30FFFFFF)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              nepaliDateLabel(_now),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${nepalClockLabel(_now)} · Nepal time',
+                              style: const TextStyle(
+                                  color: Colors.white70, fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    widget.workspace.checkedIn
+                        ? 'Clocked in'
+                        : 'Clock in for today',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: Colors.white,
+                          height: 1.2,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(lastStamp,
+                      style: const TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: kColorPrimary,
+                      ),
+                      onPressed: widget.onPressed,
+                      icon: Icon(widget.workspace.checkedIn
+                          ? Icons.logout_rounded
+                          : Icons.login_rounded),
+                      label: Text(widget.workspace.checkedIn
+                          ? 'Open clock out'
+                          : 'Clock in with location'),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

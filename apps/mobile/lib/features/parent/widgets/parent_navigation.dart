@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tms_mobile/core/navigation/android_back_coordinator.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/features/auth/data/device_account_vault.dart';
 import 'package:tms_mobile/core/theme/app_theme.dart';
@@ -172,40 +173,52 @@ abstract final class ParentNavigation {
 }
 
 class ParentNavigationBar extends StatelessWidget {
-  const ParentNavigationBar({super.key, required this.selectedIndex});
+  const ParentNavigationBar({
+    super.key,
+    required this.selectedIndex,
+    this.coordinateSystemBack = true,
+  });
 
   final int selectedIndex;
+  final bool coordinateSystemBack;
 
   @override
-  Widget build(BuildContext context) => NavigationBar(
-        selectedIndex: selectedIndex,
-        onDestinationSelected: (index) => ParentNavigation.open(context, index),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.school_outlined),
-            selectedIcon: Icon(Icons.school_rounded),
-            label: 'Classes',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.forum_outlined),
-            selectedIcon: Icon(Icons.forum_rounded),
-            label: 'Chat',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.event_outlined),
-            selectedIcon: Icon(Icons.event_rounded),
-            label: 'Meetings',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.more_horiz_rounded),
-            selectedIcon: Icon(Icons.more_rounded),
-            label: 'More',
-          ),
-        ],
-      );
+  Widget build(BuildContext context) {
+    final navigationBar = NavigationBar(
+      selectedIndex: selectedIndex,
+      onDestinationSelected: (index) => ParentNavigation.open(context, index),
+      destinations: const [
+        NavigationDestination(
+          icon: Icon(Icons.home_outlined),
+          selectedIcon: Icon(Icons.home_rounded),
+          label: 'Home',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.school_outlined),
+          selectedIcon: Icon(Icons.school_rounded),
+          label: 'Classes',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.forum_outlined),
+          selectedIcon: Icon(Icons.forum_rounded),
+          label: 'Chat',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.event_outlined),
+          selectedIcon: Icon(Icons.event_rounded),
+          label: 'Meetings',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.more_horiz_rounded),
+          selectedIcon: Icon(Icons.more_rounded),
+          label: 'More',
+        ),
+      ],
+    );
+    if (!coordinateSystemBack) return navigationBar;
+    return AndroidBackCoordinator(
+      router: GoRouter.of(context),
+      child: navigationBar,
+    );
+  }
 }

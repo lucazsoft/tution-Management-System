@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tms_mobile/core/theme/app_theme.dart';
@@ -140,7 +141,19 @@ class PortalDrawerAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = destructive ? Theme.of(context).colorScheme.error : null;
+    final alignWithDestinations =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
     return ListTile(
+      // NavigationDrawerDestination places its icon at 28dp and its label
+      // 12dp after the 24dp icon. Mirror that geometry for account actions so
+      // both sections form the same two clean vertical columns on Android.
+      contentPadding: alignWithDestinations
+          ? const EdgeInsets.only(left: 28, right: 16)
+          : null,
+      minLeadingWidth: alignWithDestinations ? 24 : null,
+      horizontalTitleGap: alignWithDestinations ? 12 : null,
+      titleAlignment:
+          alignWithDestinations ? ListTileTitleAlignment.center : null,
       leading: Icon(icon, size: 24, color: color),
       title: Text(label,
           maxLines: 1,

@@ -167,7 +167,7 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         const SnackBar(
-          content: Text('Press back again to exit'),
+          content: Text('Press again to close the application'),
           duration: Duration(seconds: 2),
         ),
       );

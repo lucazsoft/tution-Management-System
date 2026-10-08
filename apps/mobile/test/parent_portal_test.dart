@@ -855,7 +855,11 @@ void main() {
     expect(find.text('80%'), findsWidgets);
     expect(find.text('Aarav'), findsNothing);
 
-    await tester.longPress(find.text('80%').first);
+    final hold = await tester.startGesture(
+      tester.getCenter(find.text('80%').first),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await hold.up();
     await tester.pumpAndSettle();
 
     expect(find.text('Switch child'), findsOneWidget);

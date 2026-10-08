@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tms_mobile/core/navigation/android_back_coordinator.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/features/auth/data/device_account_vault.dart';
 import 'package:tms_mobile/core/theme/app_theme.dart';
@@ -175,38 +176,41 @@ class TeacherDashboardNavigationBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textScale = MediaQuery.textScalerOf(context).scale(1);
-    return NavigationBar(
-      height: 80.0 + ((textScale - 1).clamp(0.0, 1.0) * 16.0).toDouble(),
-      selectedIndex: selectedIndex,
-      onDestinationSelected: onDestinationSelected ??
-          (index) => TeacherNavigation.openDashboardSection(context, index),
-      destinations: const [
-        NavigationDestination(
-          icon: Icon(Icons.home_outlined),
-          selectedIcon: Icon(Icons.home_rounded),
-          label: 'Home',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.check_circle_outline),
-          selectedIcon: Icon(Icons.check_circle),
-          label: 'Attendance',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.forum_outlined),
-          selectedIcon: Icon(Icons.forum_rounded),
-          label: 'Messages',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.school_outlined),
-          selectedIcon: Icon(Icons.school),
-          label: 'Classes',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.more_horiz_rounded),
-          selectedIcon: Icon(Icons.more_rounded),
-          label: 'More',
-        ),
-      ],
+    return AndroidBackCoordinator(
+      router: GoRouter.of(context),
+      child: NavigationBar(
+        height: 80.0 + ((textScale - 1).clamp(0.0, 1.0) * 16.0).toDouble(),
+        selectedIndex: selectedIndex,
+        onDestinationSelected: onDestinationSelected ??
+            (index) => TeacherNavigation.openDashboardSection(context, index),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.check_circle_outline),
+            selectedIcon: Icon(Icons.check_circle),
+            label: 'Attendance',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.forum_outlined),
+            selectedIcon: Icon(Icons.forum_rounded),
+            label: 'Messages',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.school_outlined),
+            selectedIcon: Icon(Icons.school),
+            label: 'Classes',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.more_horiz_rounded),
+            selectedIcon: Icon(Icons.more_rounded),
+            label: 'More',
+          ),
+        ],
+      ),
     );
   }
 }

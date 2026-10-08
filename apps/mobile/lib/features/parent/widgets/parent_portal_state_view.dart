@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -89,7 +91,7 @@ class ParentPortalStateView extends ConsumerWidget {
   }
 }
 
-class _ChildScopeGesture extends ConsumerWidget {
+class _ChildScopeGesture extends ConsumerStatefulWidget {
   const _ChildScopeGesture({
     required this.portal,
     required this.selectedChild,
@@ -101,16 +103,65 @@ class _ChildScopeGesture extends ConsumerWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => GestureDetector(
+  ConsumerState<_ChildScopeGesture> createState() => _ChildScopeGestureState();
+}
+
+class _ChildScopeGestureState extends ConsumerState<_ChildScopeGesture> {
+  static const _holdDuration = Duration(seconds: 1);
+  static const _movementTolerance = 18.0;
+  Timer? _holdTimer;
+  int? _pointer;
+  Offset? _origin;
+  bool _opening = false;
+
+  void _startHold(PointerDownEvent event) {
+    if (_pointer != null || _opening) return;
+    _pointer = event.pointer;
+    _origin = event.position;
+    _holdTimer = Timer(_holdDuration, () async {
+      if (!mounted || _pointer != event.pointer || _opening) return;
+      _opening = true;
+      _holdTimer = null;
+      _pointer = null;
+      _origin = null;
+      HapticFeedback.mediumImpact();
+      await _showChildPicker();
+      if (mounted) _opening = false;
+    });
+  }
+
+  void _trackHold(PointerMoveEvent event) {
+    if (event.pointer != _pointer || _origin == null) return;
+    if ((event.position - _origin!).distance > _movementTolerance) {
+      _cancelHold(event.pointer);
+    }
+  }
+
+  void _cancelHold(int pointer) {
+    if (pointer != _pointer) return;
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    _pointer = null;
+    _origin = null;
+  }
+
+  @override
+  void dispose() {
+    _holdTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
         behavior: HitTestBehavior.translucent,
-        onLongPress: () {
-          HapticFeedback.mediumImpact();
-          _showChildPicker(context, ref);
-        },
-        child: child,
+        onPointerDown: _startHold,
+        onPointerMove: _trackHold,
+        onPointerUp: (event) => _cancelHold(event.pointer),
+        onPointerCancel: (event) => _cancelHold(event.pointer),
+        child: widget.child,
       );
 
-  Future<void> _showChildPicker(BuildContext context, WidgetRef ref) async {
+  Future<void> _showChildPicker() async {
     final selectedId = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -125,17 +176,17 @@ class _ChildScopeGesture extends ConsumerWidget {
                 style: Theme.of(sheetContext).textTheme.titleLarge),
             const SizedBox(height: 4),
             Text(
-              portal.children.length > 1
+              widget.portal.children.length > 1
                   ? 'The parent portal will update to the selected child.'
                   : 'This is the child currently linked to your account.',
               style: Theme.of(sheetContext).textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
-            for (final linkedChild in portal.children)
+            for (final linkedChild in widget.portal.children)
               ListTile(
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
-                selected: linkedChild.id == selectedChild.id,
+                selected: linkedChild.id == widget.selectedChild.id,
                 leading: CircleAvatar(
                   child: Text(linkedChild.initials.isEmpty
                       ? linkedChild.name.substring(0, 1).toUpperCase()
@@ -143,7 +194,7 @@ class _ChildScopeGesture extends ConsumerWidget {
                 ),
                 title: Text(linkedChild.name),
                 subtitle: Text('${linkedChild.grade} · ${linkedChild.branch}'),
-                trailing: linkedChild.id == selectedChild.id
+                trailing: linkedChild.id == widget.selectedChild.id
                     ? const Icon(Icons.check_circle_rounded)
                     : null,
                 onTap: () => Navigator.pop(sheetContext, linkedChild.id),
@@ -152,7 +203,7 @@ class _ChildScopeGesture extends ConsumerWidget {
         ),
       ),
     );
-    if (selectedId != null && selectedId != selectedChild.id) {
+    if (selectedId != null && selectedId != widget.selectedChild.id) {
       await ref.read(parentPortalProvider.notifier).selectChild(selectedId);
     }
   }
