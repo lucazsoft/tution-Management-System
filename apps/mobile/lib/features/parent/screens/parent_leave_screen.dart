@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/features/parent/viewmodels/parent_portal_viewmodel.dart';
-import 'package:tms_mobile/features/parent/widgets/child_switcher_bar.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_navigation.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_portal_state_view.dart';
 import 'package:tms_mobile/shared/widgets/leave_request_content.dart';
@@ -18,8 +17,6 @@ class ParentLeaveScreen extends ConsumerWidget {
             builder: (context, portal, child) => Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const ChildSwitcherBar(),
-                      const SizedBox(height: 16),
                       LeaveRequestContent(
                         subjectName: child.name,
                         history: portal.leaves

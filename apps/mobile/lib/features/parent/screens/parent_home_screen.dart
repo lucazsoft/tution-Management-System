@@ -1,9 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tms_mobile/core/theme/app_theme.dart';
 import 'package:tms_mobile/features/parent/models/parent_portal.dart';
-import 'package:tms_mobile/features/parent/widgets/child_switcher_bar.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_navigation.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_portal_state_view.dart';
 import 'package:tms_mobile/features/student/widgets/nepal_date_time.dart';
@@ -31,11 +32,7 @@ class ParentHomeScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const NepalDateTimeHeader(),
-                  const SizedBox(height: TmsSpace.md),
-                  const ChildSwitcherBar(),
-                  const SizedBox(height: TmsSpace.md),
-                  _DayHero(child: child),
+                  _DayHero(child: child, attendance: portal.attendance),
                   const SizedBox(height: TmsSpace.md),
                   _SummaryGrid(portal: portal, child: child),
                   const SizedBox(height: TmsSpace.lg),
@@ -191,53 +188,166 @@ class _FeeAlert extends StatelessWidget {
       );
 }
 
-class _DayHero extends StatelessWidget {
-  const _DayHero({required this.child});
+class _DayHero extends StatefulWidget {
+  const _DayHero({required this.child, required this.attendance});
 
   final ParentChild child;
+  final List<ParentAttendanceRecord> attendance;
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: TmsSpace.lg,
-          vertical: TmsSpace.md,
-        ),
+  State<_DayHero> createState() => _DayHeroState();
+}
+
+class _DayHeroState extends State<_DayHero> {
+  late DateTime _now;
+  Timer? _clock;
+
+  @override
+  void initState() {
+    super.initState();
+    _now = DateTime.now();
+    _clock = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _clock?.cancel();
+    super.dispose();
+  }
+
+  bool get _wasAbsentToday {
+    final today = nepalTime(_now);
+    return widget.attendance.any((record) {
+      final occurredAt = record.occurredAt;
+      if (!record.isAbsent || occurredAt == null) return false;
+      final date = occurredAt.isUtc ? nepalTime(occurredAt) : occurredAt;
+      return date.year == today.year &&
+          date.month == today.month &&
+          date.day == today.day;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final absent = _wasAbsentToday;
+    return Semantics(
+      liveRegion: true,
+      label: absent
+          ? 'Welcome. Your child was absent today. ${nepaliDateLabel(_now)}, ${nepalClockLabel(_now)} Nepal time.'
+          : 'Welcome. ${nepaliDateLabel(_now)}, ${nepalClockLabel(_now)} Nepal time.',
+      child: Container(
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF0B3969), kColorPrimaryLight],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF082F5B), Color(0xFF1769B0)],
           ),
           borderRadius: BorderRadius.circular(TmsRadius.cardLg),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.auto_stories_rounded,
-                color: Colors.white, size: 28),
-            const SizedBox(width: TmsSpace.sm),
-            Expanded(
-              child: Text(
-                'Welcome! Your child has learned a lot today.',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Colors.white,
-                    ),
-              ),
-            ),
-            const SizedBox(width: TmsSpace.sm),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                const Text('ATTENDANCE',
-                    style: TextStyle(color: Colors.white70, fontSize: 10)),
-                Text('${child.attendanceRate}%',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                    )),
-              ],
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF0B3969).withValues(alpha: .22),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
             ),
           ],
         ),
-      );
+        child: Stack(
+          children: [
+            const Positioned(
+              right: -24,
+              top: -34,
+              child: Icon(Icons.circle, size: 142, color: Color(0x14FFFFFF)),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(TmsSpace.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: .14),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(
+                          absent
+                              ? Icons.notification_important_rounded
+                              : Icons.waving_hand_rounded,
+                          color:
+                              absent ? const Color(0xFFFFD166) : Colors.white,
+                          size: 25,
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: .12),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0x30FFFFFF)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(nepaliDateLabel(_now),
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 2),
+                            Text('${nepalClockLabel(_now)} · Nepal time',
+                                style: const TextStyle(
+                                    color: Colors.white70, fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: TmsSpace.md),
+                  Text(
+                    absent
+                        ? 'Welcome! Your child was absent today.'
+                        : 'Welcome! Your child has learned a lot today.',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: Colors.white,
+                          height: 1.25,
+                        ),
+                  ),
+                  const SizedBox(height: TmsSpace.md),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${widget.child.name} · ${widget.child.grade}',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      const SizedBox(width: TmsSpace.sm),
+                      Text(
+                        'Attendance ${widget.child.attendanceRate}%',
+                        style: const TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _DashboardContent extends StatelessWidget {

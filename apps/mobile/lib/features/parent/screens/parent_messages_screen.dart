@@ -5,7 +5,6 @@ import 'package:tms_mobile/shared/widgets/messenger_chat.dart';
 
 import '../models/parent_portal.dart';
 import '../viewmodels/parent_portal_viewmodel.dart';
-import '../widgets/child_switcher_bar.dart';
 import '../widgets/parent_navigation.dart';
 import '../widgets/parent_portal_state_view.dart';
 
@@ -154,8 +153,6 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 1180),
                   child: Column(children: [
-                    const ChildSwitcherBar(),
-                    const SizedBox(height: 10),
                     Expanded(
                       child: LayoutBuilder(builder: (context, constraints) {
                         final isCompact = constraints.maxWidth < 760;

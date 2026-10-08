@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/features/parent/models/parent_portal.dart';
-import 'package:tms_mobile/features/parent/widgets/child_switcher_bar.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_navigation.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_portal_state_view.dart';
 import 'package:tms_mobile/shared/widgets/academic_calendar.dart';
@@ -65,8 +64,6 @@ class _ParentTimetableScreenState extends ConsumerState<ParentTimetableScreen> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const ChildSwitcherBar(),
-                const SizedBox(height: 16),
                 Text('${child.name}’s merged schedule',
                     style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 16),

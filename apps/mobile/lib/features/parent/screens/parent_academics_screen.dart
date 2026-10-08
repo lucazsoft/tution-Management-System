@@ -6,7 +6,6 @@ import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/features/parent/data/parent_portal_repository.dart';
 import 'package:tms_mobile/features/parent/models/parent_portal.dart';
 import 'package:tms_mobile/features/parent/viewmodels/parent_portal_viewmodel.dart';
-import 'package:tms_mobile/features/parent/widgets/child_switcher_bar.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_navigation.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_portal_state_view.dart';
 import 'package:tms_mobile/shared/models/app_models.dart';
@@ -122,8 +121,6 @@ class _HomeworkTab extends StatelessWidget {
   Widget build(BuildContext context) => ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const ChildSwitcherBar(),
-          const SizedBox(height: 16),
           Text('Homework', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 12),
           if (homework.isEmpty)
@@ -188,8 +185,6 @@ class _ProgressTabState extends ConsumerState<_ProgressTab> {
   Widget build(BuildContext context) => ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const ChildSwitcherBar(),
-          const SizedBox(height: 20),
           Card(
             color: kColorPrimary,
             child: Padding(
@@ -509,8 +504,6 @@ class _EventsTab extends StatelessWidget {
   Widget build(BuildContext context) => ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const ChildSwitcherBar(),
-          const SizedBox(height: 20),
           Text(
             'Academic events',
             style: GoogleFonts.fraunces(

@@ -112,4 +112,32 @@ void main() {
     expect(find.text('10:00 - 11:00 - Ms Rai'), findsOneWidget);
     expect(find.text('Attendance not recorded'), findsNothing);
   });
+
+  testWidgets('Nepali-only mode hides Gregorian event dates', (tester) async {
+    final today = DateTime(2026, 10, 8);
+    final eventDay = DateTime(2026, 10, 9);
+    final eventBs = eventDay.toNepaliDateTime();
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: AcademicCalendar(
+            now: () => today,
+            showGregorianDates: false,
+            events: [
+              AcademicCalendarEvent(
+                id: 'event-1',
+                title: 'School ceremony',
+                date: eventDay,
+                kind: 'Ceremony',
+              ),
+            ],
+          ),
+        ),
+      ),
+    ));
+
+    expect(find.text('School ceremony'), findsOneWidget);
+    expect(find.textContaining('${eventBs.year} BS'), findsWidgets);
+    expect(find.textContaining('October 9, 2026'), findsNothing);
+  });
 }

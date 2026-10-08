@@ -135,12 +135,14 @@ class AcademicCalendar extends StatefulWidget {
     this.attendance = const [],
     this.scheduledClasses = const [],
     this.now,
+    this.showGregorianDates = true,
   });
 
   final List<AcademicCalendarEvent> events;
   final List<AcademicCalendarAttendance> attendance;
   final List<AcademicCalendarClass> scheduledClasses;
   final DateTime Function()? now;
+  final bool showGregorianDates;
 
   @override
   State<AcademicCalendar> createState() => _AcademicCalendarState();
@@ -236,12 +238,13 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                     children: [
                       Text('${_bsMonths[firstBs.month - 1]} ${firstBs.year} BS',
                           style: Theme.of(context).textTheme.titleLarge),
-                      Text(
-                          '${_englishMonth(_monthAnchor.month)} ${_monthAnchor.day} - ${_englishMonth(last.month)} ${last.day}, ${last.year}',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: kColorMutedText)),
+                      if (widget.showGregorianDates)
+                        Text(
+                            '${_englishMonth(_monthAnchor.month)} ${_monthAnchor.day} - ${_englishMonth(last.month)} ${last.day}, ${last.year}',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: kColorMutedText)),
                     ],
                   );
                   final controls =
@@ -315,8 +318,9 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                         bs.year != firstBs.year || bs.month != firstBs.month;
                     return Semantics(
                       selected: selected,
-                      label:
-                          '${day.day} ${_englishMonth(day.month)}, ${events.length} events, ${attendance.length} attendance records',
+                      label: widget.showGregorianDates
+                          ? '${day.day} ${_englishMonth(day.month)}, ${events.length} events, ${attendance.length} attendance records'
+                          : '${_bsMonths[bs.month - 1]} ${bs.day}, ${bs.year} BS, ${events.length} events, ${attendance.length} attendance records',
                       child: InkWell(
                         key: ValueKey(
                             'calendar-day-${day.year}-${day.month}-${day.day}'),
@@ -350,15 +354,16 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                                                         DateTime.saturday
                                                     ? kColorError
                                                     : kColorText)),
-                                Text('${day.day}',
-                                    style: TextStyle(
-                                        fontSize: 10,
-                                        color: selected
-                                            ? Colors.white70
-                                            : outside
-                                                ? kColorMutedText.withValues(
-                                                    alpha: .38)
-                                                : kColorMutedText)),
+                                if (widget.showGregorianDates)
+                                  Text('${day.day}',
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          color: selected
+                                              ? Colors.white70
+                                              : outside
+                                                  ? kColorMutedText.withValues(
+                                                      alpha: .38)
+                                                  : kColorMutedText)),
                                 if (events.isNotEmpty || attendance.isNotEmpty)
                                   Container(
                                       width: 5,
@@ -478,10 +483,16 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
           for (final event in upcomingEvents.take(12))
             Card(
               child: ListTile(
-                leading: CircleAvatar(child: Text('${event.date.day}')),
+                leading: CircleAvatar(
+                    child: Text(widget.showGregorianDates
+                        ? '${event.date.day}'
+                        : '${event.date.toNepaliDateTime().day}')),
                 title: Text(event.title),
                 subtitle: Text([
-                  '${_englishMonth(event.date.month)} ${event.date.day}, ${event.date.year}',
+                  if (widget.showGregorianDates)
+                    '${_englishMonth(event.date.month)} ${event.date.day}, ${event.date.year}'
+                  else
+                    _nepaliDate(event.date),
                   event.kind,
                   if (event.details.isNotEmpty) event.details,
                 ].join(' - ')),
@@ -511,6 +522,11 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
         'November',
         'December'
       ][month - 1];
+
+  String _nepaliDate(DateTime date) {
+    final bs = date.toNepaliDateTime();
+    return '${_bsMonths[bs.month - 1]} ${bs.day}, ${bs.year} BS';
+  }
 }
 
 class _DayRecordTile extends StatelessWidget {

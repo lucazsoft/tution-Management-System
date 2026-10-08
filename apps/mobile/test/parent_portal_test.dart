@@ -23,6 +23,7 @@ Map<String, dynamic> _portalJson({
   String selectedId = 'student-1',
   String selectedName = 'API Child One',
   String invoiceId = 'invoice-api',
+  List<Map<String, dynamic>>? attendance,
 }) =>
     {
       'bookingWindowHours': 36,
@@ -72,22 +73,23 @@ Map<String, dynamic> _portalJson({
           'type': 'Regular',
         },
       ],
-      'attendance': [
-        {
-          'id': 'attendance-1',
-          'date': '6 Sep 2026',
-          'subject': 'API Mathematics',
-          'session': 'Morning API Class',
-          'state': 'Present',
-        },
-        {
-          'id': 'attendance-2',
-          'date': '5 Sep 2026',
-          'subject': 'API Science',
-          'session': 'Afternoon API Class',
-          'state': 'Absent (Excused)',
-        },
-      ],
+      'attendance': attendance ??
+          [
+            {
+              'id': 'attendance-1',
+              'date': '6 Sep 2026',
+              'subject': 'API Mathematics',
+              'session': 'Morning API Class',
+              'state': 'Present',
+            },
+            {
+              'id': 'attendance-2',
+              'date': '5 Sep 2026',
+              'subject': 'API Science',
+              'session': 'Afternoon API Class',
+              'state': 'Absent (Excused)',
+            },
+          ],
       'invoices': [
         {
           'id': invoiceId,
@@ -145,9 +147,10 @@ Map<String, dynamic> _portalJson({
     };
 
 class _FakeParentPortalRepository extends ParentPortalRepository {
-  _FakeParentPortalRepository() : super(dio: Dio());
+  _FakeParentPortalRepository({this.attendance}) : super(dio: Dio());
 
   final List<String?> selectedIds = [];
+  final List<Map<String, dynamic>>? attendance;
 
   @override
   Future<ParentPortal> fetchPortal({
@@ -161,6 +164,7 @@ class _FakeParentPortalRepository extends ParentPortalRepository {
         selectedId: studentId ?? 'student-1',
         selectedName:
             studentId == 'student-2' ? 'API Child Two' : 'API Child One',
+        attendance: attendance,
       ),
     );
   }
@@ -842,7 +846,7 @@ void main() {
     );
   });
 
-  testWidgets('home renders API data and switches by student id',
+  testWidgets('home opens child picker on long press and switches child',
       (tester) async {
     final repository = _FakeParentPortalRepository();
     await _pumpPortalScreen(tester, const ParentHomeScreen(), repository);
@@ -851,14 +855,40 @@ void main() {
     expect(find.text('80%'), findsWidgets);
     expect(find.text('Aarav'), findsNothing);
 
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.longPress(find.text('80%').first);
     await tester.pumpAndSettle();
+
+    expect(find.text('Switch child'), findsOneWidget);
     await tester.tap(find.text('API Child Two').last);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(repository.selectedIds.last, 'student-2');
     expect(find.text('100%'), findsWidgets);
+  });
+
+  testWidgets('home hero reports when the child is absent today',
+      (tester) async {
+    final now = DateTime.now();
+    final repository = _FakeParentPortalRepository(attendance: [
+      {
+        'id': 'attendance-today',
+        'date':
+            '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
+        'occurredAt': now.toIso8601String(),
+        'subject': 'Daily attendance',
+        'session': 'School day',
+        'state': 'Absent',
+      },
+    ]);
+
+    await _pumpPortalScreen(tester, const ParentHomeScreen(), repository);
+
+    expect(
+      find.text('Welcome! Your child was absent today.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Nepal time'), findsOneWidget);
   });
 
   testWidgets('attendance renders API records without demo dates',

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/features/parent/models/parent_portal.dart';
 import 'package:tms_mobile/features/parent/viewmodels/parent_portal_viewmodel.dart';
@@ -65,18 +66,95 @@ class ParentPortalStateView extends ConsumerWidget {
             ),
           );
     if (!wrapInScrollView) {
-      return Column(children: [
-        if (errorCard != null) errorCard,
-        Expanded(child: content),
-      ]);
+      return _ChildScopeGesture(
+        portal: portal,
+        selectedChild: child,
+        child: Column(children: [
+          if (errorCard != null) errorCard,
+          Expanded(child: content),
+        ]),
+      );
     }
-    return RefreshIndicator(
-      onRefresh: notifier.refresh,
-      child: ListView(
-        padding: padding,
-        children: [if (errorCard != null) errorCard, content],
+    return _ChildScopeGesture(
+      portal: portal,
+      selectedChild: child,
+      child: RefreshIndicator(
+        onRefresh: notifier.refresh,
+        child: ListView(
+          padding: padding,
+          children: [if (errorCard != null) errorCard, content],
+        ),
       ),
     );
+  }
+}
+
+class _ChildScopeGesture extends ConsumerWidget {
+  const _ChildScopeGesture({
+    required this.portal,
+    required this.selectedChild,
+    required this.child,
+  });
+
+  final ParentPortal portal;
+  final ParentChild selectedChild;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onLongPress: () {
+          HapticFeedback.mediumImpact();
+          _showChildPicker(context, ref);
+        },
+        child: child,
+      );
+
+  Future<void> _showChildPicker(BuildContext context, WidgetRef ref) async {
+    final selectedId = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Switch child',
+                style: Theme.of(sheetContext).textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text(
+              portal.children.length > 1
+                  ? 'The parent portal will update to the selected child.'
+                  : 'This is the child currently linked to your account.',
+              style: Theme.of(sheetContext).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            for (final linkedChild in portal.children)
+              ListTile(
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                selected: linkedChild.id == selectedChild.id,
+                leading: CircleAvatar(
+                  child: Text(linkedChild.initials.isEmpty
+                      ? linkedChild.name.substring(0, 1).toUpperCase()
+                      : linkedChild.initials),
+                ),
+                title: Text(linkedChild.name),
+                subtitle: Text('${linkedChild.grade} · ${linkedChild.branch}'),
+                trailing: linkedChild.id == selectedChild.id
+                    ? const Icon(Icons.check_circle_rounded)
+                    : null,
+                onTap: () => Navigator.pop(sheetContext, linkedChild.id),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selectedId != null && selectedId != selectedChild.id) {
+      await ref.read(parentPortalProvider.notifier).selectChild(selectedId);
+    }
   }
 }
 
