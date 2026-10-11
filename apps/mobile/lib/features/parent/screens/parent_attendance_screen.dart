@@ -53,7 +53,7 @@ class _ParentAttendanceScreenState
           ),
         ],
       ),
-      bottomNavigationBar: const ParentNavigationBar(selectedIndex: 0),
+      bottomNavigationBar: const ParentNavigationBar(selectedIndex: 4),
       body: SafeArea(
         child: ParentPortalStateView(
           builder: (context, portal, child) {

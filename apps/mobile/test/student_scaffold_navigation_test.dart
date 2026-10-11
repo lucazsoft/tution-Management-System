@@ -78,11 +78,27 @@ void main() {
       expect(
         find.descendant(
           of: find.byType(NavigationDrawer),
-          matching: find.text(label),
+          matching: find.text(label, skipOffstage: false),
+          skipOffstage: false,
         ),
         findsOneWidget,
       );
     }
+
+    final drawer = find.byType(NavigationDrawer);
+    final academicsLabelDx = tester
+        .getTopLeft(
+          find.descendant(of: drawer, matching: find.text('Academics')),
+        )
+        .dx;
+    final academicsIconDx = tester
+        .getTopLeft(
+          find.descendant(
+            of: drawer,
+            matching: find.byIcon(Icons.school_outlined),
+          ),
+        )
+        .dx;
 
     final drawerScroll = find.descendant(
       of: find.byType(NavigationDrawer),
@@ -109,20 +125,9 @@ void main() {
       expect(find.text(label), findsOneWidget);
     }
 
-    final drawer = find.byType(NavigationDrawer);
-    final academicsLabel = find.descendant(
-      of: drawer,
-      matching: find.text('Academics', skipOffstage: false),
-      skipOffstage: false,
-    );
     final profileLabel = find.descendant(
       of: drawer,
       matching: find.text('Profile settings'),
-    );
-    final academicsIcon = find.descendant(
-      of: drawer,
-      matching: find.byIcon(Icons.school_outlined, skipOffstage: false),
-      skipOffstage: false,
     );
     final profileIcon = find.descendant(
       of: drawer,
@@ -131,11 +136,11 @@ void main() {
 
     expect(
       tester.getTopLeft(profileLabel).dx,
-      moreOrLessEquals(tester.getTopLeft(academicsLabel).dx, epsilon: .01),
+      moreOrLessEquals(academicsLabelDx, epsilon: .01),
     );
     expect(
       tester.getTopLeft(profileIcon).dx,
-      moreOrLessEquals(tester.getTopLeft(academicsIcon).dx, epsilon: .01),
+      moreOrLessEquals(academicsIconDx, epsilon: .01),
     );
   });
 
@@ -157,5 +162,18 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Home page'), findsOneWidget);
+  });
+
+  testWidgets('home back shows a rounded double-back exit prompt',
+      (tester) async {
+    await pumpPortal(tester);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+
+    expect(find.text('Press back again to exit'), findsOneWidget);
+    final snackBar = tester.widget<SnackBar>(find.byType(SnackBar));
+    expect(snackBar.behavior, SnackBarBehavior.floating);
+    expect(snackBar.shape, isA<RoundedRectangleBorder>());
   });
 }

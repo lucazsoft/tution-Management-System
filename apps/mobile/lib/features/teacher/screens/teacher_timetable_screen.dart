@@ -60,7 +60,7 @@ class _TeacherTimetableScreenState
         Expanded(child: _body(state, vm)),
       ])),
       bottomNavigationBar:
-          const TeacherDashboardNavigationBar(selectedIndex: 0),
+          const TeacherDashboardNavigationBar(selectedIndex: 3),
     );
   }
 
@@ -94,6 +94,9 @@ class _TeacherTimetableScreenState
         onPrevious:
             _dayOffset <= -7 ? null : () => setState(() => _dayOffset--),
         onNext: _dayOffset >= 7 ? null : () => setState(() => _dayOffset++),
+        onDateSelected: (selected) => setState(
+          () => _dayOffset = selected.difference(_today).inDays,
+        ),
       ),
       rows: isToday
           ? _todayRows(workspace.todayClasses)
@@ -102,8 +105,6 @@ class _TeacherTimetableScreenState
       emptyMessage: isToday
           ? 'Nothing scheduled for today.'
           : 'Nothing scheduled for this day.',
-      weeklyTemplate: !isToday,
-      onTakeClass: (item) => _markTaken(workspace, item),
       onRefresh: _refresh,
     );
   }
@@ -124,26 +125,6 @@ class _TeacherTimetableScreenState
     ]);
   }
 
-  Future<void> _markTaken(
-      TeacherWorkspace workspace, TeacherTodayClass today) async {
-    if (!workspace.checkedIn) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Mark yourself present before confirming this class.'),
-      ));
-      return;
-    }
-    final ok = await ref
-        .read(teacherPortalViewModelProvider.notifier)
-        .markSessionTaken(today.sessionId);
-    if (!mounted) return;
-    final error = ref.read(teacherPortalViewModelProvider).error;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(ok
-          ? 'Class marked as taken.'
-          : error ?? 'Could not confirm the class.'),
-    ));
-  }
-
   List<TeacherAcademicEvent> _eventsOn(DateTime date) {
     final target = DateTime(date.year, date.month, date.day);
     return _events.where((event) {
@@ -162,14 +143,11 @@ class _RowData {
     required this.subject,
     required this.className,
     this.room,
-    this.todayClass,
   });
   final String time;
   final String subject;
   final String className;
   final String? room;
-  final TeacherTodayClass? todayClass;
-  bool get taken => todayClass?.dailyUpdateSubmitted ?? false;
 }
 
 class _TimetablePage extends StatelessWidget {
@@ -179,16 +157,12 @@ class _TimetablePage extends StatelessWidget {
     required this.emptyMessage,
     this.events = const [],
     required this.onRefresh,
-    this.onTakeClass,
-    this.weeklyTemplate = false,
   });
   final Widget header;
   final List<_RowData> rows;
   final String emptyMessage;
   final List<TeacherAcademicEvent> events;
   final Future<void> Function() onRefresh;
-  final ValueChanged<TeacherTodayClass>? onTakeClass;
-  final bool weeklyTemplate;
 
   @override
   Widget build(BuildContext context) {
@@ -228,13 +202,6 @@ class _TimetablePage extends StatelessWidget {
               secondaryDetail: row.room?.trim().isNotEmpty == true
                   ? row.room
                   : 'Room not assigned',
-              footer: _TakenAction(
-                taken: row.taken,
-                weeklyTemplate: weeklyTemplate,
-                onPressed: row.todayClass != null && !row.taken
-                    ? () => onTakeClass?.call(row.todayClass!)
-                    : null,
-              ),
             ),
             const SizedBox(height: TmsSpace.sm),
           ],
@@ -242,34 +209,6 @@ class _TimetablePage extends StatelessWidget {
       ]),
     );
   }
-}
-
-class _TakenAction extends StatelessWidget {
-  const _TakenAction(
-      {required this.taken, required this.weeklyTemplate, this.onPressed});
-  final bool taken;
-  final bool weeklyTemplate;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) => Tooltip(
-        message: weeklyTemplate
-            ? 'Open Today on the scheduled date to record this class.'
-            : taken
-                ? 'Class taken and confirmed'
-                : 'Complete attendance and the daily class update',
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(8),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Checkbox(
-              value: taken,
-              onChanged: onPressed == null ? null : (_) => onPressed!(),
-            ),
-            Text(taken ? 'Taken' : 'Not taken'),
-          ]),
-        ),
-      );
 }
 
 String _startTime(String value) {
@@ -291,8 +230,7 @@ List<_RowData> _todayRows(List<TeacherTodayClass> items) {
       rows.add(_RowData(
           time: item.scheduleLabel ?? '',
           subject: item.courseName,
-          className: item.className,
-          todayClass: item));
+          className: item.className));
     } else {
       rows.addAll(slots.map((slot) => _RowData(
             time: slot.timeLabel,
@@ -301,7 +239,6 @@ List<_RowData> _todayRows(List<TeacherTodayClass> items) {
                 : item.courseName,
             className: item.className,
             room: slot.room,
-            todayClass: item,
           )));
     }
   }

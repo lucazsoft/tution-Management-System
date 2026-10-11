@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:tms_mobile/core/theme/app_theme.dart';
 
@@ -8,12 +9,32 @@ class TimetableDayNavigator extends StatelessWidget {
     required this.isToday,
     required this.onPrevious,
     required this.onNext,
+    this.onDateSelected,
   });
 
   final DateTime date;
   final bool isToday;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
+  final ValueChanged<DateTime>? onDateSelected;
+
+  Future<void> _selectDate(BuildContext context) async {
+    if (onDateSelected == null ||
+        kIsWeb ||
+        defaultTargetPlatform != TargetPlatform.android) {
+      return;
+    }
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: date,
+      firstDate: today.subtract(const Duration(days: 7)),
+      lastDate: today.add(const Duration(days: 7)),
+      helpText: 'Select timetable date',
+    );
+    if (selected != null) onDateSelected!(selected);
+  }
 
   static const _days = [
     'Monday',
@@ -52,21 +73,33 @@ class TimetableDayNavigator extends StatelessWidget {
                 icon: const Icon(Icons.chevron_left_rounded),
               ),
               Expanded(
-                child: Column(children: [
-                  Text(
-                      isToday
-                          ? 'Today · ${_days[date.weekday - 1]}'
-                          : _days[date.weekday - 1],
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 3),
-                  Text('${date.day} ${_months[date.month - 1]} ${date.year}',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: kColorMutedText)),
-                ]),
+                child: InkWell(
+                  onTap: onDateSelected == null ||
+                          kIsWeb ||
+                          defaultTargetPlatform != TargetPlatform.android
+                      ? null
+                      : () => _selectDate(context),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(children: [
+                      Text(
+                          isToday
+                              ? 'Today · ${_days[date.weekday - 1]}'
+                              : _days[date.weekday - 1],
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleLarge),
+                      const SizedBox(height: 3),
+                      Text(
+                          '${date.day} ${_months[date.month - 1]} ${date.year}',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(color: kColorMutedText)),
+                    ]),
+                  ),
+                ),
               ),
               IconButton.filledTonal(
                 tooltip: 'Next day',

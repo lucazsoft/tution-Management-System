@@ -110,11 +110,17 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
         selectedIndex: _tab < 2 ? _tab : _tab + 1,
         onDestinationSelected: (i) {
           if (i == 2) {
-            context.go('/teacher/messages');
+            context.push('/teacher/messages');
           } else if (i == 3) {
-            context.go('/teacher/timetable');
+            context.push('/teacher/timetable');
           } else {
-            setState(() => _tab = i < 2 ? i : i - 1);
+            final tab = i == 1
+                ? 'attendance'
+                : i == 4
+                    ? 'more'
+                    : null;
+            context
+                .go(tab == null ? '/teacher/home' : '/teacher/home?tab=$tab');
           }
         },
       ),
@@ -535,10 +541,11 @@ class _AttendanceTabState extends ConsumerState<_AttendanceTab> {
         Text('Today\'s stamps', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         if (stamps.isEmpty)
-          const TeacherEmptyView(
-            icon: Icons.fingerprint_outlined,
-            title: 'No stamps yet',
-            message: 'Mark your attendance from a class below.',
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'No stamps yet. Mark your attendance from a class below.',
+            ),
           )
         else
           for (final stamp in stamps.take(10))
@@ -1147,7 +1154,7 @@ class _QuickActions extends StatelessWidget {
       ),
       _QuickActionTile(
         icon: Icons.assignment_outlined,
-        label: 'Assign homework',
+        label: 'Homework',
         onTap: onHomework,
       ),
       _QuickActionTile(
@@ -1156,18 +1163,10 @@ class _QuickActions extends StatelessWidget {
         onTap: onResults,
       ),
     ];
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final columns = constraints.maxWidth < 320 ? 1 : 2;
-        final width = (constraints.maxWidth - (columns - 1) * 8) / columns;
-        return Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final action in actions) SizedBox(width: width, child: action),
-          ],
-        );
-      },
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: actions,
     );
   }
 }
@@ -1185,15 +1184,14 @@ class _QuickActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 62,
-      child: OutlinedButton.icon(
-        onPressed: onTap,
-        icon: Icon(icon, size: 22),
-        label: Text(label, textAlign: TextAlign.center),
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        ),
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 20),
+      label: Text(label),
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(0, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        visualDensity: VisualDensity.compact,
       ),
     );
   }

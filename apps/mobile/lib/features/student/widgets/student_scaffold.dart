@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tms_mobile/core/navigation/android_back_coordinator.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
 import 'package:tms_mobile/features/auth/data/device_account_vault.dart';
@@ -98,13 +99,14 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
 
   void _open(String route) {
     Navigator.of(context).pop();
-    if (widget.selectedIndex != null &&
-        widget.selectedIndex! < 5 &&
-        _navigationItems[widget.selectedIndex!].route == route) {
+    final current =
+        GoRouter.maybeOf(context)?.routeInformationProvider.value.uri.path;
+    if (current == route) {
       return;
     }
     Future<void>.microtask(() {
-      if (mounted) context.push(route);
+      if (!mounted) return;
+      route == '/student/home' ? context.go(route) : context.push(route);
     });
   }
 
@@ -163,14 +165,7 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
       return;
     }
     _lastHomeBackPress = now;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('Press again to close the application'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+    showAndroidExitPrompt(context);
   }
 
   @override
@@ -195,7 +190,9 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
                     selectedIndex: widget.selectedIndex!,
                     onDestinationSelected: (index) {
                       if (index != widget.selectedIndex) {
-                        context.push(_bottomRoutes[index]);
+                        index == 0
+                            ? context.go(_bottomRoutes[index])
+                            : context.push(_bottomRoutes[index]);
                       }
                     },
                     destinations: const [
@@ -234,9 +231,13 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
 
   Widget _buildDrawer(BuildContext context) {
     final user = ref.watch(authProvider).user;
+    final location =
+        GoRouter.maybeOf(context)?.routeInformationProvider.value.uri.path;
+    final drawerIndex =
+        _navigationItems.indexWhere((item) => item.route == location);
     return PortalDrawerTheme(
       child: NavigationDrawer(
-        selectedIndex: widget.selectedIndex,
+        selectedIndex: drawerIndex < 0 ? null : drawerIndex,
         onDestinationSelected: (index) => _open(_navigationItems[index].route),
         children: [
           PortalDrawerHeader(
@@ -274,7 +275,14 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
             (item) => NavigationDrawerDestination(
               icon: Icon(item.icon),
               selectedIcon: Icon(item.icon),
-              label: Text(item.label),
+              label: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 200),
+                child: Text(
+                  item.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ),
           ),
           const Divider(indent: 28, endIndent: 28),

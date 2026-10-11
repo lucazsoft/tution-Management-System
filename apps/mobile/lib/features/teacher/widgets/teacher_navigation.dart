@@ -63,9 +63,9 @@ abstract final class TeacherNavigation {
     const sections = ['home', 'attendance', 'messages', 'classes', 'more'];
     final section = sections[index];
     if (section == 'messages') {
-      context.go('/teacher/messages');
+      context.push('/teacher/messages');
     } else if (section == 'classes') {
-      context.go('/teacher/timetable');
+      context.push('/teacher/timetable');
     } else {
       context.go(
           section == 'home' ? '/teacher/home' : '/teacher/home?tab=$section');
@@ -184,42 +184,56 @@ class TeacherDashboardNavigationBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textScale = MediaQuery.textScalerOf(context).scale(1);
-    return AndroidBackCoordinator(
-      router: GoRouter.of(context),
-      child: NavigationBar(
-        height: 80.0 + ((textScale - 1).clamp(0.0, 1.0) * 16.0).toDouble(),
-        selectedIndex: selectedIndex,
-        onDestinationSelected: onDestinationSelected ??
-            (index) => TeacherNavigation.openDashboardSection(context, index),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.check_circle_outline),
-            selectedIcon: Icon(Icons.check_circle),
-            label: 'Attendance',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.forum_outlined),
-            selectedIcon: Icon(Icons.forum_rounded),
-            label: 'Messages',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.school_outlined),
-            selectedIcon: Icon(Icons.school),
-            label: 'Classes',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.more_horiz_rounded),
-            selectedIcon: Icon(Icons.more_rounded),
-            label: 'More',
-          ),
-        ],
-      ),
+    final router = GoRouter.maybeOf(context);
+    final uri = router?.routeInformationProvider.value.uri;
+    final effectiveSelectedIndex = switch (uri?.path) {
+      '/teacher/home' => switch (uri?.queryParameters['tab']) {
+          'attendance' => 1,
+          'classes' => 3,
+          'more' => 4,
+          _ => 0,
+        },
+      '/teacher/messages' => 2,
+      '/teacher/timetable' => 3,
+      null => selectedIndex,
+      _ => 4,
+    };
+    final navigationBar = NavigationBar(
+      height: 80.0 + ((textScale - 1).clamp(0.0, 1.0) * 16.0).toDouble(),
+      selectedIndex: effectiveSelectedIndex,
+      onDestinationSelected: onDestinationSelected ??
+          (index) => TeacherNavigation.openDashboardSection(context, index),
+      destinations: const [
+        NavigationDestination(
+          icon: Icon(Icons.home_outlined),
+          selectedIcon: Icon(Icons.home_rounded),
+          label: 'Home',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.check_circle_outline),
+          selectedIcon: Icon(Icons.check_circle),
+          label: 'Attendance',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.forum_outlined),
+          selectedIcon: Icon(Icons.forum_rounded),
+          label: 'Messages',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.school_outlined),
+          selectedIcon: Icon(Icons.school),
+          label: 'Classes',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.more_horiz_rounded),
+          selectedIcon: Icon(Icons.more_rounded),
+          label: 'More',
+        ),
+      ],
     );
+    return router == null
+        ? navigationBar
+        : AndroidBackCoordinator(router: router, child: navigationBar);
   }
 }
 
@@ -238,7 +252,12 @@ class TeacherPortalScaffold extends StatelessWidget {
     final path =
         GoRouter.maybeOf(context)?.routeInformationProvider.value.uri.path ??
             '';
-    final selected = path == '/teacher/messages' ? 2 : 0;
+    final selected = switch (path) {
+      '/teacher/messages' => 2,
+      '/teacher/timetable' => 3,
+      '/teacher/home' => 0,
+      _ => 4,
+    };
     return Scaffold(
       drawer: TeacherNavigation.drawer(context),
       appBar: AppBar(title: Text(title)),

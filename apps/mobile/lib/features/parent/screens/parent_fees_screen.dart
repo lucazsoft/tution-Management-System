@@ -22,7 +22,7 @@ class ParentFeesScreen extends ConsumerWidget {
               GoogleFonts.fraunces(fontWeight: FontWeight.w700, fontSize: 22),
         ),
       ),
-      bottomNavigationBar: const ParentNavigationBar(selectedIndex: 0),
+      bottomNavigationBar: const ParentNavigationBar(selectedIndex: 4),
       body: SafeArea(
         child: ParentPortalStateView(
           builder: (context, portal, child) {

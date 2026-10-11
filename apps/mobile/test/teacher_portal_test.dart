@@ -606,7 +606,7 @@ void main() {
       expect(find.text('Clocked in'), findsOneWidget);
       expect(find.text('Attendance'), findsWidgets);
       expect(find.text('Update syllabus'), findsOneWidget);
-      expect(find.text('Assign homework'), findsOneWidget);
+      expect(find.text('Homework'), findsOneWidget);
       expect(find.text('Enter results'), findsOneWidget);
       expect(find.text('Today\'s timetable'), findsOneWidget);
       expect(find.text('Full timetable'), findsOneWidget);
@@ -668,6 +668,8 @@ void main() {
       );
 
       expect(find.text('Mathematics'), findsOneWidget);
+      expect(find.text('Taken'), findsNothing);
+      expect(find.text('Not taken'), findsNothing);
 
       final sundayOffset = (DateTime.sunday - DateTime.now().weekday) % 7;
       final daysUntilSunday = sundayOffset == 0 ? 7 : sundayOffset;

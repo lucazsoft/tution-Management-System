@@ -14,7 +14,7 @@ class ParentCalendarScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => Scaffold(
         drawer: ParentNavigation.drawer(context),
         appBar: AppBar(title: const Text('Academic calendar')),
-        bottomNavigationBar: const ParentNavigationBar(selectedIndex: 0),
+        bottomNavigationBar: const ParentNavigationBar(selectedIndex: 4),
         body: SafeArea(
             child: ParentPortalStateView(
           padding: const EdgeInsets.all(TmsSpace.md),

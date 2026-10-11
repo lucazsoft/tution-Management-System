@@ -125,6 +125,9 @@ class _StudentTimetableScreenState
                     : () => setState(() => _dayOffset--),
                 onNext:
                     _dayOffset >= 7 ? null : () => setState(() => _dayOffset++),
+                onDateSelected: (selected) => setState(
+                  () => _dayOffset = selected.difference(_today).inDays,
+                ),
               ),
               if (holidays.isNotEmpty)
                 ...holidays.map((holiday) => _HolidayCard(event: holiday))
@@ -144,10 +147,6 @@ class _StudentTimetableScreenState
                     subject: session.subject,
                     primaryDetail: session.teacher,
                     secondaryDetail: session.room,
-                    footer: Text(session.typeLabel,
-                        style: const TextStyle(
-                            color: StudentColors.info,
-                            fontWeight: FontWeight.w600)),
                   ),
                   const SizedBox(height: TmsSpace.sm),
                 ],

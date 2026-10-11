@@ -47,7 +47,7 @@ class _ParentTimetableScreenState extends ConsumerState<ParentTimetableScreen> {
   Widget build(BuildContext context) => Scaffold(
         drawer: ParentNavigation.drawer(context),
         appBar: AppBar(title: const Text('Child timetable')),
-        bottomNavigationBar: const ParentNavigationBar(selectedIndex: 0),
+        bottomNavigationBar: const ParentNavigationBar(selectedIndex: 1),
         body: ParentPortalStateView(
           builder: (context, portal, child) {
             final sessions = portal.timetableSessions
@@ -78,6 +78,9 @@ class _ParentTimetableScreenState extends ConsumerState<ParentTimetableScreen> {
                       ? () => setState(() =>
                           _selected = _selected.add(const Duration(days: 1)))
                       : null,
+                  onDateSelected: (selected) => setState(
+                    () => _selected = _dateOnly(selected),
+                  ),
                 ),
                 if (holiday != null)
                   Card(

@@ -202,7 +202,8 @@ void main() {
       }
       expect(find.textContaining('Wednesday'), findsOneWidget);
       expect(find.text('Science Revision'), findsOneWidget);
-      expect(find.text('Short-Term'), findsOneWidget);
+      expect(find.text('Short-Term'), findsNothing);
+      expect(find.text('Regular'), findsNothing);
 
       // Navigation stops one week from today.
       for (var index = delta.abs(); index < 7 + delta.abs(); index++) {

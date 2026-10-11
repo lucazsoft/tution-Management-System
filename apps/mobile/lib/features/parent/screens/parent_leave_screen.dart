@@ -12,7 +12,7 @@ class ParentLeaveScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => Scaffold(
         drawer: ParentNavigation.drawer(context),
         appBar: AppBar(title: const Text('Leave requests')),
-        bottomNavigationBar: const ParentNavigationBar(selectedIndex: 0),
+        bottomNavigationBar: const ParentNavigationBar(selectedIndex: 4),
         body: ParentPortalStateView(
             builder: (context, portal, child) => Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -61,7 +61,7 @@ class TeacherLeaveScreen extends ConsumerWidget {
         label: const Text('New Request'),
       ),
       bottomNavigationBar:
-          const TeacherDashboardNavigationBar(selectedIndex: 0),
+          const TeacherDashboardNavigationBar(selectedIndex: 4),
     );
   }
 

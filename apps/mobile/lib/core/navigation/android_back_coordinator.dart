@@ -3,6 +3,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
+void showAndroidExitPrompt(BuildContext context) {
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: const Text(
+          'Press back again to exit',
+          textAlign: TextAlign.center,
+        ),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+}
+
 /// Android-only fallback for consistent system Back behavior.
 class AndroidBackCoordinator extends StatefulWidget {
   const AndroidBackCoordinator({
@@ -77,12 +96,7 @@ class _AndroidBackCoordinatorState extends State<AndroidBackCoordinator> {
       return;
     }
     _lastHomeBack = now;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(const SnackBar(
-        content: Text('Press again to close the application'),
-        duration: Duration(seconds: 2),
-      ));
+    showAndroidExitPrompt(context);
   }
 
   @override

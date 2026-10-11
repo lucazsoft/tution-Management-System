@@ -67,7 +67,8 @@ abstract final class ParentNavigation {
       return;
     }
     final route = routes[index];
-    if (GoRouterState.of(context).matchedLocation != route) context.go(route);
+    if (GoRouterState.of(context).matchedLocation == route) return;
+    index == 0 ? context.go(route) : context.push(route);
   }
 
   static void back(BuildContext context) {
@@ -116,7 +117,14 @@ abstract final class ParentNavigation {
               NavigationDrawerDestination(
                 icon: Icon(item.icon),
                 selectedIcon: Icon(item.icon),
-                label: Text(item.label),
+                label: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 200),
+                  child: Text(
+                    item.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
             const Divider(indent: 28, endIndent: 28),
             const PortalDrawerSectionLabel('Account'),
@@ -189,8 +197,18 @@ class ParentNavigationBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final router = GoRouter.maybeOf(context);
+    final path = router?.routeInformationProvider.value.uri.path;
+    final effectiveSelectedIndex = switch (path) {
+      '/parent/home' => 0,
+      '/parent/academics' || '/parent/timetable' => 1,
+      '/parent/messages' => 2,
+      '/parent/appointments' => 3,
+      null => selectedIndex,
+      _ => 4,
+    };
     final navigationBar = NavigationBar(
-      selectedIndex: selectedIndex,
+      selectedIndex: effectiveSelectedIndex,
       onDestinationSelected: (index) => ParentNavigation.open(context, index),
       destinations: const [
         NavigationDestination(
@@ -221,9 +239,8 @@ class ParentNavigationBar extends StatelessWidget {
       ],
     );
     if (!coordinateSystemBack) return navigationBar;
-    return AndroidBackCoordinator(
-      router: GoRouter.of(context),
-      child: navigationBar,
-    );
+    return router == null
+        ? navigationBar
+        : AndroidBackCoordinator(router: router, child: navigationBar);
   }
 }

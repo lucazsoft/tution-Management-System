@@ -28,6 +28,10 @@ void main() {
         ),
         GoRoute(path: '/teacher/leave', builder: (_, __) => page('Leave', 0)),
         GoRoute(
+          path: '/teacher/meetings',
+          builder: (_, __) => page('Meetings', 0),
+        ),
+        GoRoute(
           path: '/teacher/messages',
           builder: (_, __) => page('Messages', 2),
         ),
@@ -122,6 +126,10 @@ void main() {
     router.go('/teacher/leave');
     await tester.pumpAndSettle();
     expect(find.text('Leave page'), findsOneWidget);
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      4,
+    );
 
     for (final label in ['Home', 'Attendance', 'Messages', 'Classes', 'More']) {
       expect(
@@ -139,5 +147,25 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('Messages page'), findsOneWidget);
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      2,
+    );
+  });
+
+  testWidgets('back from a teacher sub-page returns to home', (tester) async {
+    await pumpPortal(tester);
+    router.go('/teacher/meetings');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Meetings page'), findsOneWidget);
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      4,
+    );
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Home page'), findsOneWidget);
   });
 }

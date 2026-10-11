@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_navigation.dart';
 
 void main() {
@@ -60,5 +61,49 @@ void main() {
       tester.getTopLeft(profileIcon).dx,
       moreOrLessEquals(tester.getTopLeft(academicsIcon).dx, epsilon: .01),
     );
+  });
+
+  testWidgets('parent navigation highlights the route that is open',
+      (tester) async {
+    Widget page(String title) => Scaffold(
+          body: Text(title),
+          bottomNavigationBar: const ParentNavigationBar(selectedIndex: 0),
+        );
+    final router = GoRouter(
+      initialLocation: '/parent/home',
+      routes: [
+        GoRoute(path: '/parent/home', builder: (_, __) => page('Home')),
+        GoRoute(
+          path: '/parent/timetable',
+          builder: (_, __) => page('Timetable'),
+        ),
+        GoRoute(
+          path: '/parent/appointments',
+          builder: (_, __) => page('Meetings'),
+        ),
+        GoRoute(
+          path: '/parent/attendance',
+          builder: (_, __) => page('Attendance'),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(child: MaterialApp.router(routerConfig: router)),
+    );
+
+    for (final entry in const [
+      ('/parent/home', 0),
+      ('/parent/timetable', 1),
+      ('/parent/appointments', 3),
+      ('/parent/attendance', 4),
+    ]) {
+      router.go(entry.$1);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        entry.$2,
+      );
+    }
   });
 }
