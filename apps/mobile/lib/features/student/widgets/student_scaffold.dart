@@ -282,27 +282,32 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
           PortalDrawerAction(
             icon: Icons.manage_accounts_outlined,
             label: 'Profile settings',
+            useExactAndroidDestinationLayout: true,
             onTap: () => _open('/student/account'),
           ),
           PortalDrawerAction(
             icon: Icons.key_rounded,
             label: 'Change password',
+            useExactAndroidDestinationLayout: true,
             onTap: () => _open('/student/change-password'),
           ),
           PortalDrawerAction(
             icon: Icons.pin_outlined,
             label: 'Set or change MPIN',
+            useExactAndroidDestinationLayout: true,
             onTap: () => _open('/student/mpin'),
           ),
           PortalDrawerAction(
             icon: Icons.switch_account_rounded,
             label: 'Switch account',
+            useExactAndroidDestinationLayout: true,
             onTap: _switchAccount,
           ),
           PortalDrawerAction(
             icon: Icons.logout_rounded,
             label: 'Log out',
             destructive: true,
+            useExactAndroidDestinationLayout: true,
             onTap: () {
               Navigator.of(context).pop();
               ref.read(authProvider.notifier).logout();

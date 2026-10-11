@@ -131,22 +131,57 @@ class PortalDrawerAction extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.destructive = false,
+    this.useExactAndroidDestinationLayout = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final bool destructive;
+  final bool useExactAndroidDestinationLayout;
 
   @override
   Widget build(BuildContext context) {
     final color = destructive ? Theme.of(context).colorScheme.error : null;
     final alignWithDestinations =
         !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+    if (alignWithDestinations && useExactAndroidDestinationLayout) {
+      // NavigationDrawerDestination uses 12dp of tile padding followed by a
+      // 16dp inset. Reproduce that row directly instead of relying on
+      // ListTile's platform-dependent leading/title calculations.
+      return Semantics(
+        button: true,
+        child: InkWell(
+          onTap: onTap,
+          child: SizedBox(
+            height: 56,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 28, right: 16),
+              child: Row(
+                children: [
+                  Icon(icon, size: 24, color: color),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .listTileTheme
+                          .titleTextStyle
+                          ?.copyWith(color: color),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return ListTile(
-      // NavigationDrawerDestination places its icon at 28dp and its label
-      // 12dp after the 24dp icon. Mirror that geometry for account actions so
-      // both sections form the same two clean vertical columns on Android.
       contentPadding: alignWithDestinations
           ? const EdgeInsets.only(left: 28, right: 16)
           : null,

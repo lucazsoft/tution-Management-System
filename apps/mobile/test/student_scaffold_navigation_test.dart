@@ -31,7 +31,9 @@ void main() {
     );
   });
 
-  tearDown(() => router.dispose());
+  tearDown(() {
+    router.dispose();
+  });
 
   Future<void> pumpPortal(WidgetTester tester) async {
     await tester.pumpWidget(
@@ -106,6 +108,35 @@ void main() {
     ]) {
       expect(find.text(label), findsOneWidget);
     }
+
+    final drawer = find.byType(NavigationDrawer);
+    final academicsLabel = find.descendant(
+      of: drawer,
+      matching: find.text('Academics', skipOffstage: false),
+      skipOffstage: false,
+    );
+    final profileLabel = find.descendant(
+      of: drawer,
+      matching: find.text('Profile settings'),
+    );
+    final academicsIcon = find.descendant(
+      of: drawer,
+      matching: find.byIcon(Icons.school_outlined, skipOffstage: false),
+      skipOffstage: false,
+    );
+    final profileIcon = find.descendant(
+      of: drawer,
+      matching: find.byIcon(Icons.manage_accounts_outlined),
+    );
+
+    expect(
+      tester.getTopLeft(profileLabel).dx,
+      moreOrLessEquals(tester.getTopLeft(academicsLabel).dx, epsilon: .01),
+    );
+    expect(
+      tester.getTopLeft(profileIcon).dx,
+      moreOrLessEquals(tester.getTopLeft(academicsIcon).dx, epsilon: .01),
+    );
   });
 
   testWidgets('device back returns a pushed student page to home',

@@ -35,7 +35,9 @@ void main() {
     );
   });
 
-  tearDown(() => router.dispose());
+  tearDown(() {
+    router.dispose();
+  });
 
   Future<void> pumpPortal(WidgetTester tester) async {
     await tester.pumpWidget(
@@ -79,6 +81,38 @@ void main() {
     ]) {
       expect(find.text(label), findsOneWidget);
     }
+
+    final drawer = find.byType(NavigationDrawer);
+    final timetableLabel = find.descendant(
+      of: drawer,
+      matching: find.text('Timetable', skipOffstage: false),
+      skipOffstage: false,
+    );
+    final profileLabel = find.descendant(
+      of: drawer,
+      matching: find.text('Profile settings'),
+    );
+    final timetableIcon = find.descendant(
+      of: drawer,
+      matching: find.byIcon(
+        Icons.calendar_view_week_outlined,
+        skipOffstage: false,
+      ),
+      skipOffstage: false,
+    );
+    final profileIcon = find.descendant(
+      of: drawer,
+      matching: find.byIcon(Icons.manage_accounts_outlined),
+    );
+
+    expect(
+      tester.getTopLeft(profileLabel).dx,
+      moreOrLessEquals(tester.getTopLeft(timetableLabel).dx, epsilon: .01),
+    );
+    expect(
+      tester.getTopLeft(profileIcon).dx,
+      moreOrLessEquals(tester.getTopLeft(timetableIcon).dx, epsilon: .01),
+    );
   });
 
   testWidgets('bottom navigation keeps the teacher dashboard sections',

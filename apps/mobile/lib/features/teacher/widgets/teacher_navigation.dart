@@ -103,10 +103,13 @@ abstract final class TeacherNavigation {
               NavigationDrawerDestination(
                 icon: Icon(item.icon),
                 selectedIcon: Icon(item.icon),
-                label: Text(
-                  item.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                label: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 200),
+                  child: Text(
+                    item.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
             const Divider(indent: 28, endIndent: 28),
@@ -114,21 +117,25 @@ abstract final class TeacherNavigation {
             PortalDrawerAction(
               icon: Icons.manage_accounts_outlined,
               label: 'Profile settings',
+              useExactAndroidDestinationLayout: true,
               onTap: () => open('/teacher/account'),
             ),
             PortalDrawerAction(
               icon: Icons.key_rounded,
               label: 'Change password',
+              useExactAndroidDestinationLayout: true,
               onTap: () => open('/teacher/change-password'),
             ),
             PortalDrawerAction(
               icon: Icons.pin_outlined,
               label: 'Set or change MPIN',
+              useExactAndroidDestinationLayout: true,
               onTap: () => open('/teacher/mpin'),
             ),
             PortalDrawerAction(
               icon: Icons.switch_account_rounded,
               label: 'Switch account',
+              useExactAndroidDestinationLayout: true,
               onTap: () async {
                 Navigator.of(context).pop();
                 final currentId = ref.read(authProvider).user?.id;
@@ -150,6 +157,7 @@ abstract final class TeacherNavigation {
               icon: Icons.logout_rounded,
               label: 'Log out',
               destructive: true,
+              useExactAndroidDestinationLayout: true,
               onTap: () {
                 Navigator.of(context).pop();
                 ref.read(authProvider.notifier).logout();

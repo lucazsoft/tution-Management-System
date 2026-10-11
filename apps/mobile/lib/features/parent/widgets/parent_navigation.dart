@@ -123,21 +123,25 @@ abstract final class ParentNavigation {
             PortalDrawerAction(
               icon: Icons.manage_accounts_outlined,
               label: 'Profile settings',
+              useExactAndroidDestinationLayout: true,
               onTap: () => open('/parent/account'),
             ),
             PortalDrawerAction(
               icon: Icons.key_rounded,
               label: 'Change password',
+              useExactAndroidDestinationLayout: true,
               onTap: () => open('/parent/change-password'),
             ),
             PortalDrawerAction(
               icon: Icons.pin_outlined,
               label: 'Set or change MPIN',
+              useExactAndroidDestinationLayout: true,
               onTap: () => open('/parent/mpin'),
             ),
             PortalDrawerAction(
               icon: Icons.switch_account_rounded,
               label: 'Switch account',
+              useExactAndroidDestinationLayout: true,
               onTap: () async {
                 Navigator.of(context).pop();
                 final currentId = ref.read(authProvider).user?.id;
@@ -159,6 +163,7 @@ abstract final class ParentNavigation {
               icon: Icons.logout_rounded,
               label: 'Log out',
               destructive: true,
+              useExactAndroidDestinationLayout: true,
               onTap: () {
                 Navigator.of(context).pop();
                 ref.read(authProvider.notifier).logout();
