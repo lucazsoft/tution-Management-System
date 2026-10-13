@@ -14,6 +14,7 @@ import 'package:tms_mobile/features/parent/data/parent_portal_repository.dart';
 import 'package:tms_mobile/features/parent/models/parent_portal.dart';
 import 'package:tms_mobile/features/parent/screens/parent_academics_screen.dart';
 import 'package:tms_mobile/features/parent/screens/parent_attendance_screen.dart';
+import 'package:tms_mobile/features/parent/screens/parent_appointments_screen.dart';
 import 'package:tms_mobile/features/parent/screens/parent_calendar_screen.dart';
 import 'package:tms_mobile/features/parent/screens/parent_fees_screen.dart';
 import 'package:tms_mobile/features/parent/screens/parent_home_screen.dart';
@@ -295,6 +296,19 @@ Future<void> _pumpPortalScreen(
 }
 
 void main() {
+  group('parent meeting notice', () {
+    test('requires exactly 30 minutes when current time is on a minute', () {
+      final now = DateTime(2026, 10, 13, 12);
+      expect(parentMeetingEarliest(now), DateTime(2026, 10, 13, 12, 30));
+    });
+
+    test('rounds up so minute-only picker values cannot be under 30 minutes',
+        () {
+      final now = DateTime(2026, 10, 13, 12, 0, 29);
+      expect(parentMeetingEarliest(now), DateTime(2026, 10, 13, 12, 31));
+    });
+  });
+
   group('ParentPortalRepository', () {
     test('sends authorized student selector and parses portal DTOs', () async {
       final dio = ApiClient.buildDio(

@@ -132,7 +132,24 @@ class TeacherPortalRepository {
   }
 
   Future<List<TeacherMessageContact>> fetchMessageRecipients() async {
+    final available = <TeacherMessageContact>[];
     try {
+      // Parent contacts are already returned with the conversation list and
+      // remain available even when an older API deployment has no dedicated
+      // recipients route.
+      final contactsResponse =
+          await _dio.get<dynamic>('/api/communication/messages/contacts');
+      final contactRows = contactsResponse.data is Map<String, dynamic>
+          ? contactsResponse.data['availableContacts']
+          : null;
+      if (contactRows is List) {
+        available.addAll([
+          for (final row in contactRows)
+            if (row is Map<String, dynamic>)
+              TeacherMessageContact.fromJson(row)
+        ]);
+      }
+
       final response =
           await _dio.get<dynamic>('/api/communication/messages/recipients');
       final rows = response.data is Map<String, dynamic>
@@ -143,11 +160,19 @@ class TeacherPortalRepository {
             kind: ApiErrorKind.unknown,
             message: 'New-chat recipients returned an unexpected response.');
       }
-      return [
+      final recipients = [
         for (final row in rows)
           if (row is Map<String, dynamic>) TeacherMessageContact.fromJson(row)
       ];
+      final byConversation = <String, TeacherMessageContact>{
+        for (final item in [...available, ...recipients])
+          '${item.studentId}:${item.parentId}': item,
+      };
+      return byConversation.values.toList();
     } on DioException catch (error) {
+      if (error.response?.statusCode == 404) {
+        return available;
+      }
       throw _typed(error);
     }
   }

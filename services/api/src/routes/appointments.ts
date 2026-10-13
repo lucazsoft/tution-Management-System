@@ -9,6 +9,15 @@ import { canAccessBranch, isTenantAdmin, managedBranchIds } from '../utils/acces
 
 const router = Router();
 
+const androidAppointmentNoticeMs = 30 * 60 * 1000;
+const isAndroidClient = (body: any) => body?.clientPlatform === 'ANDROID';
+const appointmentMinimum = (body: any, windowHours: number) =>
+  isAndroidClient(body)
+    ? Math.floor((Date.now() + androidAppointmentNoticeMs) / 60000) * 60000
+    : Date.now() + windowHours * 60 * 60 * 1000;
+const appointmentNoticeLabel = (body: any, windowHours: number) =>
+  isAndroidClient(body) ? '30 minutes' : `${windowHours} hours`;
+
 async function linkedStudent(parentUserId: string, tenantId: string, studentId: string) {
   return prisma.student.findFirst({
     where: {
@@ -81,9 +90,9 @@ router.post('/request', authMiddleware, async (req: TenantRequest, res: Response
     if (!student || !tenant) return res.status(404).json({ error: 'Linked student was not found.' });
     const scheduledDate = new Date(scheduledTime);
     if (Number.isNaN(scheduledDate.getTime())) return res.status(422).json({ error: 'Choose a valid appointment date and time.' });
-    const minimum = Date.now() + tenant.appointmentWindowHours * 60 * 60 * 1000;
+    const minimum = appointmentMinimum(req.body, tenant.appointmentWindowHours);
     if (scheduledDate.getTime() < minimum) {
-      return res.status(422).json({ error: `Appointments must be scheduled at least ${tenant.appointmentWindowHours} hours in advance.` });
+      return res.status(422).json({ error: `Appointments must be scheduled at least ${appointmentNoticeLabel(req.body, tenant.appointmentWindowHours)} in advance.` });
     }
 
     const assignedTeacherIds = new Set(student.enrollments.map((enrollment) => enrollment.class.teacherId).filter((id): id is string => Boolean(id)));
@@ -225,9 +234,10 @@ router.post('/parent-respond/:appointmentId', authMiddleware, async (req: Tenant
     }
     const alternativeDate = new Date(req.body?.alternativeSlot);
     const tenant = await prisma.tenant.findUnique({ where: { id: req.tenantId! }, select: { appointmentWindowHours: true } });
-    const minimum = Date.now() + (tenant?.appointmentWindowHours ?? 24) * 3600000;
+    const windowHours = tenant?.appointmentWindowHours ?? 24;
+    const minimum = appointmentMinimum(req.body, windowHours);
     if (!Number.isFinite(alternativeDate.getTime()) || alternativeDate.getTime() < minimum) {
-      return res.status(422).json({ error: `Choose a time at least ${tenant?.appointmentWindowHours ?? 24} hours in advance.` });
+      return res.status(422).json({ error: `Choose a time at least ${appointmentNoticeLabel(req.body, windowHours)} in advance.` });
     }
     const participants = (Array.isArray(appointment.participantIds) ? appointment.participantIds : [appointment.teacherId]).filter((id): id is string => typeof id === 'string');
     const updated = await prisma.appointment.update({
@@ -278,10 +288,11 @@ router.patch('/:appointmentId', authMiddleware, async (req: TenantRequest, res: 
         where: { id: req.tenantId! },
         select: { appointmentWindowHours: true },
       });
-      const minimum = Date.now() + (tenant?.appointmentWindowHours ?? 24) * 3600000;
+      const windowHours = tenant?.appointmentWindowHours ?? 24;
+      const minimum = appointmentMinimum(req.body, windowHours);
       if (scheduledTime.getTime() < minimum) {
         return res.status(422).json({
-          error: `Appointments must be scheduled at least ${tenant?.appointmentWindowHours ?? 24} hours in advance.`,
+          error: `Appointments must be scheduled at least ${appointmentNoticeLabel(req.body, windowHours)} in advance.`,
         });
       }
     }

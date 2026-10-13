@@ -80,12 +80,8 @@ class _AndroidBackCoordinatorState extends State<AndroidBackCoordinator> {
     }
 
     if (!_homeRoutes.contains(location)) {
-      if (router.canPop()) {
-        router.pop();
-      } else {
-        final home = _portalHome(location);
-        if (home != null) router.go(home);
-      }
+      final home = _portalHome(location);
+      if (home != null) router.go(home);
       return;
     }
 

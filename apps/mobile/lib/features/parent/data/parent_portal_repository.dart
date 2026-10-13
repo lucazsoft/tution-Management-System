@@ -202,6 +202,7 @@ class ParentPortalRepository {
         'remarks': remarks.trim(),
         'isGroup': false,
         'participantIds': <String>[],
+        'clientPlatform': 'ANDROID',
       });
     } on DioException catch (error) {
       throw ApiException.from(error);
@@ -218,6 +219,7 @@ class ParentPortalRepository {
           if (alternativeTime != null)
             'alternativeSlot': alternativeTime.toUtc().toIso8601String(),
           if (remarks?.trim().isNotEmpty == true) 'remarks': remarks!.trim(),
+          'clientPlatform': 'ANDROID',
         },
       );
     } on DioException catch (error) {
@@ -236,6 +238,7 @@ class ParentPortalRepository {
         data: {
           'scheduledTime': scheduledTime.toUtc().toIso8601String(),
           'remarks': remarks.trim(),
+          'clientPlatform': 'ANDROID',
         },
       );
     } on DioException catch (error) {

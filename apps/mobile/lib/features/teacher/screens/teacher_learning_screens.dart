@@ -496,33 +496,48 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
     if (mounted) setState(() => _savingPlan = false);
   }
 
-  Future<void> _addTopic(
+  Future<void> _addTopics(
       TeacherSyllabus syllabus, TeacherSyllabusChapter chapter) async {
     final controller = TextEditingController();
-    final title = await showDialog<String>(
+    final titles = await showDialog<List<String>>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-              title: Text('Add topic to ${chapter.title}'),
+              title: Text('Add topics to ${chapter.title}'),
               content: TextField(
                   controller: controller,
                   autofocus: true,
+                  minLines: 4,
+                  maxLines: 8,
                   decoration: const InputDecoration(
-                      labelText: 'Topic title', border: OutlineInputBorder())),
+                      labelText: 'Topics',
+                      helperText: 'Enter one topic per line.',
+                      alignLabelWithHint: true,
+                      border: OutlineInputBorder())),
               actions: [
                 TextButton(
                     onPressed: () => Navigator.pop(dialogContext),
                     child: const Text('Cancel')),
                 FilledButton(
-                    onPressed: () =>
-                        Navigator.pop(dialogContext, controller.text.trim()),
-                    child: const Text('Add topic'))
+                    onPressed: () => Navigator.pop(
+                          dialogContext,
+                          controller.text
+                              .split('\n')
+                              .map((line) => line.trim())
+                              .where((line) => line.isNotEmpty)
+                              .toSet()
+                              .toList(),
+                        ),
+                    child: const Text('Add topics'))
               ],
             ));
     controller.dispose();
-    if (title == null || title.isEmpty) return;
+    if (titles == null || titles.isEmpty) return;
     try {
-      await TeacherPortalRepository().createSyllabusTopic(
-          syllabusId: syllabus.id, chapterId: chapter.id, title: title);
+      final repository = TeacherPortalRepository();
+      for (final title in titles) {
+        await repository.createSyllabusTopic(
+            syllabusId: syllabus.id, chapterId: chapter.id, title: title);
+      }
       await ref.read(teacherPortalViewModelProvider.notifier).refresh();
     } on ApiException catch (error) {
       if (mounted) {
@@ -533,11 +548,14 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
   }
 
   Future<void> _update(TeacherSyllabus syllabus, TeacherSyllabusTopic topic,
-      String status) async {
+      String status, String notes) async {
     setState(() => _busyTopic = topic.id);
     try {
       await TeacherPortalRepository().updateTopicProgress(
-          syllabusId: syllabus.id, topicId: topic.id, status: status);
+          syllabusId: syllabus.id,
+          topicId: topic.id,
+          status: status,
+          notes: notes);
       await ref.read(teacherPortalViewModelProvider.notifier).refresh();
     } on ApiException catch (error) {
       if (mounted) {
@@ -549,13 +567,14 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
   }
 
   Future<void> _updateChapter(TeacherSyllabus syllabus,
-      TeacherSyllabusChapter chapter, String status) async {
+      TeacherSyllabusChapter chapter, String status, String notes) async {
     setState(() => _busyChapter = chapter.id);
     try {
       await TeacherPortalRepository().updateChapterProgress(
         syllabusId: syllabus.id,
         chapterId: chapter.id,
         status: status,
+        notes: notes,
       );
       await ref.read(teacherPortalViewModelProvider.notifier).refresh();
     } on ApiException catch (error) {
@@ -565,6 +584,101 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
       }
     }
     if (mounted) setState(() => _busyChapter = null);
+  }
+
+  Future<String?> _progressNotes(String title, String status) async {
+    final controller = TextEditingController();
+    final notes = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Update $title'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 3,
+          maxLines: 6,
+          maxLength: 1000,
+          decoration: InputDecoration(
+            labelText: 'Lesson notes',
+            helperText:
+                'Status: ${status.replaceAll('_', ' ').toLowerCase()}. Record coverage, activities, or follow-up.',
+            alignLabelWithHint: true,
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+              dialogContext,
+              controller.text.trim(),
+            ),
+            child: const Text('Save progress'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return notes;
+  }
+
+  Future<void> _importChapterOutline() async {
+    final controller = TextEditingController();
+    final chapters = await showDialog<List<String>>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Import chapter outline'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 8,
+          maxLines: 14,
+          decoration: const InputDecoration(
+            labelText: 'Chapter outline',
+            helperText:
+                'Paste one chapter per line. Numbered and bulleted lists are accepted.',
+            alignLabelWithHint: true,
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(
+              dialogContext,
+              controller.text
+                  .split('\n')
+                  .map((line) => line
+                      .replaceFirst(
+                          RegExp(r'^\s*(?:\d+[.)]|[-*\u2022])\s*'), '')
+                      .trim())
+                  .where((line) => line.isNotEmpty)
+                  .toSet()
+                  .toList(),
+            ),
+            icon: const Icon(Icons.playlist_add_rounded),
+            label: const Text('Add to plan'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (chapters == null || chapters.isEmpty || !mounted) return;
+    final existing = _chapters.map((item) => item.title.toLowerCase()).toSet();
+    setState(() {
+      _chapters = [
+        ..._chapters.where((item) => item.title.trim().isNotEmpty),
+        for (final chapter in chapters)
+          if (!existing.contains(chapter.toLowerCase()))
+            _ChapterDraft(null, chapter),
+      ];
+    });
   }
 
   @override
@@ -691,8 +805,14 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
                       )
                     : PopupMenuButton<String>(
                         tooltip: 'Update chapter progress',
-                        onSelected: (status) =>
-                            _updateChapter(syllabus, chapter, status),
+                        onSelected: (status) async {
+                          final notes =
+                              await _progressNotes(chapter.title, status);
+                          if (notes != null) {
+                            await _updateChapter(
+                                syllabus, chapter, status, notes);
+                          }
+                        },
                         itemBuilder: (_) => const [
                           PopupMenuItem(
                               value: 'LEFT', child: Text('Not started')),
@@ -723,8 +843,14 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2))
                           : PopupMenuButton<String>(
                               tooltip: 'Update progress',
-                              onSelected: (status) =>
-                                  _update(syllabus, topic, status),
+                              onSelected: (status) async {
+                                final notes =
+                                    await _progressNotes(topic.title, status);
+                                if (notes != null) {
+                                  await _update(
+                                      syllabus, topic, status, notes);
+                                }
+                              },
                               itemBuilder: (_) => const [
                                     PopupMenuItem(
                                         value: 'LEFT',
@@ -742,9 +868,9 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
                       child: Align(
                           alignment: Alignment.centerLeft,
                           child: TextButton.icon(
-                              onPressed: () => _addTopic(syllabus, chapter),
+                              onPressed: () => _addTopics(syllabus, chapter),
                               icon: const Icon(Icons.add),
-                              label: const Text('Add topic')))),
+                              label: const Text('Add topics')))),
                 ],
               )),
           ]
@@ -762,7 +888,7 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
                       style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 4),
                   const Text(
-                      'Keep chapter names short and in teaching order. Add topics after saving.'),
+                      'Build the full teaching plan here so paper notes are not required. Add topics after saving.'),
                   const SizedBox(height: 16),
                   TextFormField(
                       key: ValueKey('subject-$_classId-$_editing'),
@@ -771,6 +897,11 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
                           labelText: 'Subject', border: OutlineInputBorder()),
                       onChanged: (value) => _subject = value),
                   const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                      onPressed: _importChapterOutline,
+                      icon: const Icon(Icons.content_paste_go_outlined),
+                      label: const Text('Paste chapter outline')),
+                  const SizedBox(height: 8),
                   for (var index = 0;
                       index < (_editing ? _chapters.length : 1);
                       index++)

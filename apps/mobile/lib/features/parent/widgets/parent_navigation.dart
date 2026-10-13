@@ -72,11 +72,7 @@ abstract final class ParentNavigation {
   }
 
   static void back(BuildContext context) {
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go('/parent/home');
-    }
+    context.go('/parent/home');
   }
 
   static Widget drawer(BuildContext context) {

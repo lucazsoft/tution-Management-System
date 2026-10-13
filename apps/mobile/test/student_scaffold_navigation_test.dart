@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -151,7 +152,7 @@ void main() {
     );
   });
 
-  testWidgets('device back returns a pushed student page to home',
+  testWidgets('device back always returns a main student page to home',
       (tester) async {
     await pumpPortal(tester);
     await tester.tap(find.byTooltip('Open navigation menu'));
@@ -165,6 +166,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Academics page'), findsOneWidget);
+    router.push('/student/certificates');
+    await tester.pumpAndSettle();
+    expect(find.text('Certificates page'), findsOneWidget);
+
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
@@ -198,5 +203,28 @@ void main() {
     final snackBar = tester.widget<SnackBar>(find.byType(SnackBar));
     expect(snackBar.behavior, SnackBarBehavior.floating);
     expect(snackBar.shape, isA<RoundedRectangleBorder>());
+  });
+
+  testWidgets('second home back press requests Android application exit',
+      (tester) async {
+    String? platformMethod;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'SystemNavigator.pop') platformMethod = call.method;
+        return null;
+      },
+    );
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+    await pumpPortal(tester);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.text('Press back again to exit'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(platformMethod, 'SystemNavigator.pop');
   });
 }

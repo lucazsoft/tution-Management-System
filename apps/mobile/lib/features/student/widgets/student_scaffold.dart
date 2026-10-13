@@ -161,11 +161,7 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
   void _handleBack(bool didPop, Object? result) {
     if (didPop) return;
     if (!_isHome) {
-      if (context.canPop()) {
-        context.pop();
-      } else {
-        context.go('/student/home');
-      }
+      context.go('/student/home');
       return;
     }
 

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
+import 'package:tms_mobile/core/network/api_exception.dart';
 import 'package:tms_mobile/core/theme/app_theme.dart';
 import 'package:tms_mobile/shared/widgets/messenger_chat.dart';
 
@@ -73,7 +74,7 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
       if (mounted) {
         setState(() {
           _contacts = const [];
-          _error = '$error';
+          _error = ApiException.from(error).message;
         });
       }
     }
@@ -94,7 +95,7 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
       if (mounted) {
         setState(() {
           _messages = const [];
-          _error = '$error';
+          _error = ApiException.from(error).message;
         });
       }
     }
@@ -112,7 +113,12 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not send message: $error')));
+          SnackBar(
+            content: Text(
+              'Could not send message: ${ApiException.from(error).message}',
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -186,7 +192,11 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not load new-chat contacts: $error')),
+          SnackBar(
+            content: Text(
+              'Could not load new-chat contacts: ${ApiException.from(error).message}',
+            ),
+          ),
         );
       }
     }

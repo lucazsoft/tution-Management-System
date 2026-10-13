@@ -442,6 +442,59 @@ void main() {
         ],
       });
     });
+
+    test('uses available contacts when the new-chat recipients route is absent',
+        () async {
+      final requestedPaths = <String>[];
+      final dio = ApiClient.buildDio(
+        baseUrl: 'https://test.invalid',
+        extraInterceptors: [
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              requestedPaths.add(options.path);
+              if (options.path == '/api/communication/messages/contacts') {
+                handler.resolve(Response<dynamic>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: {
+                    'contacts': const [],
+                    'availableContacts': const [
+                      {
+                        'studentId': 'student-1',
+                        'studentName': 'Saanvi',
+                        'gradeName': 'Grade 7',
+                        'parentId': 'parent-1',
+                        'parentName': 'Anita',
+                      },
+                    ],
+                  },
+                ));
+                return;
+              }
+              handler.reject(DioException(
+                requestOptions: options,
+                response: Response<dynamic>(
+                  requestOptions: options,
+                  statusCode: 404,
+                ),
+                type: DioExceptionType.badResponse,
+              ));
+            },
+          ),
+        ],
+      );
+
+      final recipients =
+          await TeacherPortalRepository(dio: dio).fetchMessageRecipients();
+
+      expect(requestedPaths, [
+        '/api/communication/messages/contacts',
+        '/api/communication/messages/recipients',
+      ]);
+      expect(recipients, hasLength(1));
+      expect(recipients.single.parentName, 'Anita');
+      expect(recipients.single.studentName, 'Saanvi');
+    });
   });
 
   group('teacher viewmodels', () {
@@ -620,6 +673,7 @@ void main() {
       ];
       final actionSizes = actionButtons.map(tester.getSize).toList();
       expect(actionSizes.toSet(), hasLength(1));
+      expect(actionSizes.first.height, 44);
       expect(tester.getTopLeft(actionButtons[0]).dy,
           tester.getTopLeft(actionButtons[1]).dy);
       expect(tester.getTopLeft(actionButtons[2]).dy,

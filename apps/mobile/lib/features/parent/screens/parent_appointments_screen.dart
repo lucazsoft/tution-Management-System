@@ -8,6 +8,23 @@ import '../viewmodels/parent_portal_viewmodel.dart';
 import '../widgets/parent_navigation.dart';
 import '../widgets/parent_portal_state_view.dart';
 
+const parentMeetingNotice = Duration(minutes: 30);
+
+/// Returns the first minute selectable at least 30 minutes from [now].
+DateTime parentMeetingEarliest(DateTime now) {
+  final threshold = now.add(parentMeetingNotice);
+  final minute = DateTime(
+    threshold.year,
+    threshold.month,
+    threshold.day,
+    threshold.hour,
+    threshold.minute,
+  );
+  return threshold.isAfter(minute)
+      ? minute.add(const Duration(minutes: 1))
+      : minute;
+}
+
 class ParentAppointmentsScreen extends ConsumerStatefulWidget {
   const ParentAppointmentsScreen({super.key});
   @override
@@ -49,7 +66,7 @@ class _ParentAppointmentsScreenState
   }
 
   Future<void> _proposeAlternative(ParentAppointmentItem item) async {
-    final minimum = DateTime.now().add(const Duration(hours: 24));
+    final minimum = parentMeetingEarliest(DateTime.now());
     final date = await showDatePicker(
       context: context,
       firstDate: DateTime(minimum.year, minimum.month, minimum.day),
@@ -64,6 +81,14 @@ class _ParentAppointmentsScreenState
     if (time == null || !mounted) return;
     final proposed =
         DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    if (proposed.isBefore(parentMeetingEarliest(DateTime.now()))) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Choose a meeting time at least 30 minutes from now.'),
+        ));
+      }
+      return;
+    }
     final note = TextEditingController();
     final send = await showDialog<bool>(
       context: context,
@@ -118,10 +143,10 @@ class _ParentAppointmentsScreenState
     }
   }
 
-  Future<void> _editAppointment(
-      ParentAppointmentItem item, int minimumHours) async {
+  Future<void> _editAppointment(ParentAppointmentItem item) async {
+    final earliest = parentMeetingEarliest(DateTime.now());
     final scheduled = item.scheduledAt?.toLocal() ??
-        DateTime.now().add(Duration(hours: minimumHours));
+        earliest;
     final edit = await showModalBottomSheet<_ParentMeetingEdit>(
       context: context,
       isScrollControlled: true,
@@ -131,7 +156,7 @@ class _ParentAppointmentsScreenState
         teacher: item.teacher,
         initialScheduled: scheduled,
         initialReason: item.subject,
-        earliest: DateTime.now().add(Duration(hours: minimumHours)),
+        earliest: earliest,
       ),
     );
     if (edit == null || !mounted) return;
@@ -207,8 +232,6 @@ class _ParentAppointmentsScreenState
           if (didPop) return;
           if (_showHistory) {
             setState(() => _showHistory = false);
-          } else if (context.canPop()) {
-            context.pop();
           } else {
             context.go('/parent/home');
           }
@@ -341,8 +364,7 @@ class _ParentAppointmentsScreenState
                                   OutlinedButton.icon(
                                     onPressed: _sending
                                         ? null
-                                        : () => _editAppointment(
-                                            item, portal.bookingWindowHours),
+                                        : () => _editAppointment(item),
                                     icon: const Icon(
                                         Icons.edit_calendar_outlined),
                                     label: const Text('Reschedule'),
@@ -390,7 +412,7 @@ class _ParentAppointmentsScreenState
                     Text('Request a meeting for ${child.name}',
                         style: Theme.of(context).textTheme.titleLarge),
                     Text(
-                      'Requests must be made at least ${portal.bookingWindowHours} hours in advance.',
+                      'Meetings can be booked at least 30 minutes from the current time.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const SizedBox(height: 12),
@@ -441,8 +463,7 @@ class _ParentAppointmentsScreenState
                     MeetingScheduleFields(
                       reasonController: _remarks,
                       scheduled: _scheduled,
-                      earliest: DateTime.now()
-                          .add(Duration(hours: portal.bookingWindowHours)),
+                      earliest: parentMeetingEarliest(DateTime.now()),
                       onScheduledChanged: (value) => setState(() {
                         _scheduled = value;
                         _formError = null;
@@ -461,6 +482,18 @@ class _ParentAppointmentsScreenState
                               if (_remarks.text.trim().isEmpty) {
                                 setState(() => _formError =
                                     'Enter the reason for this meeting.');
+                                return;
+                              }
+                              final earliest =
+                                  parentMeetingEarliest(DateTime.now());
+                              if (_scheduled!.isBefore(earliest)) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Choose a meeting time at least 30 minutes from now.',
+                                    ),
+                                  ),
+                                );
                                 return;
                               }
                               final contact = contacts
@@ -652,6 +685,12 @@ class _ParentMeetingEditSheetState extends State<_ParentMeetingEditSheet> {
   void _save() {
     if (_reason.text.trim().isEmpty) {
       setState(() => _error = 'Enter the reason for this meeting.');
+      return;
+    }
+    if (_scheduled.isBefore(parentMeetingEarliest(DateTime.now()))) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Choose a meeting time at least 30 minutes from now.'),
+      ));
       return;
     }
     Navigator.pop(
