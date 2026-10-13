@@ -87,6 +87,24 @@ void main() {
       expect(theme.colorScheme.secondary, kColorAccent);
       expect(theme.colorScheme.error, kColorError);
     });
+
+    testWidgets('chips and primary buttons keep readable foreground colors',
+        (_) async {
+      final theme = buildTmsTheme();
+      expect(theme.chipTheme.labelStyle?.color, kColorText);
+      expect(theme.chipTheme.secondaryLabelStyle?.color, kColorPrimaryDark);
+      expect(theme.chipTheme.checkmarkColor, kColorPrimaryDark);
+      expect(
+        theme.filledButtonTheme.style?.foregroundColor
+            ?.resolve(<WidgetState>{}),
+        Colors.white,
+      );
+      expect(
+        theme.outlinedButtonTheme.style?.foregroundColor
+            ?.resolve(<WidgetState>{}),
+        kColorPrimaryDark,
+      );
+    });
   });
 
   group('student web-aligned theme regression', () {

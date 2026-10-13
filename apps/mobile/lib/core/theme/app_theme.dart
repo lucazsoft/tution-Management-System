@@ -112,6 +112,31 @@ ThemeData buildTmsTheme() {
             GoogleFonts.roboto(fontSize: 14, fontWeight: FontWeight.w700),
       ),
     ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.disabled)
+              ? const Color(0xFFD6DCE5)
+              : kColorPrimary,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.disabled)
+              ? const Color(0xFF596579)
+              : Colors.white,
+        ),
+        textStyle: WidgetStatePropertyAll(
+          GoogleFonts.roboto(fontSize: 14, fontWeight: FontWeight.w700),
+        ),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: kColorPrimaryDark,
+        side: const BorderSide(color: kColorPrimary),
+        textStyle:
+            GoogleFonts.roboto(fontSize: 14, fontWeight: FontWeight.w700),
+      ),
+    ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: kColorPrimaryLight,
@@ -151,7 +176,17 @@ ThemeData buildTmsTheme() {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(TmsRadius.pill),
       ),
-      labelStyle: GoogleFonts.roboto(fontSize: 12, fontWeight: FontWeight.w600),
+      labelStyle: GoogleFonts.roboto(
+        color: kColorText,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+      secondaryLabelStyle: GoogleFonts.roboto(
+        color: kColorPrimaryDark,
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+      ),
+      checkmarkColor: kColorPrimaryDark,
     ),
   );
 }

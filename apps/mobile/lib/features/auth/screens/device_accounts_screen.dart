@@ -21,6 +21,7 @@ class DeviceAccountsScreen extends ConsumerStatefulWidget {
 class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
   final _vault = DeviceAccountVault();
   late Future<List<DeviceAccount>> _accounts;
+  bool _managing = false;
 
   @override
   void initState() {
@@ -29,6 +30,45 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
   }
 
   void _reload() => _accounts = _vault.accounts();
+
+  Future<void> _removeAccount(
+    DeviceAccount account, {
+    required bool isCurrent,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove saved account?'),
+        content: Text(
+          'Remove ${account.name.isEmpty ? account.email : account.name} from this device? '
+          'This removes its saved sign-in and MPIN only. The account and its data will not be deleted.'
+          '${isCurrent ? ' You will remain signed in until you log out.' : ''}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Remove from device'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await _vault.remove(account.userId);
+    if (!mounted) return;
+    setState(_reload);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${account.name} was removed from this device.')),
+    );
+  }
 
   Future<void> _addOrProtectCurrent({bool addAnother = false}) async {
     TextInput.finishAutofillContext(shouldSave: false);
@@ -386,6 +426,17 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
                         subtitle: const Text(
                             'Required before this account can be selected safely.'),
                         onTap: _addOrProtectCurrent)),
+              if (accounts.isNotEmpty) ...[
+                OutlinedButton.icon(
+                  key: const ValueKey('manage-device-accounts'),
+                  onPressed: () => setState(() => _managing = !_managing),
+                  icon: Icon(_managing
+                      ? Icons.check_rounded
+                      : Icons.manage_accounts_outlined),
+                  label: Text(_managing ? 'Done managing' : 'Manage accounts'),
+                ),
+                const SizedBox(height: 12),
+              ],
               for (final account in accounts)
                 Card(
                     child: ListTile(
@@ -397,10 +448,38 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
                   subtitle: Text(
                       '${account.email}\n${account.role.replaceAll('_', ' ')}'),
                   isThreeLine: true,
-                  trailing: !widget.loginMode && account.userId == currentId
-                      ? const Chip(label: Text('Current'))
-                      : const Icon(Icons.chevron_right_rounded),
-                  onTap: !widget.loginMode && account.userId == currentId
+                  trailing: _managing
+                      ? IconButton(
+                          key: ValueKey('remove-account-${account.userId}'),
+                          tooltip: 'Remove ${account.name} from this device',
+                          color: Theme.of(context).colorScheme.error,
+                          onPressed: () => _removeAccount(
+                            account,
+                            isCurrent: account.userId == currentId,
+                          ),
+                          icon: const Icon(Icons.delete_outline_rounded),
+                        )
+                      : !widget.loginMode && account.userId == currentId
+                          ? Chip(
+                              backgroundColor: Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withValues(alpha: .12),
+                              side: BorderSide(
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              label: Text(
+                                'Current',
+                                style: TextStyle(
+                                  color:
+                                      Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            )
+                          : const Icon(Icons.chevron_right_rounded),
+                  onTap: _managing ||
+                          (!widget.loginMode && account.userId == currentId)
                       ? null
                       : () => _switch(account),
                 )),

@@ -1109,7 +1109,22 @@ class _HomeworkViewState extends State<_HomeworkView> {
                 for (final filter in _HomeworkFilter.values) ...[
                   FilterChip(
                     selected: _filter == filter,
+                    backgroundColor: StudentColors.background,
+                    selectedColor:
+                        StudentColors.primary.withValues(alpha: .12),
+                    side: BorderSide(
+                      color: _filter == filter
+                          ? StudentColors.primary
+                          : StudentColors.border,
+                    ),
                     label: Text('${_label(filter)} ${_count(filter)}'),
+                    labelStyle: TextStyle(
+                      color: _filter == filter
+                          ? StudentColors.primaryDark
+                          : StudentColors.text,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    checkmarkColor: StudentColors.primaryDark,
                     onSelected: (_) => setState(() => _filter = filter),
                   ),
                   const SizedBox(width: TmsSpace.xs),
