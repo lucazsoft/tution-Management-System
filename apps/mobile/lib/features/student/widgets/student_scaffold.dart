@@ -99,8 +99,7 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
 
   void _open(String route) {
     Navigator.of(context).pop();
-    final current =
-        GoRouter.maybeOf(context)?.routeInformationProvider.value.uri.path;
+    final current = _matchedLocation(context);
     if (current == route) {
       return;
     }
@@ -108,6 +107,18 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
       if (!mounted) return;
       route == '/student/home' ? context.go(route) : context.push(route);
     });
+  }
+
+  String? _matchedLocation(BuildContext context) {
+    try {
+      return GoRouterState.of(context).matchedLocation;
+    } on GoError {
+      return GoRouter.maybeOf(context)
+          ?.routeInformationProvider
+          .value
+          .uri
+          .path;
+    }
   }
 
   Future<void> _switchAccount() async {
@@ -231,8 +242,7 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
 
   Widget _buildDrawer(BuildContext context) {
     final user = ref.watch(authProvider).user;
-    final location =
-        GoRouter.maybeOf(context)?.routeInformationProvider.value.uri.path;
+    final location = _matchedLocation(context);
     final drawerIndex =
         _navigationItems.indexWhere((item) => item.route == location);
     return PortalDrawerTheme(

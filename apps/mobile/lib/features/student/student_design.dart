@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:tms_mobile/core/theme/app_colors.dart';
-import 'package:tms_mobile/core/theme/app_tokens.dart';
+import 'package:tms_mobile/core/theme/app_theme.dart';
 
 export 'package:tms_mobile/core/theme/app_tokens.dart';
 
@@ -23,7 +22,6 @@ abstract final class StudentColors {
 }
 
 ThemeData buildStudentTheme(ThemeData base) {
-  final roboto = GoogleFonts.robotoTextTheme(base.textTheme);
   return base.copyWith(
     scaffoldBackgroundColor: StudentColors.surface,
     colorScheme: base.colorScheme.copyWith(
@@ -32,51 +30,7 @@ ThemeData buildStudentTheme(ThemeData base) {
       surface: StudentColors.background,
       error: StudentColors.error,
     ),
-    textTheme: roboto.copyWith(
-      displaySmall: GoogleFonts.fraunces(
-        fontSize: 28,
-        height: 1.15,
-        fontWeight: FontWeight.w700,
-        color: StudentColors.text,
-      ),
-      headlineSmall: GoogleFonts.fraunces(
-        fontSize: 24,
-        height: 1.2,
-        fontWeight: FontWeight.w700,
-        color: StudentColors.text,
-      ),
-      titleLarge: GoogleFonts.fraunces(
-        fontSize: 20,
-        height: 1.25,
-        fontWeight: FontWeight.w700,
-        color: StudentColors.text,
-      ),
-      titleMedium: GoogleFonts.roboto(
-        fontSize: 16,
-        height: 1.35,
-        fontWeight: FontWeight.w700,
-        color: StudentColors.text,
-      ),
-      bodyLarge: GoogleFonts.roboto(
-        fontSize: 16,
-        height: 1.45,
-        color: StudentColors.text,
-      ),
-      bodyMedium: GoogleFonts.roboto(
-        fontSize: 14,
-        height: 1.45,
-        color: StudentColors.text,
-      ),
-      bodySmall: GoogleFonts.roboto(
-        fontSize: 12,
-        height: 1.4,
-        color: StudentColors.mutedText,
-      ),
-      labelLarge: GoogleFonts.roboto(
-        fontSize: 14,
-        fontWeight: FontWeight.w700,
-      ),
-    ),
+    textTheme: buildTmsTextTheme(base.textTheme),
     appBarTheme: AppBarTheme(
       elevation: 0,
       centerTitle: false,

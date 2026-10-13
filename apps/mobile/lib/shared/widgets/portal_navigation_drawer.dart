@@ -84,20 +84,23 @@ class PortalDrawerHeader extends StatelessWidget {
               name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: kColorText,
-                  ),
+              style: GoogleFonts.roboto(
+                fontSize: 18,
+                height: 1.2,
+                fontWeight: FontWeight.w700,
+                color: kColorText,
+              ),
             ),
             const SizedBox(height: 2),
             Text(
               subtitle,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: kColorMutedText),
+              style: GoogleFonts.roboto(
+                fontSize: 12,
+                height: 1.5,
+                color: kColorMutedText,
+              ),
             ),
           ],
         ),

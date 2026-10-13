@@ -198,7 +198,12 @@ class ParentNavigationBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final router = GoRouter.maybeOf(context);
-    final path = router?.routeInformationProvider.value.uri.path;
+    String? path;
+    try {
+      path = GoRouterState.of(context).matchedLocation;
+    } on GoError {
+      path = router?.routeInformationProvider.value.uri.path;
+    }
     final effectiveSelectedIndex = switch (path) {
       '/parent/home' => 0,
       '/parent/academics' || '/parent/timetable' => 1,

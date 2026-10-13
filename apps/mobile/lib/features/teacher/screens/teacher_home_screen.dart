@@ -1163,10 +1163,17 @@ class _QuickActions extends StatelessWidget {
         onTap: onResults,
       ),
     ];
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: actions,
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: actions.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        mainAxisExtent: 48,
+      ),
+      itemBuilder: (context, index) => actions[index],
     );
   }
 }
@@ -1189,7 +1196,7 @@ class _QuickActionTile extends StatelessWidget {
       icon: Icon(icon, size: 20),
       label: Text(label),
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 44),
+        minimumSize: const Size.fromHeight(48),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         visualDensity: VisualDensity.compact,
       ),

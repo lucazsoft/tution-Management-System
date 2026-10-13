@@ -1276,7 +1276,34 @@ class _HomeworkDetailsState extends State<_HomeworkDetails> {
               const SizedBox(height: TmsSpace.xs),
               Text(item.teacherRemarks!),
             ],
-            if (!item.completed) ...[
+            if (!item.completed && item.isOverdue) ...[
+              const SizedBox(height: TmsSpace.lg),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(TmsSpace.md),
+                decoration: BoxDecoration(
+                  color: StudentColors.error.withValues(alpha: .08),
+                  borderRadius: BorderRadius.circular(TmsRadius.control),
+                  border: Border.all(
+                    color: StudentColors.error.withValues(alpha: .28),
+                  ),
+                ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.event_busy_rounded,
+                        color: StudentColors.error),
+                    SizedBox(width: TmsSpace.sm),
+                    Expanded(
+                      child: Text(
+                        'The due date has passed. This homework will remain pending and can no longer be marked as done.',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (item.canMarkDone) ...[
               const SizedBox(height: TmsSpace.xl),
               SizedBox(
                 width: double.infinity,

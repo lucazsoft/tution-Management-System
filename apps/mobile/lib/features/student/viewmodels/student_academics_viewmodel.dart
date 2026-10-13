@@ -144,7 +144,12 @@ class StudentAcademicsViewModel extends BaseViewModel<StudentAcademicsState> {
 
   Future<bool> markHomeworkDone(String homeworkId) async {
     final studentId = state.snapshot?.enrollmentId ?? '';
-    if (studentId.isEmpty || state.completingHomeworkIds.contains(homeworkId)) {
+    final homework = state.homework
+        .where((item) => item.id == homeworkId)
+        .firstOrNull;
+    if (studentId.isEmpty ||
+        homework?.canMarkDone != true ||
+        state.completingHomeworkIds.contains(homeworkId)) {
       return false;
     }
     state = state.copyWith(

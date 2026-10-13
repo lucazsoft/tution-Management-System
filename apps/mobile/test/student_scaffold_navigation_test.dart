@@ -27,6 +27,13 @@ void main() {
             body: Center(child: Text('Academics page')),
           ),
         ),
+        GoRoute(
+          path: '/student/certificates',
+          builder: (_, __) => const StudentScaffold(
+            title: 'Certificates',
+            body: Center(child: Text('Certificates page')),
+          ),
+        ),
       ],
     );
   });
@@ -162,6 +169,22 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Home page'), findsOneWidget);
+  });
+
+  testWidgets('certificate route shades Certificates in the hamburger menu',
+      (tester) async {
+    await pumpPortal(tester);
+    router.push('/student/certificates');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Certificates page'), findsOneWidget);
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+
+    final drawer = tester.widget<NavigationDrawer>(
+      find.byType(NavigationDrawer),
+    );
+    expect(drawer.selectedIndex, 7);
   });
 
   testWidgets('home back shows a rounded double-back exit prompt',

@@ -14,6 +14,7 @@ import 'package:tms_mobile/features/parent/data/parent_portal_repository.dart';
 import 'package:tms_mobile/features/parent/models/parent_portal.dart';
 import 'package:tms_mobile/features/parent/screens/parent_academics_screen.dart';
 import 'package:tms_mobile/features/parent/screens/parent_attendance_screen.dart';
+import 'package:tms_mobile/features/parent/screens/parent_calendar_screen.dart';
 import 'package:tms_mobile/features/parent/screens/parent_fees_screen.dart';
 import 'package:tms_mobile/features/parent/screens/parent_home_screen.dart';
 import 'package:tms_mobile/features/parent/screens/parent_messages_screen.dart';
@@ -919,6 +920,25 @@ void main() {
     expect(find.textContaining('September 2026'), findsWidgets);
     expect(find.textContaining('4,250'), findsWidgets);
     expect(find.textContaining('July 2026'), findsNothing);
+  });
+
+  testWidgets('calendar content keeps horizontal spacing from screen edges',
+      (tester) async {
+    await _pumpPortalScreen(
+      tester,
+      const ParentCalendarScreen(),
+      _FakeParentPortalRepository(),
+    );
+
+    final description = find.text(
+      "API Child One's holidays, exams, ceremonies, and fee deadlines.",
+    );
+    expect(description, findsOneWidget);
+    expect(tester.getTopLeft(description).dx, greaterThanOrEqualTo(16));
+    expect(
+      tester.getTopRight(description).dx,
+      lessThanOrEqualTo(tester.view.physicalSize.width - 16),
+    );
   });
 
   testWidgets('academics renders API remarks without demo curriculum',

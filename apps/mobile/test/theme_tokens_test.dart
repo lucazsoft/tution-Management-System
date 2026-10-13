@@ -98,7 +98,8 @@ void main() {
 
     testWidgets('body/label/nav text uses Roboto, display keeps Fraunces',
         (_) async {
-      final theme = buildStudentTheme(ThemeData.light());
+      final base = buildTmsTheme();
+      final theme = buildStudentTheme(base);
       final text = theme.textTheme;
       for (final style in <TextStyle?>[
         text.titleMedium,
@@ -121,6 +122,11 @@ void main() {
         text.labelLarge?.fontFamily,
       ];
       expect(families.any((f) => f?.contains('Roboto') ?? false), isTrue);
+      expect(theme.textTheme.titleMedium, base.textTheme.titleMedium);
+      expect(theme.textTheme.bodyLarge, base.textTheme.bodyLarge);
+      expect(theme.textTheme.bodyMedium, base.textTheme.bodyMedium);
+      expect(theme.textTheme.bodySmall, base.textTheme.bodySmall);
+      expect(theme.textTheme.labelLarge, base.textTheme.labelLarge);
     });
 
     testWidgets('nav indicator tint and surface are unchanged', (_) async {

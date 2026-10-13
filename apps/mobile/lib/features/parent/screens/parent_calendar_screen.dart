@@ -17,7 +17,6 @@ class ParentCalendarScreen extends ConsumerWidget {
         bottomNavigationBar: const ParentNavigationBar(selectedIndex: 4),
         body: SafeArea(
             child: ParentPortalStateView(
-          padding: const EdgeInsets.all(TmsSpace.md),
           wrapInScrollView: false,
           builder: (context, portal, child) {
             final today = DateTime.now();
@@ -43,6 +42,12 @@ class ParentCalendarScreen extends ConsumerWidget {
                 onRefresh: ref.read(parentPortalProvider.notifier).refresh,
                 child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(
+                      TmsSpace.md,
+                      TmsSpace.sm,
+                      TmsSpace.md,
+                      TmsSpace.lg,
+                    ),
                     children: [
                       Text(
                           '${child.name}\'s holidays, exams, ceremonies, and fee deadlines.',

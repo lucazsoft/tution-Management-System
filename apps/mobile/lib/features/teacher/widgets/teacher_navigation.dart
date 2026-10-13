@@ -74,8 +74,12 @@ abstract final class TeacherNavigation {
 
   static Widget drawer(BuildContext context) {
     final router = GoRouter.maybeOf(context);
-    final location =
-        router?.routeInformationProvider.value.uri.path ?? '/teacher/home';
+    String? location;
+    try {
+      location = GoRouterState.of(context).matchedLocation;
+    } on GoError {
+      location = router?.routeInformationProvider.value.uri.path;
+    }
     final selected = drawerItems.indexWhere((item) => item.route == location);
 
     void open(String route) {
@@ -249,9 +253,17 @@ class TeacherPortalScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final path =
-        GoRouter.maybeOf(context)?.routeInformationProvider.value.uri.path ??
-            '';
+    var path = '';
+    try {
+      path = GoRouterState.of(context).matchedLocation;
+    } on GoError {
+      path = GoRouter.maybeOf(context)
+              ?.routeInformationProvider
+              .value
+              .uri
+              .path ??
+          '';
+    }
     final selected = switch (path) {
       '/teacher/messages' => 2,
       '/teacher/timetable' => 3,
