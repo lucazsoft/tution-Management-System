@@ -32,7 +32,9 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
 
   Future<void> _send(ParentChild child, ParentContact contact) async {
     final text = _text.text.trim();
-    if (text.isEmpty || _sending) return;
+    if (text.isEmpty || _sending || !contact.isAuthorizedForChild(child.id)) {
+      return;
+    }
     setState(() => _sending = true);
     try {
       await ref.read(parentPortalRepositoryProvider).sendMessage(
@@ -129,7 +131,9 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
                 latestByContact[message.teacherId] = message;
               }
             }
-            final contacts = portal.contacts.toList()
+            final contacts = portal.contacts
+                .where((contact) => contact.isAuthorizedForChild(child.id))
+                .toList()
               ..sort((a, b) {
                 final aTime =
                     latestByContact[a.id]?.occurredAt ?? DateTime(1970);
@@ -139,10 +143,14 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
               });
             final selected = contacts.where((item) => item.id == _contactId);
             final contact = selected.isNotEmpty ? selected.first : null;
+            final authorizedContactIds =
+                contacts.map((item) => item.id).toSet();
             final thread = contact == null
                 ? <ParentMessageItem>[]
                 : portal.messages
-                    .where((message) => message.teacherId == contact.id)
+                    .where((message) =>
+                        authorizedContactIds.contains(message.teacherId) &&
+                        message.teacherId == contact.id)
                     .toList();
             thread.sort((a, b) => (a.occurredAt ?? DateTime(1970))
                 .compareTo(b.occurredAt ?? DateTime(1970)));
@@ -175,7 +183,10 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
                         final desktopThread = desktopContact == null
                             ? <ParentMessageItem>[]
                             : portal.messages
-                                .where((m) => m.teacherId == desktopContact.id)
+                                .where((m) =>
+                                    authorizedContactIds
+                                        .contains(m.teacherId) &&
+                                    m.teacherId == desktopContact.id)
                                 .toList();
                         desktopThread.sort((a, b) =>
                             (a.occurredAt ?? DateTime(1970))

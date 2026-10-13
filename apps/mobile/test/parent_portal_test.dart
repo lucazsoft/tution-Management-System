@@ -136,6 +136,21 @@ Map<String, dynamic> _portalJson({
           'initials': 'BS',
           'role': 'BRANCH_ADMIN',
         },
+        {
+          'id': 'staff-api',
+          'name': 'Unassigned Staff',
+          'subject': 'Teaching staff',
+          'initials': 'US',
+          'role': 'STAFF',
+        },
+        {
+          'id': 'other-child-teacher',
+          'childId': 'student-2',
+          'name': 'Other Child Teacher',
+          'subject': 'Science',
+          'initials': 'OT',
+          'role': 'TEACHER',
+        },
       ],
       'messages': [
         {
@@ -861,7 +876,7 @@ void main() {
     );
   });
 
-  testWidgets('home opens child picker on long press and switches child',
+  testWidgets('home opens child picker after a 250ms hold and switches child',
       (tester) async {
     final repository = _FakeParentPortalRepository();
     await _pumpPortalScreen(tester, const ParentHomeScreen(), repository);
@@ -873,7 +888,10 @@ void main() {
     final hold = await tester.startGesture(
       tester.getCenter(find.text('80%').first),
     );
-    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(milliseconds: 249));
+    expect(find.text('Switch child'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 1));
     await hold.up();
     await tester.pumpAndSettle();
 
@@ -985,6 +1003,8 @@ void main() {
     expect(find.byIcon(Icons.search_rounded), findsOneWidget);
     expect(find.text('Teacher API'), findsWidgets);
     expect(find.text('Branch Support'), findsOneWidget);
+    expect(find.text('Unassigned Staff'), findsNothing);
+    expect(find.text('Other Child Teacher'), findsNothing);
     expect(find.text('API message about your child'), findsWidgets);
     expect(find.text('Message about API Child One'), findsOneWidget);
   });

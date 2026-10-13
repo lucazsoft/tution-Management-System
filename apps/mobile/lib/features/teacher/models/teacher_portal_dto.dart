@@ -366,6 +366,9 @@ class TeacherMessageContact {
   final String lastMessage;
   final DateTime? lastMessageAt;
   final int unreadCount;
+  bool get isAuthorizedParentContact =>
+      studentId.isNotEmpty && parentId.isNotEmpty;
+
   factory TeacherMessageContact.fromJson(Map<String, dynamic> json) =>
       TeacherMessageContact(
           studentId: _str(json['studentId']),

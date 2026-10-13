@@ -152,7 +152,7 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
     };
     const classIds = currentEnrollments.map((enrollment) => enrollment.classId);
     const branchIds = [...new Set(currentEnrollments.map((enrollment) => enrollment.class.branchId))];
-    const [events, leaves, appointments, messages, remarks, scores, tenant, branchAdmins, branchStaff, homeworkRows] = await Promise.all([
+    const [events, leaves, appointments, messages, remarks, scores, tenant, branchAdmins, homeworkRows] = await Promise.all([
       prisma.academicEvent.findMany({
         where: await calendarAccessWhere(req.user!, req.tenantId!, { studentId: student.id, viewerRole: 'Parent' }),
         orderBy: { startDate: 'asc' },
@@ -176,14 +176,6 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
       prisma.studentScore.findMany({ where: { tenantId: req.tenantId!, studentId: student.id, publishedAt: { not: null } }, orderBy: { testDate: 'asc' } }),
       prisma.tenant.findUnique({ where: { id: req.tenantId! }, select: { appointmentWindowHours: true, name: true } }),
       prisma.user.findMany({ where: { tenantId: req.tenantId!, status: 'ACTIVE', userRoles: { some: { branchId: { in: branchIds }, role: { name: 'Branch Admin' } } } }, select: { id: true, firstName: true, lastName: true } }),
-      prisma.user.findMany({
-        where: {
-          tenantId: req.tenantId!,
-          status: 'ACTIVE',
-          userRoles: { some: { branchId: { in: branchIds }, role: { name: { in: ['Teacher', 'Accountant'] } } } },
-        },
-        select: { id: true, firstName: true, lastName: true, userRoles: { where: { branchId: { in: branchIds }, role: { name: { in: ['Teacher', 'Accountant'] } } }, include: { role: true } } },
-      }),
       classIds.length ? prisma.homework.findMany({
         where: { classId: { in: classIds } },
         include: {
@@ -225,16 +217,8 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
         type: enrollment.course.type.split('_').map((part) => part[0] + part.slice(1).toLowerCase()).join('-'),
       }));
     });
-    type ParentContact = { id: string; childId: string; name: string; subject: string; initials: string; role: 'TEACHER' | 'BRANCH_ADMIN' | 'STAFF' };
+    type ParentContact = { id: string; childId: string; name: string; subject: string; initials: string; role: 'TEACHER' | 'BRANCH_ADMIN' };
     const contactEntries: Array<[string, ParentContact]> = [
-      ...branchStaff.map((staff) => [staff.id, {
-        id: staff.id,
-        childId: student.id,
-        name: `${staff.firstName} ${staff.lastName}`,
-        subject: staff.userRoles.some((assignment) => assignment.role.name === 'Accountant') ? 'Accounts office' : 'Teaching staff',
-        initials: `${staff.firstName[0] ?? ''}${staff.lastName[0] ?? ''}`.toUpperCase(),
-        role: 'STAFF' as const,
-      }] as [string, ParentContact]),
       ...currentEnrollments
       .filter((enrollment) => enrollment.class.assignedTeacher)
       .map((enrollment) => {
@@ -372,12 +356,17 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
         htmlUrl: (certificate.template.layoutConfig as { renderMode?: string }).renderMode === 'HTML' ? `/certificates/${encodeURIComponent(certificate.certificateId)}/html` : undefined,
       };
     });
-    const mappedMessages = messages.map((message) => ({
+    const authorizedContactIds = new Set(teachers.map((contact) => contact.id));
+    const mappedMessages = messages
+      .filter((message) => authorizedContactIds.has(
+        message.senderId === req.user!.id ? message.receiverId : message.senderId,
+      ))
+      .map((message) => ({
       id: message.id, childId: student.id,
       teacherId: message.senderId === req.user!.id ? message.receiverId : message.senderId,
       sender: message.senderId === req.user!.id ? 'Parent' : 'Teacher',
       text: message.messageText, time: formatDate(message.createdAt), occurredAt: message.createdAt.toISOString(),
-    }));
+      }));
     const generatedNotifications = [
       ...student.invoices.filter((invoice) => invoice.status === 'OVERDUE' || (invoice.status === 'UNPAID' && invoice.dueDate.getTime() - Date.now() <= 3 * 86400000)).map((invoice) => ({
         id: `invoice-${invoice.id}`, childId: student.id, title: invoice.status === 'OVERDUE' ? 'Fee overdue' : 'Fee due soon',

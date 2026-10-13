@@ -59,7 +59,7 @@ class TeacherPortalRepository {
       return [
         for (final row in rows)
           if (row is Map<String, dynamic>) TeacherMessageContact.fromJson(row)
-      ];
+      ].where((contact) => contact.isAuthorizedParentContact).toList();
     } on DioException catch (error) {
       // Older API containers did not expose the contacts endpoint. Avoid
       // leaking a raw route-level 404 while the API deployment catches up.
@@ -70,13 +70,16 @@ class TeacherPortalRepository {
 
   Future<List<TeacherMessageItem>> fetchMessageThread(
       TeacherMessageContact contact) async {
+    if (!contact.isAuthorizedParentContact) {
+      throw const ApiException(
+        kind: ApiErrorKind.forbidden,
+        message: 'This parent conversation is not authorized.',
+      );
+    }
     try {
-      final response = contact.studentId.isEmpty
-          ? await _dio.get<dynamic>(
-              '/api/communication/messages/direct/${Uri.encodeComponent(contact.parentId)}')
-          : await _dio.get<dynamic>(
-              '/api/communication/messages/thread/${Uri.encodeComponent(contact.studentId)}',
-              queryParameters: {'participantId': contact.parentId});
+      final response = await _dio.get<dynamic>(
+          '/api/communication/messages/thread/${Uri.encodeComponent(contact.studentId)}',
+          queryParameters: {'participantId': contact.parentId});
       final rows = response.data is Map<String, dynamic>
           ? response.data['messages']
           : null;
@@ -99,6 +102,12 @@ class TeacherPortalRepository {
   }
 
   Future<void> sendMessage(TeacherMessageContact contact, String text) async {
+    if (!contact.isAuthorizedParentContact) {
+      throw const ApiException(
+        kind: ApiErrorKind.forbidden,
+        message: 'This parent conversation is not authorized.',
+      );
+    }
     try {
       await _dio.post<dynamic>('/api/communication/messages', data: {
         'studentId': contact.studentId,
@@ -145,8 +154,7 @@ class TeacherPortalRepository {
       if (contactRows is List) {
         available.addAll([
           for (final row in contactRows)
-            if (row is Map<String, dynamic>)
-              TeacherMessageContact.fromJson(row)
+            if (row is Map<String, dynamic>) TeacherMessageContact.fromJson(row)
         ]);
       }
 
@@ -163,7 +171,8 @@ class TeacherPortalRepository {
       final recipients = [
         for (final row in rows)
           if (row is Map<String, dynamic>) TeacherMessageContact.fromJson(row)
-      ];
+      ].where((contact) => contact.isAuthorizedParentContact).toList();
+      available.removeWhere((contact) => !contact.isAuthorizedParentContact);
       final byConversation = <String, TeacherMessageContact>{
         for (final item in [...available, ...recipients])
           '${item.studentId}:${item.parentId}': item,

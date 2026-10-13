@@ -32,24 +32,17 @@ router.get('/messages/contacts', authMiddleware, async (req: TenantRequest, res:
         orderBy: { createdAt: 'desc' },
       }),
     ]);
+    const authorizedPairs = new Set(
+      links.map((link) => `${link.studentId}:${link.parent.user.id}`),
+    );
     const conversations = new Map<string, any>();
     for (const message of conversationRows) {
-      if (!message.student) {
-        const participant = message.senderId === req.user!.id ? message.receiver : message.sender;
-        const key = `direct:${participant.id}`;
-        if (!conversations.has(key)) conversations.set(key, {
-          studentId: '', studentName: 'Direct message', gradeName: 'Teacher',
-          parentId: participant.id,
-          parentName: `${participant.firstName} ${participant.lastName}`.trim(),
-          lastMessage: message.messageText, lastMessageAt: message.createdAt, unreadCount: 0,
-        });
-        if (message.receiverId === req.user!.id && !message.readAt) conversations.get(key).unreadCount += 1;
-        continue;
-      }
+      if (!message.student) continue;
       const link = message.student.studentParents.find((item) =>
         item.parent.user.id === message.senderId || item.parent.user.id === message.receiverId);
       if (!link) continue;
       const key = `${message.studentId}:${link.parent.user.id}`;
+      if (!authorizedPairs.has(key)) continue;
       const existing = conversations.get(key);
       if (!existing) {
         conversations.set(key, {

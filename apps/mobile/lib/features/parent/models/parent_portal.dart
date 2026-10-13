@@ -100,6 +100,10 @@ class ParentContact {
   final String subject;
   final String initials;
   final String role;
+
+  bool isAuthorizedForChild(String selectedChildId) =>
+      (role == 'TEACHER' || role == 'BRANCH_ADMIN') &&
+      (childId.isEmpty || childId == selectedChildId);
 }
 
 class ParentMessageItem {

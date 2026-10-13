@@ -460,6 +460,13 @@ void main() {
                     'contacts': const [],
                     'availableContacts': const [
                       {
+                        'studentId': '',
+                        'studentName': 'Direct message',
+                        'gradeName': 'Teacher',
+                        'parentId': 'staff-1',
+                        'parentName': 'Unassigned Staff',
+                      },
+                      {
                         'studentId': 'student-1',
                         'studentName': 'Saanvi',
                         'gradeName': 'Grade 7',
@@ -494,6 +501,48 @@ void main() {
       expect(recipients, hasLength(1));
       expect(recipients.single.parentName, 'Anita');
       expect(recipients.single.studentName, 'Saanvi');
+    });
+
+    test('filters unauthorized direct staff chats from conversation contacts',
+        () async {
+      final dio = ApiClient.buildDio(
+        baseUrl: 'https://test.invalid',
+        extraInterceptors: [
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              handler.resolve(Response<dynamic>(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'contacts': const [
+                    {
+                      'studentId': '',
+                      'studentName': 'Direct message',
+                      'gradeName': 'Teacher',
+                      'parentId': 'staff-1',
+                      'parentName': 'Unassigned Staff',
+                    },
+                    {
+                      'studentId': 'student-1',
+                      'studentName': 'Saanvi',
+                      'gradeName': 'Grade 7',
+                      'parentId': 'parent-1',
+                      'parentName': 'Anita',
+                    },
+                  ],
+                },
+              ));
+            },
+          ),
+        ],
+      );
+
+      final contacts =
+          await TeacherPortalRepository(dio: dio).fetchMessageContacts();
+
+      expect(contacts, hasLength(1));
+      expect(contacts.single.parentId, 'parent-1');
+      expect(contacts.single.studentId, 'student-1');
     });
   });
 

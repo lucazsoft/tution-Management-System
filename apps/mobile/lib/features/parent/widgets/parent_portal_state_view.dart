@@ -107,7 +107,11 @@ class _ChildScopeGesture extends ConsumerStatefulWidget {
 }
 
 class _ChildScopeGestureState extends ConsumerState<_ChildScopeGesture> {
-  static const _holdDuration = Duration(seconds: 1);
+  static const _holdDuration = Duration(milliseconds: 250);
+  static const _sheetAnimation = AnimationStyle(
+    duration: Duration(milliseconds: 220),
+    reverseDuration: Duration(milliseconds: 180),
+  );
   static const _movementTolerance = 18.0;
   Timer? _holdTimer;
   int? _pointer;
@@ -166,6 +170,7 @@ class _ChildScopeGestureState extends ConsumerState<_ChildScopeGesture> {
       context: context,
       showDragHandle: true,
       useSafeArea: true,
+      sheetAnimationStyle: _sheetAnimation,
       builder: (sheetContext) => Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: Column(
