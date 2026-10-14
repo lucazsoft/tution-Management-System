@@ -322,6 +322,27 @@ void main() {
       final now = DateTime(2026, 10, 13, 12, 0, 29);
       expect(parentMeetingEarliest(now), DateTime(2026, 10, 13, 12, 31));
     });
+
+    test('blocks Saturdays and published holidays', () {
+      final holidayKeys = parentMeetingHolidayKeys(const [
+        ParentEventItem(
+          id: 'holiday-1',
+          day: '09',
+          month: 'Oct',
+          date: '2026-10-09',
+          title: 'School holiday',
+          kind: 'Holiday',
+          details: '',
+        ),
+      ]);
+
+      expect(parentMeetingDayAvailable(DateTime(2026, 10, 9), holidayKeys),
+          isFalse);
+      expect(parentMeetingDayAvailable(DateTime(2026, 10, 10), holidayKeys),
+          isFalse);
+      expect(parentMeetingDayAvailable(DateTime(2026, 10, 11), holidayKeys),
+          isTrue);
+    });
   });
 
   group('ParentPortalRepository', () {

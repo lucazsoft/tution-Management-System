@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tms_mobile/shared/widgets/academic_calendar.dart';
 import 'package:tms_mobile/shared/widgets/meeting_schedule_fields.dart';
 
 import '../models/parent_portal.dart';
@@ -9,6 +10,30 @@ import '../widgets/parent_navigation.dart';
 import '../widgets/parent_portal_state_view.dart';
 
 const parentMeetingNotice = Duration(minutes: 30);
+const parentMeetingUnavailableMessage =
+    'Meetings cannot be booked on Saturdays or school holidays.';
+
+String _meetingDayKey(DateTime date) =>
+    '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+Set<String> parentMeetingHolidayKeys(Iterable<ParentEventItem> events) => events
+    .where((event) => event.kind.toLowerCase().contains('holiday'))
+    .map((event) => parsePortalEventDate(event.date))
+    .whereType<DateTime>()
+    .map(_meetingDayKey)
+    .toSet();
+
+bool parentMeetingDayAvailable(DateTime date, Set<String> holidayKeys) =>
+    date.weekday != DateTime.saturday &&
+    !holidayKeys.contains(_meetingDayKey(date));
+
+DateTime _nextAvailableMeetingDay(DateTime date, Set<String> holidayKeys) {
+  var candidate = date;
+  while (!parentMeetingDayAvailable(candidate, holidayKeys)) {
+    candidate = candidate.add(const Duration(days: 1));
+  }
+  return candidate;
+}
 
 /// Returns the first minute selectable at least 30 minutes from [now].
 DateTime parentMeetingEarliest(DateTime now) {
@@ -65,13 +90,17 @@ class _ParentAppointmentsScreenState
     }
   }
 
-  Future<void> _proposeAlternative(ParentAppointmentItem item) async {
+  Future<void> _proposeAlternative(
+      ParentAppointmentItem item, Set<String> holidayKeys) async {
     final minimum = parentMeetingEarliest(DateTime.now());
+    final initialDate = _nextAvailableMeetingDay(minimum, holidayKeys);
     final date = await showDatePicker(
       context: context,
       firstDate: DateTime(minimum.year, minimum.month, minimum.day),
       lastDate: minimum.add(const Duration(days: 365)),
-      initialDate: minimum,
+      initialDate: initialDate,
+      selectableDayPredicate: (day) =>
+          parentMeetingDayAvailable(day, holidayKeys),
     );
     if (date == null || !mounted) return;
     final time = await showTimePicker(
@@ -87,6 +116,12 @@ class _ParentAppointmentsScreenState
           content: Text('Choose a meeting time at least 30 minutes from now.'),
         ));
       }
+      return;
+    }
+    if (!parentMeetingDayAvailable(proposed, holidayKeys)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(parentMeetingUnavailableMessage)),
+      );
       return;
     }
     final note = TextEditingController();
@@ -143,10 +178,13 @@ class _ParentAppointmentsScreenState
     }
   }
 
-  Future<void> _editAppointment(ParentAppointmentItem item) async {
+  Future<void> _editAppointment(
+      ParentAppointmentItem item, Set<String> holidayKeys) async {
     final earliest = parentMeetingEarliest(DateTime.now());
-    final scheduled = item.scheduledAt?.toLocal() ??
-        earliest;
+    final original = item.scheduledAt?.toLocal() ?? earliest;
+    final scheduled = parentMeetingDayAvailable(original, holidayKeys)
+        ? original
+        : _nextAvailableMeetingDay(earliest, holidayKeys);
     final edit = await showModalBottomSheet<_ParentMeetingEdit>(
       context: context,
       isScrollControlled: true,
@@ -157,6 +195,7 @@ class _ParentAppointmentsScreenState
         initialScheduled: scheduled,
         initialReason: item.subject,
         earliest: earliest,
+        holidayKeys: holidayKeys,
       ),
     );
     if (edit == null || !mounted) return;
@@ -273,6 +312,7 @@ class _ParentAppointmentsScreenState
                 final selectedContact = selectedId == null
                     ? null
                     : contacts.firstWhere((item) => item.id == selectedId);
+                final holidayKeys = parentMeetingHolidayKeys(portal.events);
                 return ListView(padding: const EdgeInsets.all(16), children: [
                   if (!_showHistory) ...[
                     Card(
@@ -349,7 +389,8 @@ class _ParentAppointmentsScreenState
                                     child: OutlinedButton(
                                         onPressed: _sending
                                             ? null
-                                            : () => _proposeAlternative(item),
+                                            : () => _proposeAlternative(
+                                                item, holidayKeys),
                                         child: const Text('Reschedule'))),
                               ]),
                             ),
@@ -364,7 +405,8 @@ class _ParentAppointmentsScreenState
                                   OutlinedButton.icon(
                                     onPressed: _sending
                                         ? null
-                                        : () => _editAppointment(item),
+                                        : () =>
+                                            _editAppointment(item, holidayKeys),
                                     icon: const Icon(
                                         Icons.edit_calendar_outlined),
                                     label: const Text('Reschedule'),
@@ -412,7 +454,7 @@ class _ParentAppointmentsScreenState
                     Text('Request a meeting for ${child.name}',
                         style: Theme.of(context).textTheme.titleLarge),
                     Text(
-                      'Meetings can be booked at least 30 minutes from the current time.',
+                      'Meetings can be booked at least 30 minutes ahead. Saturdays and published school holidays are unavailable.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const SizedBox(height: 12),
@@ -464,6 +506,13 @@ class _ParentAppointmentsScreenState
                       reasonController: _remarks,
                       scheduled: _scheduled,
                       earliest: parentMeetingEarliest(DateTime.now()),
+                      selectableDayPredicate: (day) =>
+                          parentMeetingDayAvailable(day, holidayKeys),
+                      holidayPredicate: (day) =>
+                          holidayKeys.contains(_meetingDayKey(day)),
+                      redDayPredicate: (day) =>
+                          day.weekday == DateTime.saturday,
+                      redDayLegend: 'Saturday / holiday',
                       onScheduledChanged: (value) => setState(() {
                         _scheduled = value;
                         _formError = null;
@@ -492,6 +541,16 @@ class _ParentAppointmentsScreenState
                                     content: Text(
                                       'Choose a meeting time at least 30 minutes from now.',
                                     ),
+                                  ),
+                                );
+                                return;
+                              }
+                              if (!parentMeetingDayAvailable(
+                                  _scheduled!, holidayKeys)) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content:
+                                        Text(parentMeetingUnavailableMessage),
                                   ),
                                 );
                                 return;
@@ -650,12 +709,14 @@ class _ParentMeetingEditSheet extends StatefulWidget {
     required this.initialScheduled,
     required this.initialReason,
     required this.earliest,
+    required this.holidayKeys,
   });
 
   final String teacher;
   final DateTime initialScheduled;
   final String initialReason;
   final DateTime earliest;
+  final Set<String> holidayKeys;
 
   @override
   State<_ParentMeetingEditSheet> createState() =>
@@ -693,6 +754,12 @@ class _ParentMeetingEditSheetState extends State<_ParentMeetingEditSheet> {
       ));
       return;
     }
+    if (!parentMeetingDayAvailable(_scheduled, widget.holidayKeys)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(parentMeetingUnavailableMessage)),
+      );
+      return;
+    }
     Navigator.pop(
       context,
       _ParentMeetingEdit(
@@ -728,6 +795,12 @@ class _ParentMeetingEditSheetState extends State<_ParentMeetingEditSheet> {
               reasonController: _reason,
               scheduled: _scheduled,
               earliest: widget.earliest,
+              selectableDayPredicate: (day) =>
+                  parentMeetingDayAvailable(day, widget.holidayKeys),
+              holidayPredicate: (day) =>
+                  widget.holidayKeys.contains(_meetingDayKey(day)),
+              redDayPredicate: (day) => day.weekday == DateTime.saturday,
+              redDayLegend: 'Saturday / holiday',
               onScheduledChanged: (value) => setState(() => _scheduled = value),
               actionLabel: 'Save',
               onAction: _save,

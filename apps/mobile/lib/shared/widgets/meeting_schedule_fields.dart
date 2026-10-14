@@ -16,6 +16,10 @@ class MeetingScheduleFields extends StatelessWidget {
     this.busy = false,
     this.reasonError,
     this.onReasonChanged,
+    this.selectableDayPredicate,
+    this.holidayPredicate,
+    this.redDayPredicate,
+    this.redDayLegend = 'Holiday',
   });
 
   final TextEditingController reasonController;
@@ -27,15 +31,23 @@ class MeetingScheduleFields extends StatelessWidget {
   final bool busy;
   final String? reasonError;
   final ValueChanged<String>? onReasonChanged;
+  final bool Function(DateTime day)? selectableDayPredicate;
+  final bool Function(DateTime day)? holidayPredicate;
+  final bool Function(DateTime day)? redDayPredicate;
+  final String redDayLegend;
 
   Future<void> _pickTime(BuildContext context) async {
-    final initial = scheduled ?? earliest;
+    var initial = scheduled ?? earliest;
+    while (selectableDayPredicate?.call(initial) == false &&
+        initial.isBefore(earliest.add(const Duration(days: 365)))) {
+      initial = initial.add(const Duration(days: 1));
+    }
     final time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(initial),
     );
     if (time == null || !context.mounted) return;
-    final day = scheduled ?? earliest;
+    final day = initial;
     final value =
         DateTime(day.year, day.month, day.day, time.hour, time.minute);
     if (value.isBefore(earliest)) {
@@ -49,6 +61,7 @@ class MeetingScheduleFields extends StatelessWidget {
   }
 
   void _selectDate(DateTime date) {
+    if (selectableDayPredicate?.call(date) == false) return;
     final current = scheduled ?? earliest;
     var value = DateTime(
       date.year,
@@ -89,6 +102,10 @@ class MeetingScheduleFields extends StatelessWidget {
             firstDate: earliest,
             lastDate: earliest.add(const Duration(days: 365)),
             onDateSelected: busy ? null : _selectDate,
+            selectableDayPredicate: selectableDayPredicate,
+            holidayPredicate: holidayPredicate,
+            redDayPredicate: redDayPredicate,
+            redDayLegend: redDayLegend,
           ),
           const SizedBox(height: 14),
           Row(
@@ -126,12 +143,20 @@ class NepaliMeetingCalendar extends StatefulWidget {
     required this.firstDate,
     required this.lastDate,
     required this.onDateSelected,
+    this.selectableDayPredicate,
+    this.holidayPredicate,
+    this.redDayPredicate,
+    this.redDayLegend = 'Holiday',
   });
 
   final DateTime selectedDate;
   final DateTime firstDate;
   final DateTime lastDate;
   final ValueChanged<DateTime>? onDateSelected;
+  final bool Function(DateTime day)? selectableDayPredicate;
+  final bool Function(DateTime day)? holidayPredicate;
+  final bool Function(DateTime day)? redDayPredicate;
+  final String redDayLegend;
 
   @override
   State<NepaliMeetingCalendar> createState() => _NepaliMeetingCalendarState();
@@ -191,7 +216,7 @@ class _NepaliMeetingCalendarState extends State<NepaliMeetingCalendar> {
                 ),
                 Expanded(
                   child: Text(
-                    '${academicNepaliMonths[monthBs.month - 1]} ${monthBs.year} BS',
+                    '${academicNepaliMonths[monthBs.month - 1]} ${_nepaliDigits('${monthBs.year}')} BS',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
@@ -230,9 +255,12 @@ class _NepaliMeetingCalendarState extends State<NepaliMeetingCalendar> {
                 final outside =
                     bs.month != monthBs.month || bs.year != monthBs.year;
                 final selected = _same(date, widget.selectedDate);
+                final redDay = (widget.holidayPredicate?.call(date) ?? false) ||
+                    (widget.redDayPredicate?.call(date) ?? false);
                 final enabled = !outside &&
                     !_beforeDay(date, widget.firstDate) &&
                     !_afterDay(date, widget.lastDate) &&
+                    (widget.selectableDayPredicate?.call(date) ?? true) &&
                     widget.onDateSelected != null;
                 return InkWell(
                   key: ValueKey('meeting-bs-${bs.year}-${bs.month}-${bs.day}'),
@@ -242,32 +270,49 @@ class _NepaliMeetingCalendarState extends State<NepaliMeetingCalendar> {
                     margin: const EdgeInsets.all(2),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: selected ? kColorPrimary : null,
+                      color: redDay
+                          ? (selected
+                              ? Colors.red.shade700
+                              : Colors.red.shade50)
+                          : selected
+                              ? kColorPrimary
+                              : null,
+                      border: redDay
+                          ? Border.all(color: Colors.red.shade400)
+                          : null,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          '${bs.day}',
+                          _nepaliDigits('${bs.day}'),
                           style: TextStyle(
                             fontWeight: FontWeight.w800,
-                            color: selected
-                                ? Colors.white
-                                : enabled
-                                    ? kColorText
-                                    : Theme.of(context).disabledColor,
+                            color: redDay
+                                ? selected
+                                    ? Colors.white
+                                    : Colors.red.shade700
+                                : selected
+                                    ? Colors.white
+                                    : enabled
+                                        ? kColorText
+                                        : Theme.of(context).disabledColor,
                           ),
                         ),
                         Text(
                           '${date.day}',
                           style: TextStyle(
                             fontSize: 10,
-                            color: selected
-                                ? Colors.white70
-                                : enabled
-                                    ? kColorMutedText
-                                    : Theme.of(context).disabledColor,
+                            color: redDay
+                                ? selected
+                                    ? Colors.white70
+                                    : Colors.red.shade600
+                                : selected
+                                    ? Colors.white70
+                                    : enabled
+                                        ? kColorMutedText
+                                        : Theme.of(context).disabledColor,
                           ),
                         ),
                       ],
@@ -276,9 +321,43 @@ class _NepaliMeetingCalendarState extends State<NepaliMeetingCalendar> {
                 );
               },
             ),
+            if (widget.holidayPredicate != null ||
+                widget.redDayPredicate != null) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        border: Border.all(color: Colors.red.shade400),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      widget.redDayLegend,
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                            color: Colors.red.shade700,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 }
+
+String _nepaliDigits(String value) => value.replaceAllMapped(
+      RegExp(r'\d'),
+      (match) => '०१२३४५६७८९'[int.parse(match.group(0)!)],
+    );

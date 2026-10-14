@@ -199,4 +199,79 @@ void main() {
     )));
     expect(picked, selectedDate);
   });
+
+  testWidgets(
+      'meeting calendar uses Nepali digits and disables unavailable days',
+      (tester) async {
+    final firstDate = DateTime(2026, 10, 8);
+    final holiday = DateTime(2026, 10, 9);
+    final saturday = DateTime(2026, 10, 10);
+    DateTime? picked;
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: NepaliMeetingCalendar(
+          selectedDate: firstDate,
+          firstDate: firstDate,
+          lastDate: firstDate.add(const Duration(days: 30)),
+          selectableDayPredicate: (day) =>
+              day.weekday != DateTime.saturday &&
+              !(day.year == holiday.year &&
+                  day.month == holiday.month &&
+                  day.day == holiday.day),
+          holidayPredicate: (day) =>
+              day.year == holiday.year &&
+              day.month == holiday.month &&
+              day.day == holiday.day,
+          redDayPredicate: (day) => day.weekday == DateTime.saturday,
+          redDayLegend: 'Saturday / holiday',
+          onDateSelected: (value) => picked = value,
+        ),
+      ),
+    ));
+
+    final firstBs = firstDate.toNepaliDateTime();
+    final nepaliDay = '${firstBs.day}'.replaceAllMapped(
+      RegExp(r'\d'),
+      (match) => '०१२३४५६७८९'[int.parse(match.group(0)!)],
+    );
+    final nepaliYear = '${firstBs.year}'.replaceAllMapped(
+      RegExp(r'\d'),
+      (match) => '०१२३४५६७८९'[int.parse(match.group(0)!)],
+    );
+    expect(find.text(nepaliDay), findsOneWidget);
+    expect(find.textContaining('$nepaliYear BS'), findsOneWidget);
+    expect(find.text('${firstDate.day}'), findsOneWidget);
+
+    final holidayBs = holiday.toNepaliDateTime();
+    final holidayCell = find.byKey(ValueKey(
+      'meeting-bs-${holidayBs.year}-${holidayBs.month}-${holidayBs.day}',
+    ));
+    final holidayContainer = tester.widget<Container>(
+      find.descendant(of: holidayCell, matching: find.byType(Container)),
+    );
+    final holidayDecoration = holidayContainer.decoration! as BoxDecoration;
+    expect(holidayDecoration.color, Colors.red.shade50);
+    expect(holidayDecoration.border, isNotNull);
+    expect(find.text('Saturday / holiday'), findsOneWidget);
+
+    final saturdayBs = saturday.toNepaliDateTime();
+    final saturdayCell = find.byKey(ValueKey(
+      'meeting-bs-${saturdayBs.year}-${saturdayBs.month}-${saturdayBs.day}',
+    ));
+    final saturdayContainer = tester.widget<Container>(
+      find.descendant(of: saturdayCell, matching: find.byType(Container)),
+    );
+    final saturdayDecoration = saturdayContainer.decoration! as BoxDecoration;
+    expect(saturdayDecoration.color, Colors.red.shade50);
+    expect(saturdayDecoration.border, isNotNull);
+
+    for (final blocked in [holiday, saturday]) {
+      final bs = blocked.toNepaliDateTime();
+      await tester.tap(find.byKey(
+        ValueKey('meeting-bs-${bs.year}-${bs.month}-${bs.day}'),
+      ));
+      expect(picked, isNull);
+    }
+  });
 }

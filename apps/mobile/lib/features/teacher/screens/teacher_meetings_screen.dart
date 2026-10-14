@@ -3,8 +3,16 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
+import 'package:tms_mobile/features/teacher/data/teacher_portal_repository.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_navigation.dart';
 import 'package:tms_mobile/shared/widgets/meeting_schedule_fields.dart';
+
+String _teacherMeetingDayKey(DateTime date) =>
+    '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+bool _teacherMeetingDayAvailable(DateTime day, Set<String> holidayKeys) =>
+    day.weekday != DateTime.saturday &&
+    !holidayKeys.contains(_teacherMeetingDayKey(day));
 
 class TeacherMeetingsScreen extends StatefulWidget {
   const TeacherMeetingsScreen({super.key});
@@ -17,6 +25,7 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
   List<Map<String, dynamic>>? _meetings;
   String? _error;
   String? _busyId;
+  Set<String> _holidayKeys = const {};
   Timer? _refreshTimer;
 
   @override
@@ -40,9 +49,28 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
           ? response.data['appointments']
           : null;
       if (rows is! List) throw StateError('Invalid response');
+      var holidayKeys = _holidayKeys;
+      try {
+        final events = await TeacherPortalRepository().fetchCalendar();
+        holidayKeys = <String>{};
+        for (final event in events
+            .where((item) => item.type.toLowerCase().contains('holiday'))) {
+          final end = event.endDate ?? event.startDate;
+          for (var day = DateTime(event.startDate.year, event.startDate.month,
+                  event.startDate.day);
+              !day.isAfter(DateTime(end.year, end.month, end.day));
+              day = day.add(const Duration(days: 1))) {
+            holidayKeys.add(_teacherMeetingDayKey(day));
+          }
+        }
+      } catch (_) {
+        // Keep the last successfully loaded holiday set if the calendar
+        // endpoint is temporarily unavailable.
+      }
       if (mounted) {
         setState(() {
           _meetings = rows.whereType<Map<String, dynamic>>().toList();
+          _holidayKeys = holidayKeys;
           _error = null;
         });
       }
@@ -99,6 +127,7 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
         studentName: _studentName(item),
         initialScheduled: scheduled,
         initialRemarks: '${item['responseRemarks'] ?? item['remarks'] ?? ''}',
+        holidayKeys: _holidayKeys,
       ),
     );
     if (edit == null || !mounted) return;
@@ -383,11 +412,13 @@ class _MeetingEditSheet extends StatefulWidget {
     required this.studentName,
     required this.initialScheduled,
     required this.initialRemarks,
+    required this.holidayKeys,
   });
 
   final String studentName;
   final DateTime initialScheduled;
   final String initialRemarks;
+  final Set<String> holidayKeys;
 
   @override
   State<_MeetingEditSheet> createState() => _MeetingEditSheetState();
@@ -418,6 +449,12 @@ class _MeetingEditSheetState extends State<_MeetingEditSheet> {
   void _save() {
     if (_remarks.text.trim().isEmpty) {
       setState(() => _error = 'Add a message for the parent.');
+      return;
+    }
+    if (!_teacherMeetingDayAvailable(_scheduled, widget.holidayKeys)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Meetings cannot be scheduled on Saturdays or holidays.'),
+      ));
       return;
     }
     Navigator.pop(
@@ -456,6 +493,10 @@ class _MeetingEditSheetState extends State<_MeetingEditSheet> {
                 reasonController: _remarks,
                 scheduled: _scheduled,
                 earliest: _earliest,
+                selectableDayPredicate: (day) =>
+                    _teacherMeetingDayAvailable(day, widget.holidayKeys),
+                holidayPredicate: (day) =>
+                    widget.holidayKeys.contains(_teacherMeetingDayKey(day)),
                 onScheduledChanged: (value) =>
                     setState(() => _scheduled = value),
                 actionLabel: 'Save',
