@@ -9,11 +9,19 @@ import 'package:tms_mobile/shared/widgets/portal_navigation_drawer.dart';
 
 /// Shared navigation chrome for the teacher portal's route-based screens.
 abstract final class TeacherNavigation {
+  static const primaryNavigationItemCount = 4;
+
   static const drawerItems = <({String label, IconData icon, String route})>[
     (label: 'Home', icon: Icons.home_outlined, route: '/teacher/home'),
     (
-      label: 'Timetable',
-      icon: Icons.calendar_view_week_outlined,
+      label: 'Attendance',
+      icon: Icons.check_circle_outline,
+      route: '/teacher/home?tab=attendance'
+    ),
+    (label: 'Messages', icon: Icons.forum_outlined, route: '/teacher/messages'),
+    (
+      label: 'Classes',
+      icon: Icons.school_outlined,
       route: '/teacher/timetable'
     ),
     (
@@ -26,7 +34,6 @@ abstract final class TeacherNavigation {
       icon: Icons.calendar_month_outlined,
       route: '/teacher/calendar'
     ),
-    (label: 'Messages', icon: Icons.forum_outlined, route: '/teacher/messages'),
     (
       label: 'Meetings',
       icon: Icons.groups_outlined,
@@ -75,27 +82,36 @@ abstract final class TeacherNavigation {
   static Widget drawer(BuildContext context) {
     final router = GoRouter.maybeOf(context);
     String? location;
+    Uri? uri;
     try {
       location = GoRouterState.of(context).matchedLocation;
+      uri = GoRouterState.of(context).uri;
     } on GoError {
-      location = router?.routeInformationProvider.value.uri.path;
+      uri = router?.routeInformationProvider.value.uri;
+      location = uri?.path;
     }
-    final selected = drawerItems.indexWhere((item) => item.route == location);
+    final currentRoute = uri == null
+        ? location
+        : '${uri.path}${uri.hasQuery ? '?${uri.query}' : ''}';
+    final selected =
+        drawerItems.indexWhere((item) => item.route == currentRoute);
 
     void open(String route) {
       Navigator.of(context).pop();
-      if (route != location) router?.push(route);
+      if (route != currentRoute) router?.push(route);
     }
 
     return Consumer(
       builder: (context, ref, _) => PortalDrawerTheme(
         child: NavigationDrawer(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 8),
           selectedIndex: selected < 0 ? null : selected,
           onDestinationSelected: (index) => open(drawerItems[index].route),
           children: [
             PortalDrawerHeader(
               name: ref.watch(authProvider).user?.name ?? 'Teacher',
               subtitle: ref.watch(authProvider).user?.email ?? 'Teacher portal',
+              onTap: () => open('/teacher/account'),
               avatar: CircleAvatar(
                 radius: 30,
                 backgroundColor: Theme.of(context).colorScheme.primaryContainer,
@@ -103,7 +119,8 @@ abstract final class TeacherNavigation {
                 child: const Icon(Icons.person_rounded, size: 30),
               ),
             ),
-            for (final item in drawerItems)
+            const PortalDrawerSectionLabel('Navigation'),
+            for (final item in drawerItems.take(primaryNavigationItemCount))
               NavigationDrawerDestination(
                 icon: Icon(item.icon),
                 selectedIcon: Icon(item.icon),
@@ -116,7 +133,22 @@ abstract final class TeacherNavigation {
                   ),
                 ),
               ),
-            const Divider(indent: 28, endIndent: 28),
+            const PortalDrawerDivider(),
+            const PortalDrawerSectionLabel('Features'),
+            for (final item in drawerItems.skip(primaryNavigationItemCount))
+              NavigationDrawerDestination(
+                icon: Icon(item.icon),
+                selectedIcon: Icon(item.icon),
+                label: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 200),
+                  child: Text(
+                    item.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            const PortalDrawerDivider(),
             const PortalDrawerSectionLabel('Account'),
             PortalDrawerAction(
               icon: Icons.manage_accounts_outlined,
@@ -257,12 +289,9 @@ class TeacherPortalScaffold extends StatelessWidget {
     try {
       path = GoRouterState.of(context).matchedLocation;
     } on GoError {
-      path = GoRouter.maybeOf(context)
-              ?.routeInformationProvider
-              .value
-              .uri
-              .path ??
-          '';
+      path =
+          GoRouter.maybeOf(context)?.routeInformationProvider.value.uri.path ??
+              '';
     }
     final selected = switch (path) {
       '/teacher/messages' => 2,

@@ -35,6 +35,10 @@ void main() {
             body: Center(child: Text('Certificates page')),
           ),
         ),
+        GoRoute(
+          path: '/student/account',
+          builder: (_, __) => const Scaffold(body: Text('Student profile')),
+        ),
       ],
     );
   });
@@ -73,6 +77,14 @@ void main() {
 
     await tester.tap(find.byTooltip('Open navigation menu'));
     await tester.pumpAndSettle();
+
+    for (final section in ['NAVIGATION', 'FEATURES']) {
+      expect(find.text(section, skipOffstage: false), findsOneWidget);
+    }
+    expect(
+      tester.getSize(find.byType(NavigationDrawerDestination).first).height,
+      48,
+    );
 
     for (final label in [
       'Academics',
@@ -123,6 +135,7 @@ void main() {
       300,
       scrollable: drawerScroll,
     );
+    expect(find.text('ACCOUNT'), findsOneWidget);
     for (final label in [
       'Profile settings',
       'Change password',
@@ -174,6 +187,27 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Home page'), findsOneWidget);
+  });
+
+  testWidgets('centered student drawer profile opens profile settings',
+      (tester) async {
+    await pumpPortal(tester);
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+
+    final header = find.byKey(const ValueKey('portal-drawer-profile-header'));
+    final avatar = find.descendant(
+      of: header,
+      matching: find.byType(CircleAvatar),
+    );
+    expect(
+      tester.getCenter(avatar).dx,
+      moreOrLessEquals(tester.getCenter(header).dx, epsilon: .01),
+    );
+
+    await tester.tap(header);
+    await tester.pumpAndSettle();
+    expect(find.text('Student profile'), findsOneWidget);
   });
 
   testWidgets('certificate route shades Certificates in the hamburger menu',

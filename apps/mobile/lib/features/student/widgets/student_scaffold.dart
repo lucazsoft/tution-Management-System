@@ -32,6 +32,8 @@ class StudentScaffold extends ConsumerStatefulWidget {
 }
 
 class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
+  static const _primaryNavigationItemCount = 5;
+
   DateTime? _lastHomeBackPress;
   late final Future<PersonalAccount?> _drawerAccount;
 
@@ -113,11 +115,7 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
     try {
       return GoRouterState.of(context).matchedLocation;
     } on GoError {
-      return GoRouter.maybeOf(context)
-          ?.routeInformationProvider
-          .value
-          .uri
-          .path;
+      return GoRouter.maybeOf(context)?.routeInformationProvider.value.uri.path;
     }
   }
 
@@ -243,6 +241,7 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
         _navigationItems.indexWhere((item) => item.route == location);
     return PortalDrawerTheme(
       child: NavigationDrawer(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 8),
         selectedIndex: drawerIndex < 0 ? null : drawerIndex,
         onDestinationSelected: (index) => _open(_navigationItems[index].route),
         children: [
@@ -250,6 +249,7 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
             name: user?.name ?? 'Student',
             subtitle:
                 user?.email.isNotEmpty == true ? user!.email : 'Student portal',
+            onTap: () => _open('/student/account'),
             avatar: FutureBuilder<PersonalAccount?>(
               future: _drawerAccount,
               builder: (context, snapshot) {
@@ -277,21 +277,38 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
               },
             ),
           ),
-          ..._navigationItems.map(
-            (item) => NavigationDrawerDestination(
-              icon: Icon(item.icon),
-              selectedIcon: Icon(item.icon),
-              label: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 200),
-                child: Text(
-                  item.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          const PortalDrawerSectionLabel('Navigation'),
+          ..._navigationItems.take(_primaryNavigationItemCount).map(
+                (item) => NavigationDrawerDestination(
+                  icon: Icon(item.icon),
+                  selectedIcon: Icon(item.icon),
+                  label: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 200),
+                    child: Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-          const Divider(indent: 28, endIndent: 28),
+          const PortalDrawerDivider(),
+          const PortalDrawerSectionLabel('Features'),
+          ..._navigationItems.skip(_primaryNavigationItemCount).map(
+                (item) => NavigationDrawerDestination(
+                  icon: Icon(item.icon),
+                  selectedIcon: Icon(item.icon),
+                  label: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 200),
+                    child: Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ),
+          const PortalDrawerDivider(),
           const PortalDrawerSectionLabel('Account'),
           PortalDrawerAction(
             icon: Icons.manage_accounts_outlined,

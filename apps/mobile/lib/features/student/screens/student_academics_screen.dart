@@ -553,13 +553,6 @@ class _SyllabusViewState extends State<_SyllabusView> {
           Text('Syllabus progress',
               style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: TmsSpace.xs),
-          Text(
-            'Chapter plans and daily progress shared by your teachers.',
-            style: Theme.of(context)
-                .textTheme
-                .bodyMedium
-                ?.copyWith(color: StudentColors.mutedText),
-          ),
           const SizedBox(height: TmsSpace.lg),
           SizedBox(
             height: 50,
@@ -1135,14 +1128,11 @@ class _HomeworkViewState extends State<_HomeworkView> {
           const SizedBox(height: TmsSpace.md),
           Text('${_label(_filter)} homework',
               style: Theme.of(context).textTheme.titleLarge),
-          Text('Open an assignment to review details or mark it done.',
-              style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: TmsSpace.sm),
           if (_visible.isEmpty)
             StudentEmptyView(
               icon: Icons.task_alt_rounded,
               title: 'No ${_label(_filter).toLowerCase()} homework',
-              message: 'There are no assignments in this view right now.',
+              message: 'There are no assignments right now.',
             )
           else
             for (final item in _visible) ...[

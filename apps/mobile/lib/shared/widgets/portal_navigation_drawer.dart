@@ -15,12 +15,14 @@ class PortalDrawerTheme extends StatelessWidget {
     return Theme(
       data: base.copyWith(
         navigationDrawerTheme: NavigationDrawerThemeData(
+          tileHeight: 48,
           backgroundColor: kColorBg,
           surfaceTintColor: Colors.transparent,
           indicatorColor: kColorPrimary.withValues(alpha: .09),
+          indicatorSize: const Size(336, 44),
           iconTheme: WidgetStateProperty.resolveWith(
             (states) => IconThemeData(
-              size: 24,
+              size: 22,
               color: states.contains(WidgetState.selected)
                   ? kColorPrimary
                   : kColorMutedText,
@@ -40,10 +42,10 @@ class PortalDrawerTheme extends StatelessWidget {
           ),
         ),
         listTileTheme: ListTileThemeData(
-          minTileHeight: 56,
-          contentPadding: const EdgeInsets.only(left: 28, right: 16),
-          minLeadingWidth: 24,
-          horizontalTitleGap: 16,
+          minTileHeight: 48,
+          contentPadding: const EdgeInsets.only(left: 24, right: 12),
+          minLeadingWidth: 22,
+          horizontalTitleGap: 12,
           iconColor: kColorMutedText,
           textColor: kColorText,
           titleTextStyle: GoogleFonts.roboto(
@@ -66,43 +68,58 @@ class PortalDrawerHeader extends StatelessWidget {
     required this.name,
     required this.subtitle,
     required this.avatar,
+    required this.onTap,
   });
 
   final String name;
   final String subtitle;
   final Widget avatar;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(28, 24, 28, 18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox.square(dimension: 60, child: avatar),
-            const SizedBox(height: 12),
-            Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.roboto(
-                fontSize: 18,
-                height: 1.2,
-                fontWeight: FontWeight.w700,
-                color: kColorText,
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        label: 'Open profile settings',
+        child: InkWell(
+          key: const ValueKey('portal-drawer-profile-header'),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
+            child: SizedBox(
+              width: double.infinity,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox.square(dimension: 56, child: avatar),
+                  const SizedBox(height: 8),
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.roboto(
+                      fontSize: 17,
+                      height: 1.2,
+                      fontWeight: FontWeight.w700,
+                      color: kColorText,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.roboto(
+                      fontSize: 11,
+                      height: 1.35,
+                      color: kColorMutedText,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.roboto(
-                fontSize: 12,
-                height: 1.5,
-                color: kColorMutedText,
-              ),
-            ),
-          ],
+          ),
         ),
       );
 }
@@ -114,7 +131,7 @@ class PortalDrawerSectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(28, 10, 28, 6),
+        padding: const EdgeInsets.fromLTRB(24, 6, 24, 3),
         child: Text(
           label.toUpperCase(),
           style: GoogleFonts.roboto(
@@ -158,12 +175,12 @@ class PortalDrawerAction extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           child: SizedBox(
-            height: 56,
+            height: 48,
             child: Padding(
-              padding: const EdgeInsets.only(left: 28, right: 16),
+              padding: const EdgeInsets.only(left: 24, right: 12),
               child: Row(
                 children: [
-                  Icon(icon, size: 24, color: color),
+                  Icon(icon, size: 22, color: color),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -186,13 +203,13 @@ class PortalDrawerAction extends StatelessWidget {
 
     return ListTile(
       contentPadding: alignWithDestinations
-          ? const EdgeInsets.only(left: 28, right: 16)
+          ? const EdgeInsets.only(left: 24, right: 12)
           : null,
-      minLeadingWidth: alignWithDestinations ? 24 : null,
+      minLeadingWidth: alignWithDestinations ? 22 : null,
       horizontalTitleGap: alignWithDestinations ? 12 : null,
       titleAlignment:
           alignWithDestinations ? ListTileTitleAlignment.center : null,
-      leading: Icon(icon, size: 24, color: color),
+      leading: Icon(icon, size: 22, color: color),
       title: Text(label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -200,4 +217,16 @@ class PortalDrawerAction extends StatelessWidget {
       onTap: onTap,
     );
   }
+}
+
+class PortalDrawerDivider extends StatelessWidget {
+  const PortalDrawerDivider({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Divider(
+        height: 1,
+        thickness: 1,
+        indent: 24,
+        endIndent: 24,
+      );
 }

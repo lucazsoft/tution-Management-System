@@ -151,6 +151,9 @@ class AcademicCalendar extends StatefulWidget {
     this.scheduledClasses = const [],
     this.now,
     this.showGregorianDates = true,
+    this.showSelectedDayLabel = true,
+    this.showUpcomingEmptyDescription = true,
+    this.emphasizeUpcomingEmptyState = false,
   });
 
   final List<AcademicCalendarEvent> events;
@@ -158,6 +161,9 @@ class AcademicCalendar extends StatefulWidget {
   final List<AcademicCalendarClass> scheduledClasses;
   final DateTime Function()? now;
   final bool showGregorianDates;
+  final bool showSelectedDayLabel;
+  final bool showUpcomingEmptyDescription;
+  final bool emphasizeUpcomingEmptyState;
 
   @override
   State<AcademicCalendar> createState() => _AcademicCalendarState();
@@ -388,11 +394,12 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
           ),
         ),
         const SizedBox(height: TmsSpace.md),
-        Text('Selected day',
-            style: Theme.of(context)
-                .textTheme
-                .labelLarge
-                ?.copyWith(color: kColorMutedText)),
+        if (widget.showSelectedDayLabel)
+          Text('Selected day',
+              style: Theme.of(context)
+                  .textTheme
+                  .labelLarge
+                  ?.copyWith(color: kColorMutedText)),
         Text(
             '${_selected.toNepaliDateTime().day} ${academicNepaliMonths[_selected.toNepaliDateTime().month - 1]} ${_selected.toNepaliDateTime().year} BS',
             style: Theme.of(context).textTheme.titleLarge),
@@ -401,16 +408,13 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
             style: Theme.of(context).textTheme.bodyMedium),
         const SizedBox(height: TmsSpace.sm),
         if (isSelectedHoliday)
-          _DayRecordTile(
-            icon: Icons.beach_access_outlined,
-            color: kColorWarning,
-            title: 'Holiday - no attendance required',
-            details: selectedEvents.where(_isHoliday).map((event) {
-              return event.details.isEmpty
-                  ? event.title
-                  : '${event.title} - ${event.details}';
-            }).join('\n'),
-          )
+          for (final event in selectedEvents.where(_isHoliday))
+            _DayRecordTile(
+              icon: Icons.beach_access_outlined,
+              color: kColorWarning,
+              title: event.title,
+              details: event.details,
+            )
         else if (selectedAttendance.isNotEmpty)
           for (final record in selectedAttendance)
             _DayRecordTile(
@@ -470,12 +474,33 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
         Text('Upcoming events', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: TmsSpace.xs),
         if (upcomingEvents.isEmpty)
-          const Card(
-            child: ListTile(
-              leading: Icon(Icons.event_busy_outlined),
-              title: Text('No upcoming events published'),
-              subtitle: Text(
-                'Holidays, exams, ceremonies and deadlines will appear here when the institution publishes them.',
+          Card(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: widget.emphasizeUpcomingEmptyState ? 96 : 0,
+              ),
+              child: ListTile(
+                contentPadding: widget.emphasizeUpcomingEmptyState
+                    ? const EdgeInsets.symmetric(
+                        horizontal: TmsSpace.md,
+                        vertical: TmsSpace.md,
+                      )
+                    : null,
+                leading: Icon(
+                  Icons.event_busy_outlined,
+                  size: widget.emphasizeUpcomingEmptyState ? 32 : 24,
+                ),
+                title: Text(
+                  'No upcoming events published',
+                  style: widget.emphasizeUpcomingEmptyState
+                      ? Theme.of(context).textTheme.titleMedium
+                      : null,
+                ),
+                subtitle: widget.showUpcomingEmptyDescription
+                    ? const Text(
+                        'Holidays, exams, ceremonies and deadlines will appear here when the institution publishes them.',
+                      )
+                    : null,
               ),
             ),
           )

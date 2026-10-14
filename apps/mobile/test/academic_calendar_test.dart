@@ -50,6 +50,7 @@ void main() {
                 title: 'Dashain break',
                 date: day,
                 kind: 'Holiday',
+                details: 'School closed.',
               ),
             ],
             scheduledClasses: const [
@@ -66,7 +67,9 @@ void main() {
       ),
     ));
 
-    expect(find.text('Holiday - no attendance required'), findsOneWidget);
+    expect(find.text('Holiday - no attendance required'), findsNothing);
+    expect(find.text('Dashain break'), findsWidgets);
+    expect(find.text('School closed.'), findsOneWidget);
     expect(find.text('Attendance not recorded'), findsNothing);
   });
 
@@ -140,6 +143,37 @@ void main() {
     expect(find.text('School ceremony'), findsOneWidget);
     expect(find.textContaining('${eventBs.year} BS'), findsWidgets);
     expect(find.textContaining('October 9, 2026'), findsNothing);
+  });
+
+  testWidgets('student presentation omits redundant calendar copy',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: AcademicCalendar(
+            now: () => DateTime(2026, 10, 8),
+            events: const [],
+            showSelectedDayLabel: false,
+            showUpcomingEmptyDescription: false,
+            emphasizeUpcomingEmptyState: true,
+          ),
+        ),
+      ),
+    ));
+
+    expect(find.text('Selected day'), findsNothing);
+    expect(find.text('No upcoming events published'), findsOneWidget);
+    expect(
+      find.text(
+        'Holidays, exams, ceremonies and deadlines will appear here when the institution publishes them.',
+      ),
+      findsNothing,
+    );
+    final emptyCard = find.ancestor(
+      of: find.text('No upcoming events published'),
+      matching: find.byType(Card),
+    );
+    expect(tester.getSize(emptyCard).height, greaterThanOrEqualTo(96));
   });
 
   testWidgets('meeting calendar selects a Bikram Sambat day', (tester) async {

@@ -5,6 +5,13 @@ import 'package:go_router/go_router.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_navigation.dart';
 
 void main() {
+  test('teacher drawer starts in bottom navigation order', () {
+    expect(
+      TeacherNavigation.drawerItems.take(4).map((item) => item.label),
+      ['Home', 'Attendance', 'Messages', 'Classes'],
+    );
+  });
+
   late GoRouter router;
 
   setUp(() {
@@ -35,6 +42,10 @@ void main() {
           path: '/teacher/messages',
           builder: (_, __) => page('Messages', 2),
         ),
+        GoRoute(
+          path: '/teacher/account',
+          builder: (_, __) => const Scaffold(body: Text('Teacher profile')),
+        ),
       ],
     );
   });
@@ -57,7 +68,17 @@ void main() {
     await tester.tap(find.byTooltip('Open navigation menu'));
     await tester.pumpAndSettle();
 
-    for (final label in ['Home', 'Timetable', 'Leave requests']) {
+    for (final section in ['NAVIGATION', 'FEATURES']) {
+      expect(find.text(section, skipOffstage: false), findsOneWidget);
+    }
+
+    for (final label in [
+      'Home',
+      'Attendance',
+      'Messages',
+      'Classes',
+      'Leave requests',
+    ]) {
       expect(
         find.descendant(
           of: find.byType(NavigationDrawer),
@@ -76,6 +97,7 @@ void main() {
       300,
       scrollable: drawerScroll,
     );
+    expect(find.text('ACCOUNT'), findsOneWidget);
     for (final label in [
       'Profile settings',
       'Change password',
@@ -87,19 +109,19 @@ void main() {
     }
 
     final drawer = find.byType(NavigationDrawer);
-    final timetableLabel = find.descendant(
+    final classesLabel = find.descendant(
       of: drawer,
-      matching: find.text('Timetable', skipOffstage: false),
+      matching: find.text('Classes', skipOffstage: false),
       skipOffstage: false,
     );
     final profileLabel = find.descendant(
       of: drawer,
       matching: find.text('Profile settings'),
     );
-    final timetableIcon = find.descendant(
+    final classesIcon = find.descendant(
       of: drawer,
       matching: find.byIcon(
-        Icons.calendar_view_week_outlined,
+        Icons.school_outlined,
         skipOffstage: false,
       ),
       skipOffstage: false,
@@ -111,11 +133,11 @@ void main() {
 
     expect(
       tester.getTopLeft(profileLabel).dx,
-      moreOrLessEquals(tester.getTopLeft(timetableLabel).dx, epsilon: .01),
+      moreOrLessEquals(tester.getTopLeft(classesLabel).dx, epsilon: .01),
     );
     expect(
       tester.getTopLeft(profileIcon).dx,
-      moreOrLessEquals(tester.getTopLeft(timetableIcon).dx, epsilon: .01),
+      moreOrLessEquals(tester.getTopLeft(classesIcon).dx, epsilon: .01),
     );
   });
 
@@ -151,6 +173,27 @@ void main() {
       tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
       2,
     );
+  });
+
+  testWidgets('centered teacher drawer profile opens profile settings',
+      (tester) async {
+    await pumpPortal(tester);
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+
+    final header = find.byKey(const ValueKey('portal-drawer-profile-header'));
+    final avatar = find.descendant(
+      of: header,
+      matching: find.byType(CircleAvatar),
+    );
+    expect(
+      tester.getCenter(avatar).dx,
+      moreOrLessEquals(tester.getCenter(header).dx, epsilon: .01),
+    );
+
+    await tester.tap(header);
+    await tester.pumpAndSettle();
+    expect(find.text('Teacher profile'), findsOneWidget);
   });
 
   testWidgets('back from a teacher sub-page returns to home', (tester) async {

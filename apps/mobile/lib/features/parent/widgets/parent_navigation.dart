@@ -9,12 +9,16 @@ import 'package:tms_mobile/shared/widgets/portal_navigation_drawer.dart';
 
 /// Shared navigation chrome for every top-level parent destination.
 abstract final class ParentNavigation {
+  static const primaryNavigationItemCount = 4;
+
   static const drawerItems = <({String label, IconData icon, String route})>[
     (label: 'Home', icon: Icons.home_outlined, route: '/parent/home'),
+    (label: 'Classes', icon: Icons.school_outlined, route: '/parent/academics'),
+    (label: 'Chat', icon: Icons.forum_outlined, route: '/parent/messages'),
     (
-      label: 'Academics',
-      icon: Icons.school_outlined,
-      route: '/parent/academics'
+      label: 'Meetings',
+      icon: Icons.event_outlined,
+      route: '/parent/appointments'
     ),
     (
       label: 'Timetable',
@@ -45,12 +49,6 @@ abstract final class ParentNavigation {
       label: 'Notice board',
       icon: Icons.campaign_outlined,
       route: '/parent/notices'
-    ),
-    (label: 'Messages', icon: Icons.forum_outlined, route: '/parent/messages'),
-    (
-      label: 'Meetings',
-      icon: Icons.event_available_outlined,
-      route: '/parent/appointments'
     ),
   ];
 
@@ -96,12 +94,14 @@ abstract final class ParentNavigation {
     return Consumer(
       builder: (context, ref, _) => PortalDrawerTheme(
         child: NavigationDrawer(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 8),
           selectedIndex: selected < 0 ? null : selected,
           onDestinationSelected: (index) => open(drawerItems[index].route),
           children: [
             PortalDrawerHeader(
               name: ref.watch(authProvider).user?.name ?? 'Parent',
               subtitle: ref.watch(authProvider).user?.email ?? 'Parent portal',
+              onTap: () => open('/parent/account'),
               avatar: CircleAvatar(
                 radius: 30,
                 backgroundColor: Theme.of(context).colorScheme.primaryContainer,
@@ -109,7 +109,8 @@ abstract final class ParentNavigation {
                 child: const Icon(Icons.family_restroom_rounded, size: 30),
               ),
             ),
-            for (final item in drawerItems)
+            const PortalDrawerSectionLabel('Navigation'),
+            for (final item in drawerItems.take(primaryNavigationItemCount))
               NavigationDrawerDestination(
                 icon: Icon(item.icon),
                 selectedIcon: Icon(item.icon),
@@ -122,7 +123,22 @@ abstract final class ParentNavigation {
                   ),
                 ),
               ),
-            const Divider(indent: 28, endIndent: 28),
+            const PortalDrawerDivider(),
+            const PortalDrawerSectionLabel('Features'),
+            for (final item in drawerItems.skip(primaryNavigationItemCount))
+              NavigationDrawerDestination(
+                icon: Icon(item.icon),
+                selectedIcon: Icon(item.icon),
+                label: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 200),
+                  child: Text(
+                    item.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            const PortalDrawerDivider(),
             const PortalDrawerSectionLabel('Account'),
             PortalDrawerAction(
               icon: Icons.manage_accounts_outlined,

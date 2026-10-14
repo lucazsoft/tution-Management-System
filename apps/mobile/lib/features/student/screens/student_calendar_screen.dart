@@ -94,13 +94,13 @@ class StudentCalendarScreen extends ConsumerWidget {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(TmsSpace.md),
             children: [
-              Text('Holidays, exams, ceremonies, and fee deadlines.',
-                  style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: TmsSpace.md),
               AcademicCalendar(
                 events: events,
                 attendance: attendance,
                 scheduledClasses: scheduledClasses,
+                showSelectedDayLabel: false,
+                showUpcomingEmptyDescription: false,
+                emphasizeUpcomingEmptyState: true,
               ),
             ]),
       ),

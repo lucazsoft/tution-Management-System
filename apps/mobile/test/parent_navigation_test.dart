@@ -5,6 +5,13 @@ import 'package:go_router/go_router.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_navigation.dart';
 
 void main() {
+  test('parent drawer starts in bottom navigation order', () {
+    expect(
+      ParentNavigation.drawerItems.take(4).map((item) => item.label),
+      ['Home', 'Classes', 'Chat', 'Meetings'],
+    );
+  });
+
   testWidgets('parent drawer aligns account actions with destinations',
       (tester) async {
     await tester.pumpWidget(
@@ -23,6 +30,10 @@ void main() {
     await tester.tap(find.byTooltip('Open navigation menu'));
     await tester.pumpAndSettle();
 
+    for (final section in ['NAVIGATION', 'FEATURES']) {
+      expect(find.text(section, skipOffstage: false), findsOneWidget);
+    }
+
     final drawer = find.byType(NavigationDrawer);
     final drawerScroll = find.descendant(
       of: drawer,
@@ -33,10 +44,11 @@ void main() {
       300,
       scrollable: drawerScroll,
     );
+    expect(find.text('ACCOUNT'), findsOneWidget);
 
-    final academicsLabel = find.descendant(
+    final classesLabel = find.descendant(
       of: drawer,
-      matching: find.text('Academics', skipOffstage: false),
+      matching: find.text('Classes', skipOffstage: false),
       skipOffstage: false,
     );
     final profileLabel = find.descendant(
@@ -55,7 +67,7 @@ void main() {
 
     expect(
       tester.getTopLeft(profileLabel).dx,
-      moreOrLessEquals(tester.getTopLeft(academicsLabel).dx, epsilon: .01),
+      moreOrLessEquals(tester.getTopLeft(classesLabel).dx, epsilon: .01),
     );
     expect(
       tester.getTopLeft(profileIcon).dx,
@@ -105,5 +117,47 @@ void main() {
         entry.$2,
       );
     }
+  });
+
+  testWidgets('centered parent drawer profile opens profile settings',
+      (tester) async {
+    late GoRouter router;
+    Widget home() => Scaffold(
+          drawer: Builder(
+            builder: (context) => ParentNavigation.drawer(context),
+          ),
+          appBar: AppBar(),
+        );
+    router = GoRouter(
+      initialLocation: '/parent/home',
+      routes: [
+        GoRoute(path: '/parent/home', builder: (_, __) => home()),
+        GoRoute(
+          path: '/parent/account',
+          builder: (_, __) => const Scaffold(body: Text('Parent profile')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(child: MaterialApp.router(routerConfig: router)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+
+    final header = find.byKey(const ValueKey('portal-drawer-profile-header'));
+    final avatar = find.descendant(
+      of: header,
+      matching: find.byType(CircleAvatar),
+    );
+    expect(
+      tester.getCenter(avatar).dx,
+      moreOrLessEquals(tester.getCenter(header).dx, epsilon: .01),
+    );
+
+    await tester.tap(header);
+    await tester.pumpAndSettle();
+    expect(find.text('Parent profile'), findsOneWidget);
   });
 }
