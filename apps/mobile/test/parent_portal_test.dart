@@ -312,6 +312,23 @@ Future<void> _pumpPortalScreen(
 
 void main() {
   group('parent meeting notice', () {
+    test('requires an explicitly selected booking time', () {
+      expect(
+        parentMeetingTimeValidation(
+          hasSelectedTime: false,
+          scheduled: DateTime(2026, 10, 13, 12, 30),
+        ),
+        'Enter the time to book.',
+      );
+      expect(
+        parentMeetingTimeValidation(
+          hasSelectedTime: true,
+          scheduled: DateTime(2026, 10, 13, 12, 30),
+        ),
+        isNull,
+      );
+    });
+
     test('requires exactly 30 minutes when current time is on a minute', () {
       final now = DateTime(2026, 10, 13, 12);
       expect(parentMeetingEarliest(now), DateTime(2026, 10, 13, 12, 30));
@@ -321,6 +338,11 @@ void main() {
         () {
       final now = DateTime(2026, 10, 13, 12, 0, 29);
       expect(parentMeetingEarliest(now), DateTime(2026, 10, 13, 12, 31));
+    });
+
+    test('limits advance booking to 30 days', () {
+      final earliest = DateTime(2026, 10, 13, 12, 30);
+      expect(parentMeetingLatest(earliest), DateTime(2026, 11, 12, 12, 30));
     });
 
     test('blocks Saturdays and published holidays', () {

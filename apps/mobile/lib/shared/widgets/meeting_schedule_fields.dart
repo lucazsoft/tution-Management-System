@@ -20,6 +20,9 @@ class MeetingScheduleFields extends StatelessWidget {
     this.holidayPredicate,
     this.redDayPredicate,
     this.redDayLegend = 'Holiday',
+    this.hasSelectedTime,
+    this.onTimeSelected,
+    this.lastDate,
   });
 
   final TextEditingController reasonController;
@@ -35,11 +38,15 @@ class MeetingScheduleFields extends StatelessWidget {
   final bool Function(DateTime day)? holidayPredicate;
   final bool Function(DateTime day)? redDayPredicate;
   final String redDayLegend;
+  final bool? hasSelectedTime;
+  final VoidCallback? onTimeSelected;
+  final DateTime? lastDate;
 
   Future<void> _pickTime(BuildContext context) async {
     var initial = scheduled ?? earliest;
+    final maximum = lastDate ?? earliest.add(const Duration(days: 365));
     while (selectableDayPredicate?.call(initial) == false &&
-        initial.isBefore(earliest.add(const Duration(days: 365)))) {
+        initial.isBefore(maximum)) {
       initial = initial.add(const Duration(days: 1));
     }
     final time = await showTimePicker(
@@ -57,6 +64,7 @@ class MeetingScheduleFields extends StatelessWidget {
       ));
       return;
     }
+    onTimeSelected?.call();
     onScheduledChanged(value);
   }
 
@@ -100,7 +108,7 @@ class MeetingScheduleFields extends StatelessWidget {
           NepaliMeetingCalendar(
             selectedDate: scheduled ?? earliest,
             firstDate: earliest,
-            lastDate: earliest.add(const Duration(days: 365)),
+            lastDate: lastDate ?? earliest.add(const Duration(days: 365)),
             onDateSelected: busy ? null : _selectDate,
             selectableDayPredicate: selectableDayPredicate,
             holidayPredicate: holidayPredicate,
@@ -114,7 +122,9 @@ class MeetingScheduleFields extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: busy ? null : () => _pickTime(context),
                   icon: const Icon(Icons.schedule_rounded, size: 18),
-                  label: Text(_timeLabel(scheduled)),
+                  label: Text(_timeLabel(
+                    hasSelectedTime == false ? null : scheduled,
+                  )),
                 ),
               ),
               const SizedBox(width: 10),
