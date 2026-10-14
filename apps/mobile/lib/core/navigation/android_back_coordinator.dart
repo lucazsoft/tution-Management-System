@@ -40,7 +40,8 @@ class AndroidBackCoordinator extends StatefulWidget {
 }
 
 class _AndroidBackCoordinatorState extends State<AndroidBackCoordinator> {
-  DateTime? _lastHomeBack;
+  static final Expando<_AndroidExitState> _exitStates =
+      Expando<_AndroidExitState>('androidExitStates');
 
   static const _homeRoutes = {
     '/student/home',
@@ -71,19 +72,25 @@ class _AndroidBackCoordinatorState extends State<AndroidBackCoordinator> {
   void _handleBack(bool didPop, Object? result) {
     if (didPop || !_isAndroid) return;
     final router = widget.router;
+    final exitState = _exitStates[router] ??= _AndroidExitState();
     final uri = router.routeInformationProvider.value.uri;
     final location = uri.path;
 
-    if (widget.onBack?.call() == true) return;
+    if (widget.onBack?.call() == true) {
+      exitState.lastHomeBack = null;
+      return;
+    }
 
     // Dashboard tabs encoded in the query string are still sub-pages. Back
     // returns to the dashboard before enabling the double-back exit gesture.
     if (_homeRoutes.contains(location) && uri.hasQuery) {
+      exitState.lastHomeBack = null;
       router.go(location);
       return;
     }
 
     if (!_homeRoutes.contains(location)) {
+      exitState.lastHomeBack = null;
       const parentDestinations = <String, String>{
         '/teacher/attendance': '/teacher/timetable',
       };
@@ -98,12 +105,13 @@ class _AndroidBackCoordinatorState extends State<AndroidBackCoordinator> {
     }
 
     final now = DateTime.now();
-    if (_lastHomeBack != null &&
-        now.difference(_lastHomeBack!) <= const Duration(seconds: 2)) {
+    if (exitState.lastHomeBack != null &&
+        now.difference(exitState.lastHomeBack!) <= const Duration(seconds: 2)) {
+      exitState.lastHomeBack = null;
       SystemNavigator.pop();
       return;
     }
-    _lastHomeBack = now;
+    exitState.lastHomeBack = now;
     showAndroidExitPrompt(context);
   }
 
@@ -116,4 +124,8 @@ class _AndroidBackCoordinatorState extends State<AndroidBackCoordinator> {
       child: widget.child,
     );
   }
+}
+
+class _AndroidExitState {
+  DateTime? lastHomeBack;
 }

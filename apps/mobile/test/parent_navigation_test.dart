@@ -230,4 +230,104 @@ void main() {
     await tester.pump();
     expect(platformMethod, 'SystemNavigator.pop');
   });
+
+  testWidgets('returning to parent home resets the double-back exit sequence',
+      (tester) async {
+    String? platformMethod;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'SystemNavigator.pop') platformMethod = call.method;
+        return null;
+      },
+    );
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+
+    Widget page(String title, int index) => Scaffold(
+          body: Text(title),
+          bottomNavigationBar: ParentNavigationBar(selectedIndex: index),
+        );
+    final router = GoRouter(
+      initialLocation: '/parent/home',
+      routes: [
+        GoRoute(
+          path: '/parent/home',
+          builder: (_, __) => page('Parent home page', 0),
+        ),
+        GoRoute(
+          path: '/parent/messages',
+          builder: (_, __) => page('Parent messages page', 2),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(child: MaterialApp.router(routerConfig: router)),
+    );
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.text('Press back again to exit'), findsOneWidget);
+
+    router.go('/parent/messages');
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Parent home page'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(platformMethod, isNull);
+    expect(find.text('Press back again to exit'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(platformMethod, 'SystemNavigator.pop');
+  });
+
+  testWidgets('back closes a parent inner page before leaving its navigation',
+      (tester) async {
+    var insideConversation = true;
+    final router = GoRouter(
+      initialLocation: '/parent/messages',
+      routes: [
+        GoRoute(
+          path: '/parent/home',
+          builder: (_, __) => const Scaffold(body: Text('Parent home page')),
+        ),
+        GoRoute(
+          path: '/parent/messages',
+          builder: (_, __) => StatefulBuilder(
+            builder: (context, setState) => Scaffold(
+              body: Text(insideConversation
+                  ? 'Message conversation'
+                  : 'Message navigation'),
+              bottomNavigationBar: ParentNavigationBar(
+                selectedIndex: 2,
+                onBack: () {
+                  if (!insideConversation) return false;
+                  setState(() => insideConversation = false);
+                  return true;
+                },
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(child: MaterialApp.router(routerConfig: router)),
+    );
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Message navigation'), findsOneWidget);
+    expect(find.text('Parent home page'), findsNothing);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Parent home page'), findsOneWidget);
+  });
 }

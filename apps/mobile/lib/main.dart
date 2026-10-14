@@ -85,8 +85,7 @@ class _StartupScreen extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
         debugShowCheckedModeBanner: false,
         home: Scaffold(
-          backgroundColor:
-              _isAndroid ? Colors.white : const Color(0xFFF8FAFC),
+          backgroundColor: _isAndroid ? Colors.white : const Color(0xFFF8FAFC),
           body: _isAndroid
               ? const _AndroidStartupContent()
               : const Center(
