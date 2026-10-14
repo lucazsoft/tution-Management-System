@@ -319,13 +319,6 @@ class _TodayTab extends StatelessWidget {
       children: [
         _ClockCard(workspace: workspace, onPressed: onClockAttendance),
         const SizedBox(height: 16),
-        _QuickActions(
-          onAttendance: onOpenAttendance,
-          onSyllabus: onUpdateSyllabus,
-          onHomework: onAssignHomework,
-          onResults: onEnterResults,
-        ),
-        const SizedBox(height: 24),
         Row(children: [
           Expanded(
               child: Text('Today\'s timetable',
@@ -346,6 +339,18 @@ class _TodayTab extends StatelessWidget {
             items: items,
             onAttendClass: onAttendClass,
           ),
+        const SizedBox(height: 24),
+        Text(
+          'Quick actions',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 12),
+        _QuickActions(
+          onAttendance: onOpenAttendance,
+          onSyllabus: onUpdateSyllabus,
+          onHomework: onAssignHomework,
+          onResults: onEnterResults,
+        ),
         const SizedBox(height: 24),
         _TeacherUpcomingEvents(
           events: events,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -31,12 +32,12 @@ void main() {
         GoRoute(path: '/teacher/home', builder: (_, __) => page('Home', 0)),
         GoRoute(
           path: '/teacher/timetable',
-          builder: (_, __) => page('Timetable', 0),
+          builder: (_, __) => page('Timetable', 3),
         ),
-        GoRoute(path: '/teacher/leave', builder: (_, __) => page('Leave', 0)),
+        GoRoute(path: '/teacher/leave', builder: (_, __) => page('Leave', 4)),
         GoRoute(
           path: '/teacher/meetings',
-          builder: (_, __) => page('Meetings', 0),
+          builder: (_, __) => page('Meetings', 4),
         ),
         GoRoute(
           path: '/teacher/messages',
@@ -210,5 +211,47 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.text('Home page'), findsOneWidget);
+  });
+
+  testWidgets('back from Messages returns to the teacher home tab',
+      (tester) async {
+    await pumpPortal(tester);
+    router.go('/teacher/messages');
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      2,
+    );
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Home page'), findsOneWidget);
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      0,
+    );
+  });
+
+  testWidgets('teacher home uses double back to exit', (tester) async {
+    String? platformMethod;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'SystemNavigator.pop') platformMethod = call.method;
+        return null;
+      },
+    );
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+    await pumpPortal(tester);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.text('Press back again to exit'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(platformMethod, 'SystemNavigator.pop');
   });
 }

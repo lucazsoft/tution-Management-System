@@ -202,10 +202,12 @@ class ParentNavigationBar extends StatelessWidget {
     super.key,
     required this.selectedIndex,
     this.coordinateSystemBack = true,
+    this.onBack,
   });
 
   final int selectedIndex;
   final bool coordinateSystemBack;
+  final bool Function()? onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -258,6 +260,10 @@ class ParentNavigationBar extends StatelessWidget {
     if (!coordinateSystemBack) return navigationBar;
     return router == null
         ? navigationBar
-        : AndroidBackCoordinator(router: router, child: navigationBar);
+        : AndroidBackCoordinator(
+            router: router,
+            onBack: onBack,
+            child: navigationBar,
+          );
   }
 }

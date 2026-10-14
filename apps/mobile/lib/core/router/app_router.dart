@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tms_mobile/core/auth/role_codes.dart';
@@ -134,7 +135,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     initialLocation: '/auth-loading',
-    debugLogDiagnostics: true,
+    debugLogDiagnostics: kDebugMode,
     refreshListenable: authRefresh,
 
     // ── Auth redirect guard ──

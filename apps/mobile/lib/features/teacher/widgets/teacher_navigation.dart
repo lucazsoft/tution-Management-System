@@ -212,31 +212,20 @@ class TeacherDashboardNavigationBar extends StatelessWidget {
     super.key,
     required this.selectedIndex,
     this.onDestinationSelected,
+    this.onBack,
   });
 
   final int selectedIndex;
   final ValueChanged<int>? onDestinationSelected;
+  final bool Function()? onBack;
 
   @override
   Widget build(BuildContext context) {
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final router = GoRouter.maybeOf(context);
-    final uri = router?.routeInformationProvider.value.uri;
-    final effectiveSelectedIndex = switch (uri?.path) {
-      '/teacher/home' => switch (uri?.queryParameters['tab']) {
-          'attendance' => 1,
-          'classes' => 3,
-          'more' => 4,
-          _ => 0,
-        },
-      '/teacher/messages' => 2,
-      '/teacher/timetable' => 3,
-      null => selectedIndex,
-      _ => 4,
-    };
     final navigationBar = NavigationBar(
       height: 80.0 + ((textScale - 1).clamp(0.0, 1.0) * 16.0).toDouble(),
-      selectedIndex: effectiveSelectedIndex,
+      selectedIndex: selectedIndex,
       onDestinationSelected: onDestinationSelected ??
           (index) => TeacherNavigation.openDashboardSection(context, index),
       destinations: const [
@@ -269,7 +258,11 @@ class TeacherDashboardNavigationBar extends StatelessWidget {
     );
     return router == null
         ? navigationBar
-        : AndroidBackCoordinator(router: router, child: navigationBar);
+        : AndroidBackCoordinator(
+            router: router,
+            onBack: onBack,
+            child: navigationBar,
+          );
   }
 }
 
@@ -278,10 +271,12 @@ class TeacherPortalScaffold extends StatelessWidget {
       {super.key,
       required this.title,
       required this.body,
-      this.floatingActionButton});
+      this.floatingActionButton,
+      this.onBack});
   final String title;
   final Widget body;
   final Widget? floatingActionButton;
+  final bool Function()? onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -314,8 +309,8 @@ class TeacherPortalScaffold extends StatelessWidget {
         ),
       ),
       floatingActionButton: floatingActionButton,
-      bottomNavigationBar:
-          TeacherDashboardNavigationBar(selectedIndex: selected),
+      bottomNavigationBar: TeacherDashboardNavigationBar(
+          selectedIndex: selected, onBack: onBack),
     );
   }
 }

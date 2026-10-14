@@ -712,6 +712,7 @@ void main() {
       expect(find.text('Enter results'), findsOneWidget);
       expect(find.text('Today\'s timetable'), findsOneWidget);
       expect(find.text('Full timetable'), findsOneWidget);
+      expect(find.text('Quick actions'), findsOneWidget);
       expect(find.text('Pending daily updates: 1'), findsNothing);
 
       final actionButtons = [
@@ -731,6 +732,18 @@ void main() {
           tester.getTopLeft(actionButtons[2]).dx);
       expect(tester.getTopLeft(actionButtons[1]).dx,
           tester.getTopLeft(actionButtons[3]).dx);
+      expect(
+        tester.getTopLeft(find.text('Today\'s timetable')).dy,
+        lessThan(tester.getTopLeft(actionButtons.first).dy),
+      );
+      expect(
+        tester.getTopLeft(find.text('Quick actions')).dy,
+        lessThan(tester.getTopLeft(actionButtons.first).dy),
+      );
+      expect(
+        tester.getTopLeft(find.text('Clocked in')).dy,
+        lessThan(tester.getTopLeft(find.text('Today\'s timetable')).dy),
+      );
     });
 
     testWidgets('learning workflows use workspace classes and records',

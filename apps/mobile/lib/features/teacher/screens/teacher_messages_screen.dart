@@ -127,6 +127,15 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
     }
   }
 
+  bool _backToConversations() {
+    if (_selected == null) return false;
+    setState(() {
+      _selected = null;
+      _messages = null;
+    });
+    return true;
+  }
+
   Future<void> _startNewChat() async {
     try {
       final recipients = await _repository.fetchMessageRecipients();
@@ -205,6 +214,7 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
   @override
   Widget build(BuildContext context) => TeacherPortalScaffold(
         title: 'Messages',
+        onBack: _backToConversations,
         body: Padding(
           padding: const EdgeInsets.all(TmsSpace.md),
           child: _contacts == null
@@ -334,10 +344,7 @@ class _TeacherMessagesScreenState extends ConsumerState<TeacherMessagesScreen> {
             if (compact)
               IconButton(
                 tooltip: 'Back to conversations',
-                onPressed: () => setState(() {
-                  _selected = null;
-                  _messages = null;
-                }),
+                onPressed: _backToConversations,
                 icon: const Icon(Icons.arrow_back_rounded),
               ),
             ChatAvatar(name: contact.parentName, size: 42),

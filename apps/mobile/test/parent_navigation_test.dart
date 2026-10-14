@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -159,5 +160,74 @@ void main() {
     await tester.tap(header);
     await tester.pumpAndSettle();
     expect(find.text('Parent profile'), findsOneWidget);
+  });
+
+  testWidgets('back from a parent navigation tab returns to home',
+      (tester) async {
+    Widget page(String title, int index) => Scaffold(
+          body: Text(title),
+          bottomNavigationBar: ParentNavigationBar(selectedIndex: index),
+        );
+    final router = GoRouter(
+      initialLocation: '/parent/home',
+      routes: [
+        GoRoute(
+          path: '/parent/home',
+          builder: (_, __) => page('Parent home page', 0),
+        ),
+        GoRoute(
+          path: '/parent/messages',
+          builder: (_, __) => page('Messages', 2),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(child: MaterialApp.router(routerConfig: router)),
+    );
+    router.go('/parent/messages');
+    await tester.pumpAndSettle();
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Parent home page'), findsOneWidget);
+  });
+
+  testWidgets('parent home requires two back presses to exit', (tester) async {
+    String? platformMethod;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'SystemNavigator.pop') platformMethod = call.method;
+        return null;
+      },
+    );
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+    final router = GoRouter(
+      initialLocation: '/parent/home',
+      routes: [
+        GoRoute(
+          path: '/parent/home',
+          builder: (_, __) => const Scaffold(
+            body: Text('Home'),
+            bottomNavigationBar: ParentNavigationBar(selectedIndex: 0),
+          ),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(child: MaterialApp.router(routerConfig: router)),
+    );
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.text('Press back again to exit'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(platformMethod, 'SystemNavigator.pop');
   });
 }

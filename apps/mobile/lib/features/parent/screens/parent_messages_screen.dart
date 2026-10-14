@@ -23,6 +23,12 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
   String _query = '';
   bool _sending = false;
 
+  bool _backToConversations() {
+    if (_contactId == null) return false;
+    setState(() => _contactId = null);
+    return true;
+  }
+
   @override
   void dispose() {
     _text.dispose();
@@ -118,7 +124,10 @@ class _ParentMessagesScreenState extends ConsumerState<ParentMessagesScreen> {
   Widget build(BuildContext context) => Scaffold(
         drawer: ParentNavigation.drawer(context),
         appBar: AppBar(title: const Text('Messages')),
-        bottomNavigationBar: const ParentNavigationBar(selectedIndex: 2),
+        bottomNavigationBar: ParentNavigationBar(
+          selectedIndex: 2,
+          onBack: _backToConversations,
+        ),
         body: ParentPortalStateView(
           wrapInScrollView: false,
           builder: (context, portal, child) {

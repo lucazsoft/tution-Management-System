@@ -28,10 +28,12 @@ class AndroidBackCoordinator extends StatefulWidget {
     super.key,
     required this.router,
     required this.child,
+    this.onBack,
   });
 
   final GoRouter router;
   final Widget child;
+  final bool Function()? onBack;
 
   @override
   State<AndroidBackCoordinator> createState() => _AndroidBackCoordinatorState();
@@ -72,6 +74,8 @@ class _AndroidBackCoordinatorState extends State<AndroidBackCoordinator> {
     final uri = router.routeInformationProvider.value.uri;
     final location = uri.path;
 
+    if (widget.onBack?.call() == true) return;
+
     // Dashboard tabs encoded in the query string are still sub-pages. Back
     // returns to the dashboard before enabling the double-back exit gesture.
     if (_homeRoutes.contains(location) && uri.hasQuery) {
@@ -80,6 +84,14 @@ class _AndroidBackCoordinatorState extends State<AndroidBackCoordinator> {
     }
 
     if (!_homeRoutes.contains(location)) {
+      const parentDestinations = <String, String>{
+        '/teacher/attendance': '/teacher/timetable',
+      };
+      final destination = parentDestinations[location];
+      if (destination != null) {
+        router.go(destination);
+        return;
+      }
       final home = _portalHome(location);
       if (home != null) router.go(home);
       return;
