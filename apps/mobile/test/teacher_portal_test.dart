@@ -630,12 +630,19 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await _pumpWithRepository(
         tester,
-        const TeacherHomeScreen(),
+        const TeacherHomeScreen(initialTab: 1),
         repository,
       );
 
-      await tester.tap(find.byType(NavigationDestination).at(1));
-      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('Attendance'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Teacher Home'), findsNothing);
+      expect(find.text('Teacher attendance'), findsNothing);
       expect(find.text('Aarya Rai'), findsOneWidget);
       expect(find.text('Bikash Lama'), findsOneWidget);
       expect(find.text('Excused leave recorded'), findsOneWidget);
@@ -763,17 +770,51 @@ void main() {
       await _pumpWithRepository(
           tester, const TeacherSyllabusScreen(), repository);
       expect(find.text('Edit plan'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Algebra'), 250);
       expect(find.text('Algebra'), findsOneWidget);
+      expect(find.byTooltip('Update chapter progress'), findsNothing);
       await tester.tap(find.text('Algebra'));
       await tester.pumpAndSettle();
       expect(find.text('Linear equations'), findsOneWidget);
+      expect(find.text('Add topics'), findsOneWidget);
+      await tester.ensureVisible(find.text('Add topics'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add topics'));
+      await tester.pumpAndSettle();
+      expect(find.text('Add topics to Algebra'), findsOneWidget);
+      await tester.tap(find.text('Cancel').last);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      await tester.drag(find.byType(ListView).first, const Offset(0, 700));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Edit plan'));
+      await tester.pumpAndSettle();
+      expect(find.text('Chapter progress'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(DropdownButtonFormField<String>),
+          matching: find.text('In progress'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(TextFormField, 'Linear equations'),
+          findsOneWidget);
       expect(find.text('Add topic'), findsOneWidget);
+      expect(find.byTooltip('Delete topic'), findsOneWidget);
+      await tester.tap(find.text('Add topic'));
+      await tester.pumpAndSettle();
+      expect(
+          find.widgetWithText(TextFormField, 'Topic title'), findsNWidgets(2));
+      expect(tester.takeException(), isNull);
 
       await _pumpWithRepository(
           tester, const TeacherResultsScreen(), repository);
       expect(find.textContaining('First Term'), findsOneWidget);
       expect(find.text('Aarya Rai'), findsOneWidget);
       expect(find.text('Add paper'), findsWidgets);
+      await tester.drag(find.byType(ListView).first, const Offset(0, -600));
+      await tester.pumpAndSettle();
       expect(find.text('Publish results'), findsOneWidget);
     });
 

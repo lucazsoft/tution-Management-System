@@ -227,6 +227,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(clearError: true);
   }
 
+  Future<void> updateDisplayName(String firstName, String lastName) async {
+    final current = state.user;
+    if (current == null) return;
+    final updated = AuthUser(
+      id: current.id,
+      email: current.email,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      role: current.role,
+      tenantId: current.tenantId,
+      requiresTwoFactor: current.requiresTwoFactor,
+    );
+    state = state.copyWith(user: updated);
+    await ApiClient.saveUser(jsonEncode(updated.toJson()));
+  }
+
   Future<void> send2FACode() async {
     if (!state.isTwoFactorPending || state.pendingEmail == null) {
       throw const AuthFailure('Start sign-in again before requesting a code.');

@@ -440,7 +440,6 @@ class TeacherSyllabusScreen extends ConsumerStatefulWidget {
 class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
   String? _classId;
   String? _busyTopic;
-  String? _busyChapter;
   bool _editing = false;
   bool _savingPlan = false;
   String _subject = '';
@@ -454,7 +453,15 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
           ? [_ChapterDraft(null, '')]
           : [
               for (final chapter in syllabus.chapters)
-                _ChapterDraft(chapter.id, chapter.title)
+                _ChapterDraft(
+                  chapter.id,
+                  chapter.title,
+                  status: chapter.status,
+                  topics: [
+                    for (final topic in chapter.topics)
+                      _TopicDraft(topic.id, topic.title),
+                  ],
+                )
             ];
     });
   }
@@ -475,15 +482,82 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
         await repository.createSyllabus(
             classId: klass.id,
             subject: _subject.trim(),
-            chapters: [for (final item in chapters) item.title.trim()]);
+            chapters: [
+              for (final item in chapters)
+                {
+                  'title': item.title.trim(),
+                  'topics': [
+                    for (final topic in item.topics)
+                      if (topic.title.trim().isNotEmpty) topic.title.trim(),
+                  ],
+                },
+            ]);
       } else {
-        await repository.updateSyllabus(
+        final updated = await repository.updateSyllabus(
             syllabusId: syllabus.id,
             subject: _subject.trim(),
             chapters: [
               for (final item in chapters)
                 {'id': item.id, 'title': item.title.trim()}
             ]);
+        final savedChapters = updated['chapters'] is List
+            ? (updated['chapters'] as List).whereType<Map>().toList()
+            : const <Map>[];
+        final retainedChapterIds =
+            chapters.map((chapter) => chapter.id).whereType<String>().toSet();
+        final originalTopics = {
+          for (final chapter in syllabus.chapters)
+            if (retainedChapterIds.contains(chapter.id))
+              for (final topic in chapter.topics) topic.id: topic,
+        };
+        final retainedTopicIds = chapters
+            .expand((chapter) => chapter.topics)
+            .map((topic) => topic.id)
+            .whereType<String>()
+            .toSet();
+        for (final topic in originalTopics.values) {
+          if (!retainedTopicIds.contains(topic.id)) {
+            await repository.deleteSyllabusTopic(
+              syllabusId: syllabus.id,
+              topicId: topic.id,
+            );
+          }
+        }
+        for (var index = 0; index < chapters.length; index++) {
+          final chapter = chapters[index];
+          final chapterId = chapter.id ??
+              (index < savedChapters.length
+                  ? savedChapters[index]['id']?.toString()
+                  : null);
+          if (chapterId == null) continue;
+          final originalChapter = syllabus.chapters
+              .where((item) => item.id == chapter.id)
+              .firstOrNull;
+          if (originalChapter?.status != chapter.status) {
+            await repository.updateChapterProgress(
+              syllabusId: syllabus.id,
+              chapterId: chapterId,
+              status: chapter.status,
+              notes: '',
+            );
+          }
+          for (final topic
+              in chapter.topics.where((item) => item.title.trim().isNotEmpty)) {
+            if (topic.id == null) {
+              await repository.createSyllabusTopic(
+                syllabusId: syllabus.id,
+                chapterId: chapterId,
+                title: topic.title,
+              );
+            } else if (originalTopics[topic.id]?.title != topic.title.trim()) {
+              await repository.updateSyllabusTopic(
+                syllabusId: syllabus.id,
+                topicId: topic.id!,
+                title: topic.title,
+              );
+            }
+          }
+        }
       }
       await ref.read(teacherPortalViewModelProvider.notifier).refresh();
       if (mounted) setState(() => _editing = false);
@@ -498,39 +572,15 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
 
   Future<void> _addTopics(
       TeacherSyllabus syllabus, TeacherSyllabusChapter chapter) async {
-    final controller = TextEditingController();
     final titles = await showDialog<List<String>>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-              title: Text('Add topics to ${chapter.title}'),
-              content: TextField(
-                  controller: controller,
-                  autofocus: true,
-                  minLines: 4,
-                  maxLines: 8,
-                  decoration: const InputDecoration(
-                      labelText: 'Topics',
-                      helperText: 'Enter one topic per line.',
-                      alignLabelWithHint: true,
-                      border: OutlineInputBorder())),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(dialogContext),
-                    child: const Text('Cancel')),
-                FilledButton(
-                    onPressed: () => Navigator.pop(
-                          dialogContext,
-                          controller.text
-                              .split('\n')
-                              .map((line) => line.trim())
-                              .where((line) => line.isNotEmpty)
-                              .toSet()
-                              .toList(),
-                        ),
-                    child: const Text('Add topics'))
-              ],
-            ));
-    controller.dispose();
+      context: context,
+      builder: (_) => _SyllabusListDialog(
+        title: 'Add topics to ${chapter.title}',
+        fieldLabel: 'Topics',
+        helperText: 'Enter one topic per line.',
+        actionLabel: 'Add topics',
+      ),
+    );
     if (titles == null || titles.isEmpty) return;
     try {
       final repository = TeacherPortalRepository();
@@ -566,15 +616,25 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
     if (mounted) setState(() => _busyTopic = null);
   }
 
-  Future<void> _updateChapter(TeacherSyllabus syllabus,
-      TeacherSyllabusChapter chapter, String status, String notes) async {
-    setState(() => _busyChapter = chapter.id);
+  Future<void> _renameTopic(
+    TeacherSyllabus syllabus,
+    TeacherSyllabusTopic topic,
+  ) async {
+    final title = await showDialog<String>(
+      context: context,
+      builder: (_) => _TopicTitleDialog(
+        title: 'Edit topic',
+        initialValue: topic.title,
+        actionLabel: 'Save topic',
+      ),
+    );
+    if (title == null || title == topic.title || !mounted) return;
+    setState(() => _busyTopic = topic.id);
     try {
-      await TeacherPortalRepository().updateChapterProgress(
+      await TeacherPortalRepository().updateSyllabusTopic(
         syllabusId: syllabus.id,
-        chapterId: chapter.id,
-        status: status,
-        notes: notes,
+        topicId: topic.id,
+        title: title,
       );
       await ref.read(teacherPortalViewModelProvider.notifier).refresh();
     } on ApiException catch (error) {
@@ -583,92 +643,61 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
             .showSnackBar(SnackBar(content: Text(error.message)));
       }
     }
-    if (mounted) setState(() => _busyChapter = null);
+    if (mounted) setState(() => _busyTopic = null);
   }
 
-  Future<String?> _progressNotes(String title, String status) async {
-    final controller = TextEditingController();
-    final notes = await showDialog<String>(
+  Future<void> _deleteTopic(
+    TeacherSyllabus syllabus,
+    TeacherSyllabusTopic topic,
+  ) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Update $title'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          minLines: 3,
-          maxLines: 6,
-          maxLength: 1000,
-          decoration: InputDecoration(
-            labelText: 'Lesson notes',
-            helperText:
-                'Status: ${status.replaceAll('_', ' ').toLowerCase()}. Record coverage, activities, or follow-up.',
-            alignLabelWithHint: true,
-            border: const OutlineInputBorder(),
-          ),
-        ),
+        title: const Text('Delete topic?'),
+        content: Text('Remove “${topic.title}” from this chapter?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(
-              dialogContext,
-              controller.text.trim(),
-            ),
-            child: const Text('Save progress'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
           ),
         ],
       ),
     );
-    controller.dispose();
-    return notes;
+    if (confirmed != true || !mounted) return;
+    setState(() => _busyTopic = topic.id);
+    try {
+      await TeacherPortalRepository().deleteSyllabusTopic(
+        syllabusId: syllabus.id,
+        topicId: topic.id,
+      );
+      await ref.read(teacherPortalViewModelProvider.notifier).refresh();
+    } on ApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    }
+    if (mounted) setState(() => _busyTopic = null);
   }
 
   Future<void> _importChapterOutline() async {
-    final controller = TextEditingController();
     final chapters = await showDialog<List<String>>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Import chapter outline'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          minLines: 8,
-          maxLines: 14,
-          decoration: const InputDecoration(
-            labelText: 'Chapter outline',
-            helperText:
-                'Paste one chapter per line. Numbered and bulleted lists are accepted.',
-            alignLabelWithHint: true,
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(
-              dialogContext,
-              controller.text
-                  .split('\n')
-                  .map((line) => line
-                      .replaceFirst(
-                          RegExp(r'^\s*(?:\d+[.)]|[-*\u2022])\s*'), '')
-                      .trim())
-                  .where((line) => line.isNotEmpty)
-                  .toSet()
-                  .toList(),
-            ),
-            icon: const Icon(Icons.playlist_add_rounded),
-            label: const Text('Add to plan'),
-          ),
-        ],
+      builder: (_) => const _SyllabusListDialog(
+        title: 'Import chapter outline',
+        fieldLabel: 'Chapter outline',
+        helperText:
+            'Paste one chapter per line. Numbered and bulleted lists are accepted.',
+        actionLabel: 'Add to plan',
+        stripListMarkers: true,
+        minLines: 8,
+        maxLines: 14,
       ),
     );
-    controller.dispose();
     if (chapters == null || chapters.isEmpty || !mounted) return;
     final existing = _chapters.map((item) => item.title.toLowerCase()).toSet();
     setState(() {
@@ -797,31 +826,6 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
                     child: Text('${syllabus.chapters.indexOf(chapter) + 1}')),
                 title: Text(chapter.title),
                 subtitle: Text(chapter.status.replaceAll('_', ' ')),
-                trailing: _busyChapter == chapter.id
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : PopupMenuButton<String>(
-                        tooltip: 'Update chapter progress',
-                        onSelected: (status) async {
-                          final notes =
-                              await _progressNotes(chapter.title, status);
-                          if (notes != null) {
-                            await _updateChapter(
-                                syllabus, chapter, status, notes);
-                          }
-                        },
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(
-                              value: 'LEFT', child: Text('Not started')),
-                          PopupMenuItem(
-                              value: 'IN_PROGRESS', child: Text('In progress')),
-                          PopupMenuItem(
-                              value: 'COMPLETED', child: Text('Completed')),
-                        ],
-                      ),
                 children: [
                   for (final topic in chapter.topics)
                     ListTile(
@@ -842,13 +846,14 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
                               height: 22,
                               child: CircularProgressIndicator(strokeWidth: 2))
                           : PopupMenuButton<String>(
-                              tooltip: 'Update progress',
+                              tooltip: 'Topic actions',
                               onSelected: (status) async {
-                                final notes =
-                                    await _progressNotes(topic.title, status);
-                                if (notes != null) {
-                                  await _update(
-                                      syllabus, topic, status, notes);
+                                if (status == 'EDIT') {
+                                  await _renameTopic(syllabus, topic);
+                                } else if (status == 'DELETE') {
+                                  await _deleteTopic(syllabus, topic);
+                                } else {
+                                  await _update(syllabus, topic, status, '');
                                 }
                               },
                               itemBuilder: (_) => const [
@@ -860,7 +865,14 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
                                         child: Text('In progress')),
                                     PopupMenuItem(
                                         value: 'COMPLETED',
-                                        child: Text('Completed'))
+                                        child: Text('Completed')),
+                                    PopupMenuDivider(),
+                                    PopupMenuItem(
+                                        value: 'EDIT',
+                                        child: Text('Edit topic')),
+                                    PopupMenuItem(
+                                        value: 'DELETE',
+                                        child: Text('Delete topic')),
                                   ]),
                     ),
                   Padding(
@@ -888,7 +900,7 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
                       style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 4),
                   const Text(
-                      'Build the full teaching plan here so paper notes are not required. Add topics after saving.'),
+                      'Add chapters and break each chapter into editable topics.'),
                   const SizedBox(height: 16),
                   TextFormField(
                       key: ValueKey('subject-$_classId-$_editing'),
@@ -905,34 +917,125 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
                   for (var index = 0;
                       index < (_editing ? _chapters.length : 1);
                       index++)
-                    Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Row(children: [
-                          CircleAvatar(radius: 16, child: Text('${index + 1}')),
-                          const SizedBox(width: 10),
-                          Expanded(
-                              child: TextFormField(
+                    Card.outlined(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(children: [
+                              CircleAvatar(
+                                  radius: 16, child: Text('${index + 1}')),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: TextFormField(
                                   key: ValueKey(
-                                      'chapter-$index-${_chapters.elementAtOrNull(index)?.id}'),
-                                  initialValue:
-                                      _chapters.elementAtOrNull(index)?.title ??
-                                          '',
+                                      'chapter-$index-${_chapters[index].id}'),
+                                  initialValue: _chapters[index].title,
                                   decoration: const InputDecoration(
-                                      labelText: 'Chapter name',
-                                      border: OutlineInputBorder()),
-                                  onChanged: (value) {
-                                    if (index < _chapters.length) {
-                                      _chapters[index].title = value;
-                                    }
-                                  })),
-                          IconButton(
-                              onPressed: _chapters.length <= 1
-                                  ? null
-                                  : () =>
-                                      setState(() => _chapters.removeAt(index)),
-                              icon: const Icon(Icons.remove_circle_outline),
-                              tooltip: 'Remove chapter'),
-                        ])),
+                                    labelText: 'Chapter name',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  onChanged: (value) =>
+                                      _chapters[index].title = value,
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: _chapters.length <= 1
+                                    ? null
+                                    : () => setState(
+                                        () => _chapters.removeAt(index)),
+                                icon: const Icon(Icons.delete_outline),
+                                tooltip: 'Delete chapter',
+                              ),
+                            ]),
+                            const SizedBox(height: 10),
+                            DropdownButtonFormField<String>(
+                              key: ValueKey(
+                                  'chapter-status-$index-${_chapters[index].id}'),
+                              initialValue: _chapters[index].status,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Chapter progress',
+                                prefixIcon: Icon(Icons.filter_alt_outlined),
+                                border: OutlineInputBorder(),
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'LEFT',
+                                  child: Text('Not started'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'IN_PROGRESS',
+                                  child: Text('In progress'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'COMPLETED',
+                                  child: Text('Completed'),
+                                ),
+                              ],
+                              onChanged: (value) {
+                                if (value != null) {
+                                  _chapters[index].status = value;
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 10),
+                            Text('Topics',
+                                style: Theme.of(context).textTheme.titleSmall),
+                            const SizedBox(height: 6),
+                            for (var topicIndex = 0;
+                                topicIndex < _chapters[index].topics.length;
+                                topicIndex++)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Row(children: [
+                                  const SizedBox(width: 10),
+                                  const Icon(Icons.subdirectory_arrow_right,
+                                      size: 20),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: TextFormField(
+                                      key: ValueKey(
+                                          'topic-$index-$topicIndex-${_chapters[index].topics[topicIndex].id}'),
+                                      initialValue: _chapters[index]
+                                          .topics[topicIndex]
+                                          .title,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Topic title',
+                                        isDense: true,
+                                        border: OutlineInputBorder(),
+                                      ),
+                                      onChanged: (value) => _chapters[index]
+                                          .topics[topicIndex]
+                                          .title = value,
+                                    ),
+                                  ),
+                                  IconButton(
+                                    onPressed: () => setState(() =>
+                                        _chapters[index]
+                                            .topics
+                                            .removeAt(topicIndex)),
+                                    icon: const Icon(Icons.close_rounded),
+                                    tooltip: 'Delete topic',
+                                  ),
+                                ]),
+                              ),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                onPressed: () => setState(() => _chapters[index]
+                                    .topics
+                                    .add(_TopicDraft(null, ''))),
+                                icon: const Icon(Icons.add),
+                                label: const Text('Add topic'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   OutlinedButton.icon(
                       onPressed: () => setState(() =>
                           _chapters = [..._chapters, _ChapterDraft(null, '')]),
@@ -1090,9 +1193,154 @@ class _TeacherSyllabusMetricCard extends StatelessWidget {
 }
 
 class _ChapterDraft {
-  _ChapterDraft(this.id, this.title);
+  _ChapterDraft(
+    this.id,
+    this.title, {
+    this.status = 'LEFT',
+    List<_TopicDraft>? topics,
+  }) : topics = topics ?? [];
   final String? id;
   String title;
+  String status;
+  final List<_TopicDraft> topics;
+}
+
+class _TopicDraft {
+  _TopicDraft(this.id, this.title);
+  final String? id;
+  String title;
+}
+
+class _SyllabusListDialog extends StatefulWidget {
+  const _SyllabusListDialog({
+    required this.title,
+    required this.fieldLabel,
+    required this.helperText,
+    required this.actionLabel,
+    this.stripListMarkers = false,
+    this.minLines = 4,
+    this.maxLines = 8,
+  });
+
+  final String title;
+  final String fieldLabel;
+  final String helperText;
+  final String actionLabel;
+  final bool stripListMarkers;
+  final int minLines;
+  final int maxLines;
+
+  @override
+  State<_SyllabusListDialog> createState() => _SyllabusListDialogState();
+}
+
+class _SyllabusListDialogState extends State<_SyllabusListDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final values = _controller.text
+        .split('\n')
+        .map((line) => widget.stripListMarkers
+            ? line
+                .replaceFirst(RegExp(r'^\s*(?:\d+[.)]|[-*\u2022])\s*'), '')
+                .trim()
+            : line.trim())
+        .where((line) => line.isNotEmpty)
+        .toSet()
+        .toList();
+    if (values.isNotEmpty) Navigator.pop(context, values);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(widget.title),
+        scrollable: true,
+        content: SizedBox(
+          width: 420,
+          child: TextField(
+            controller: _controller,
+            autofocus: true,
+            minLines: widget.minLines,
+            maxLines: widget.maxLines,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(
+              labelText: widget.fieldLabel,
+              helperText: widget.helperText,
+              helperMaxLines: 3,
+              alignLabelWithHint: true,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(onPressed: _submit, child: Text(widget.actionLabel)),
+        ],
+      );
+}
+
+class _TopicTitleDialog extends StatefulWidget {
+  const _TopicTitleDialog({
+    required this.title,
+    required this.initialValue,
+    required this.actionLabel,
+  });
+
+  final String title;
+  final String initialValue;
+  final String actionLabel;
+
+  @override
+  State<_TopicTitleDialog> createState() => _TopicTitleDialogState();
+}
+
+class _TopicTitleDialogState extends State<_TopicTitleDialog> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.initialValue);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final value = _controller.text.trim();
+    if (value.isNotEmpty) Navigator.pop(context, value);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(widget.title),
+        content: TextField(
+          controller: _controller,
+          autofocus: true,
+          maxLength: 200,
+          textCapitalization: TextCapitalization.sentences,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _submit(),
+          decoration: const InputDecoration(
+            labelText: 'Topic title',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(onPressed: _submit, child: Text(widget.actionLabel)),
+        ],
+      );
 }
 
 class TeacherResultsScreen extends ConsumerStatefulWidget {

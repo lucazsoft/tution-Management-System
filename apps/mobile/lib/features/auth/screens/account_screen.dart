@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:tms_mobile/core/network/api_exception.dart';
+import 'package:tms_mobile/core/providers/auth_provider.dart';
 
 import '../data/account_repository.dart';
 
-class AccountScreen extends StatefulWidget {
+class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({super.key, required this.passwordRoute});
   final String passwordRoute;
 
   @override
-  State<AccountScreen> createState() => _AccountScreenState();
+  ConsumerState<AccountScreen> createState() => _AccountScreenState();
 }
 
-class _AccountScreenState extends State<AccountScreen> {
+class _AccountScreenState extends ConsumerState<AccountScreen> {
   final _repository = AccountRepository();
   late Future<PersonalAccount> _account;
   bool _photoBusy = false;
@@ -65,54 +68,23 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _editName(PersonalAccount account) async {
-    final first = TextEditingController(text: account.firstName);
-    final last = TextEditingController(text: account.lastName);
-    final saved = await showDialog<bool>(
+    final saved = await showDialog<({String firstName, String lastName})>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Edit profile name'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: first,
-              decoration: const InputDecoration(labelText: 'First name'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: last,
-              decoration: const InputDecoration(labelText: 'Last name'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              if (first.text.trim().isEmpty || last.text.trim().isEmpty) return;
-              try {
-                await _repository.updateName(first.text, last.text);
-                if (dialogContext.mounted) Navigator.pop(dialogContext, true);
-              } catch (_) {
-                if (dialogContext.mounted) {
-                  ScaffoldMessenger.of(dialogContext).showSnackBar(
-                    const SnackBar(
-                        content: Text('Could not update your profile.')),
-                  );
-                }
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
+      builder: (_) => _EditNameDialog(
+        account: account,
+        repository: _repository,
       ),
     );
-    first.dispose();
-    last.dispose();
-    if (saved == true) _reload();
+    if (saved == null || !mounted) return;
+    await ref
+        .read(authProvider.notifier)
+        .updateDisplayName(saved.firstName, saved.lastName);
+    if (!mounted) return;
+    ref.invalidate(personalAccountProvider);
+    _reload();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Profile name updated.')),
+    );
   }
 
   @override
@@ -274,6 +246,117 @@ class _AccountScreenState extends State<AccountScreen> {
             );
           },
         ),
+      );
+}
+
+class _EditNameDialog extends StatefulWidget {
+  const _EditNameDialog({required this.account, required this.repository});
+
+  final PersonalAccount account;
+  final AccountRepository repository;
+
+  @override
+  State<_EditNameDialog> createState() => _EditNameDialogState();
+}
+
+class _EditNameDialogState extends State<_EditNameDialog> {
+  late final TextEditingController _first;
+  late final TextEditingController _last;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _first = TextEditingController(text: widget.account.firstName);
+    _last = TextEditingController(text: widget.account.lastName);
+  }
+
+  @override
+  void dispose() {
+    _first.dispose();
+    _last.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final firstName = _first.text.trim();
+    final lastName = _last.text.trim();
+    if (firstName.isEmpty || lastName.isEmpty) {
+      setState(() => _error = 'Enter your first and last name.');
+      return;
+    }
+    if (firstName.length > 100 || lastName.length > 100) {
+      setState(() => _error = 'Each name must be 100 characters or fewer.');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final saved = await widget.repository.updateName(firstName, lastName);
+      if (mounted) Navigator.pop(context, saved);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = ApiException.from(error).message;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Edit profile name'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _first,
+              autofocus: true,
+              enabled: !_saving,
+              maxLength: 100,
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.givenName],
+              decoration: const InputDecoration(labelText: 'First name'),
+            ),
+            const SizedBox(height: 4),
+            TextField(
+              controller: _last,
+              enabled: !_saving,
+              maxLength: 100,
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.done,
+              autofillHints: const [AutofillHints.familyName],
+              onSubmitted: (_) => _saving ? null : _save(),
+              decoration: const InputDecoration(labelText: 'Last name'),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: _saving ? null : () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: _saving ? null : _save,
+            child: _saving
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Save'),
+          ),
+        ],
       );
 }
 

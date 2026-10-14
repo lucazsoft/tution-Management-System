@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tms_mobile/core/navigation/android_back_coordinator.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/features/auth/data/device_account_vault.dart';
+import 'package:tms_mobile/features/auth/data/account_repository.dart';
 import 'package:tms_mobile/core/theme/app_theme.dart';
 import 'package:tms_mobile/shared/widgets/portal_navigation_drawer.dart';
 
@@ -92,107 +93,116 @@ abstract final class ParentNavigation {
     }
 
     return Consumer(
-      builder: (context, ref, _) => PortalDrawerTheme(
-        child: NavigationDrawer(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 8),
-          selectedIndex: selected < 0 ? null : selected,
-          onDestinationSelected: (index) => open(drawerItems[index].route),
-          children: [
-            PortalDrawerHeader(
-              name: ref.watch(authProvider).user?.name ?? 'Parent',
-              subtitle: ref.watch(authProvider).user?.email ?? 'Parent portal',
-              onTap: () => open('/parent/account'),
-              avatar: CircleAvatar(
-                radius: 30,
-                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                foregroundColor: kColorPrimary,
-                child: const Icon(Icons.family_restroom_rounded, size: 30),
-              ),
-            ),
-            const PortalDrawerSectionLabel('Navigation'),
-            for (final item in drawerItems.take(primaryNavigationItemCount))
-              NavigationDrawerDestination(
-                icon: Icon(item.icon),
-                selectedIcon: Icon(item.icon),
-                label: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 200),
-                  child: Text(
-                    item.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+      builder: (context, ref, _) {
+        final account = ref.watch(personalAccountProvider).asData?.value;
+        final user = ref.watch(authProvider).user;
+        return PortalDrawerTheme(
+          child: NavigationDrawer(
+            tilePadding: const EdgeInsets.symmetric(horizontal: 8),
+            selectedIndex: selected < 0 ? null : selected,
+            onDestinationSelected: (index) => open(drawerItems[index].route),
+            children: [
+              PortalDrawerHeader(
+                name: account?.name.isNotEmpty == true
+                    ? account!.name
+                    : user?.name ?? 'Parent',
+                subtitle: account?.email.isNotEmpty == true
+                    ? account!.email
+                    : user?.email ?? 'Parent portal',
+                onTap: () => open('/parent/account'),
+                avatar: CircleAvatar(
+                  radius: 30,
+                  backgroundColor:
+                      Theme.of(context).colorScheme.primaryContainer,
+                  foregroundColor: kColorPrimary,
+                  child: const Icon(Icons.family_restroom_rounded, size: 30),
                 ),
               ),
-            const PortalDrawerDivider(),
-            const PortalDrawerSectionLabel('Features'),
-            for (final item in drawerItems.skip(primaryNavigationItemCount))
-              NavigationDrawerDestination(
-                icon: Icon(item.icon),
-                selectedIcon: Icon(item.icon),
-                label: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 200),
-                  child: Text(
-                    item.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+              const PortalDrawerSectionLabel('Navigation'),
+              for (final item in drawerItems.take(primaryNavigationItemCount))
+                NavigationDrawerDestination(
+                  icon: Icon(item.icon),
+                  selectedIcon: Icon(item.icon),
+                  label: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 200),
+                    child: Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
+              const PortalDrawerDivider(),
+              const PortalDrawerSectionLabel('Features'),
+              for (final item in drawerItems.skip(primaryNavigationItemCount))
+                NavigationDrawerDestination(
+                  icon: Icon(item.icon),
+                  selectedIcon: Icon(item.icon),
+                  label: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 200),
+                    child: Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              const PortalDrawerDivider(),
+              const PortalDrawerSectionLabel('Account'),
+              PortalDrawerAction(
+                icon: Icons.manage_accounts_outlined,
+                label: 'Profile settings',
+                useExactAndroidDestinationLayout: true,
+                onTap: () => open('/parent/account'),
               ),
-            const PortalDrawerDivider(),
-            const PortalDrawerSectionLabel('Account'),
-            PortalDrawerAction(
-              icon: Icons.manage_accounts_outlined,
-              label: 'Profile settings',
-              useExactAndroidDestinationLayout: true,
-              onTap: () => open('/parent/account'),
-            ),
-            PortalDrawerAction(
-              icon: Icons.key_rounded,
-              label: 'Change password',
-              useExactAndroidDestinationLayout: true,
-              onTap: () => open('/parent/change-password'),
-            ),
-            PortalDrawerAction(
-              icon: Icons.pin_outlined,
-              label: 'Set or change MPIN',
-              useExactAndroidDestinationLayout: true,
-              onTap: () => open('/parent/mpin'),
-            ),
-            PortalDrawerAction(
-              icon: Icons.switch_account_rounded,
-              label: 'Switch account',
-              useExactAndroidDestinationLayout: true,
-              onTap: () async {
-                Navigator.of(context).pop();
-                final currentId = ref.read(authProvider).user?.id;
-                final accounts = await DeviceAccountVault().accounts();
-                final hasCurrentMpin =
-                    accounts.any((account) => account.userId == currentId);
-                if (!hasCurrentMpin) {
-                  router?.push(
-                    '/parent/mpin?switchAccount=${accounts.isEmpty ? 'add' : 'accounts'}',
-                  );
-                } else {
-                  router?.push(accounts.length > 1
-                      ? '/parent/accounts'
-                      : '/parent/accounts/add');
-                }
-              },
-            ),
-            PortalDrawerAction(
-              icon: Icons.logout_rounded,
-              label: 'Log out',
-              destructive: true,
-              useExactAndroidDestinationLayout: true,
-              onTap: () {
-                Navigator.of(context).pop();
-                ref.read(authProvider.notifier).logout();
-              },
-            ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
+              PortalDrawerAction(
+                icon: Icons.key_rounded,
+                label: 'Change password',
+                useExactAndroidDestinationLayout: true,
+                onTap: () => open('/parent/change-password'),
+              ),
+              PortalDrawerAction(
+                icon: Icons.pin_outlined,
+                label: 'Set or change MPIN',
+                useExactAndroidDestinationLayout: true,
+                onTap: () => open('/parent/mpin'),
+              ),
+              PortalDrawerAction(
+                icon: Icons.switch_account_rounded,
+                label: 'Switch account',
+                useExactAndroidDestinationLayout: true,
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  final currentId = ref.read(authProvider).user?.id;
+                  final accounts = await DeviceAccountVault().accounts();
+                  final hasCurrentMpin =
+                      accounts.any((account) => account.userId == currentId);
+                  if (!hasCurrentMpin) {
+                    router?.push(
+                      '/parent/mpin?switchAccount=${accounts.isEmpty ? 'add' : 'accounts'}',
+                    );
+                  } else {
+                    router?.push(accounts.length > 1
+                        ? '/parent/accounts'
+                        : '/parent/accounts/add');
+                  }
+                },
+              ),
+              PortalDrawerAction(
+                icon: Icons.logout_rounded,
+                label: 'Log out',
+                destructive: true,
+                useExactAndroidDestinationLayout: true,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  ref.read(authProvider.notifier).logout();
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
     );
   }
 }

@@ -276,7 +276,7 @@ class TeacherPortalRepository {
   Future<void> createSyllabus(
       {required String classId,
       required String subject,
-      required List<String> chapters}) async {
+      required List<Map<String, dynamic>> chapters}) async {
     try {
       await _dio.post<dynamic>('/api/teacher/syllabus',
           data: {'classId': classId, 'subject': subject, 'chapters': chapters});
@@ -285,13 +285,18 @@ class TeacherPortalRepository {
     }
   }
 
-  Future<void> updateSyllabus(
+  Future<Map<String, dynamic>> updateSyllabus(
       {required String syllabusId,
       required String subject,
       required List<Map<String, String?>> chapters}) async {
     try {
-      await _dio.patch<dynamic>('/api/teacher/syllabus/$syllabusId',
+      final response = await _dio.patch<dynamic>(
+          '/api/teacher/syllabus/$syllabusId',
           data: {'subject': subject, 'chapters': chapters});
+      final data = response.data;
+      return data is Map && data['syllabus'] is Map
+          ? Map<String, dynamic>.from(data['syllabus'] as Map)
+          : const <String, dynamic>{};
     } on DioException catch (error) {
       throw _typed(error);
     }
@@ -304,6 +309,34 @@ class TeacherPortalRepository {
     try {
       await _dio.post<dynamic>('/api/teacher/syllabus/$syllabusId/topics',
           data: {'chapterId': chapterId, 'title': title});
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
+  Future<void> updateSyllabusTopic({
+    required String syllabusId,
+    required String topicId,
+    required String title,
+  }) async {
+    try {
+      await _dio.patch<dynamic>(
+        '/api/teacher/syllabus/$syllabusId/topics/$topicId',
+        data: {'title': title.trim()},
+      );
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
+  Future<void> deleteSyllabusTopic({
+    required String syllabusId,
+    required String topicId,
+  }) async {
+    try {
+      await _dio.delete<dynamic>(
+        '/api/teacher/syllabus/$syllabusId/topics/$topicId',
+      );
     } on DioException catch (error) {
       throw _typed(error);
     }

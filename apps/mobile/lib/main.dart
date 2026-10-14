@@ -106,11 +106,34 @@ class _AndroidStartupContent extends StatelessWidget {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            Image.asset(
-              'android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png',
-              width: 88,
-              height: 88,
-              filterQuality: FilterQuality.high,
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(
+                  'android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png',
+                  width: 88,
+                  height: 88,
+                  filterQuality: FilterQuality.high,
+                ),
+                const SizedBox(height: 24),
+                const SizedBox.square(
+                  dimension: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Color(0xFF2457A7),
+                    backgroundColor: Color(0xFFE2E8F0),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Loading...',
+                  style: TextStyle(
+                    color: Color(0xFF64748B),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
             const Positioned(
               left: 24,

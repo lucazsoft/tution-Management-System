@@ -2,7 +2,12 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
+
+final personalAccountProvider = FutureProvider.autoDispose<PersonalAccount>(
+  (ref) => AccountRepository().load(),
+);
 
 class AccountRole {
   const AccountRole({required this.name, this.branchName, this.branchId});
@@ -103,12 +108,19 @@ class AccountRepository {
     return PersonalAccount.fromJson(response.data ?? const {});
   }
 
-  Future<PersonalAccount> updateName(String firstName, String lastName) async {
-    await _dio.patch<Map<String, dynamic>>(
+  Future<({String firstName, String lastName})> updateName(
+    String firstName,
+    String lastName,
+  ) async {
+    final response = await _dio.patch<Map<String, dynamic>>(
       '/api/users/me/account',
       data: {'firstName': firstName.trim(), 'lastName': lastName.trim()},
     );
-    return load();
+    final data = response.data ?? const <String, dynamic>{};
+    return (
+      firstName: (data['firstName'] ?? firstName).toString().trim(),
+      lastName: (data['lastName'] ?? lastName).toString().trim(),
+    );
   }
 
   Future<String> updatePhoto(Uint8List bytes, String mimeType) async {

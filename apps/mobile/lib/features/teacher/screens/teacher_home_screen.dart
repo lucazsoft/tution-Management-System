@@ -79,7 +79,7 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
       drawer: TeacherNavigation.drawer(context),
       appBar: AppBar(
         title: Text(
-          'Teacher Home',
+          _tab == 1 ? 'Attendance' : 'Teacher Home',
           style:
               GoogleFonts.fraunces(fontWeight: FontWeight.w700, fontSize: 22),
         ),
@@ -562,9 +562,6 @@ class _AttendanceTabState extends ConsumerState<_AttendanceTab> {
               ),
             ),
         const SizedBox(height: 16),
-        Text('Teacher attendance',
-            style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
         if (workspace.todayClasses.isEmpty)
           const TeacherEmptyView(
             icon: Icons.event_available_rounded,

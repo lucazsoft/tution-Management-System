@@ -35,7 +35,6 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
   static const _primaryNavigationItemCount = 5;
 
   DateTime? _lastHomeBackPress;
-  late final Future<PersonalAccount?> _drawerAccount;
 
   static const _bottomRoutes = <String>[
     '/student/home',
@@ -90,14 +89,6 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
   ];
 
   bool get _isHome => widget.selectedIndex == 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _drawerAccount = ApiClient.instance.isInitialized
-        ? AccountRepository().load()
-        : Future<PersonalAccount?>.value();
-  }
 
   void _open(String route) {
     Navigator.of(context).pop();
@@ -236,6 +227,9 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
 
   Widget _buildDrawer(BuildContext context) {
     final user = ref.watch(authProvider).user;
+    final account = ApiClient.instance.isInitialized
+        ? ref.watch(personalAccountProvider).asData?.value
+        : null;
     final location = _matchedLocation(context);
     final drawerIndex =
         _navigationItems.indexWhere((item) => item.route == location);
@@ -246,35 +240,34 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
         onDestinationSelected: (index) => _open(_navigationItems[index].route),
         children: [
           PortalDrawerHeader(
-            name: user?.name ?? 'Student',
-            subtitle:
-                user?.email.isNotEmpty == true ? user!.email : 'Student portal',
+            name: account?.name.isNotEmpty == true
+                ? account!.name
+                : user?.name ?? 'Student',
+            subtitle: account?.email.isNotEmpty == true
+                ? account!.email
+                : user?.email.isNotEmpty == true
+                    ? user!.email
+                    : 'Student portal',
             onTap: () => _open('/student/account'),
-            avatar: FutureBuilder<PersonalAccount?>(
-              future: _drawerAccount,
-              builder: (context, snapshot) {
-                final account = snapshot.data;
-                return CircleAvatar(
-                  radius: 30,
-                  backgroundColor: StudentColors.primary.withValues(alpha: .10),
-                  foregroundImage: account?.photoUrl?.isNotEmpty == true
-                      ? NetworkImage(account!.photoUrl!)
-                      : null,
-                  child: account?.photoUrl?.isNotEmpty == true
-                      ? null
-                      : Text(
-                          account?.initials.isNotEmpty == true
-                              ? account!.initials
-                              : (user?.name.isNotEmpty == true
-                                  ? user!.name[0].toUpperCase()
-                                  : 'S'),
-                          style: const TextStyle(
-                            color: StudentColors.primary,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                );
-              },
+            avatar: CircleAvatar(
+              radius: 30,
+              backgroundColor: StudentColors.primary.withValues(alpha: .10),
+              foregroundImage: account?.photoUrl?.isNotEmpty == true
+                  ? NetworkImage(account!.photoUrl!)
+                  : null,
+              child: account?.photoUrl?.isNotEmpty == true
+                  ? null
+                  : Text(
+                      account?.initials.isNotEmpty == true
+                          ? account!.initials
+                          : (user?.name.isNotEmpty == true
+                              ? user!.name[0].toUpperCase()
+                              : 'S'),
+                      style: const TextStyle(
+                        color: StudentColors.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
             ),
           ),
           const PortalDrawerSectionLabel('Navigation'),
