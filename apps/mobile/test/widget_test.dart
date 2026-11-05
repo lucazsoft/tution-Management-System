@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/router/app_router.dart';
 import 'package:tms_mobile/features/auth/data/auth_service.dart';
@@ -11,8 +12,17 @@ void main() {
   GoogleFonts.config.allowRuntimeFetching = false;
 
   testWidgets('shows login screen by default', (tester) async {
-    await tester.pumpWidget(const ProviderScope(child: TMSApp()));
-    await tester.pumpAndSettle();
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authProvider.overrideWith((ref) => _SignedOutAuthNotifier()),
+        ],
+        child: const TMSApp(),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.text('Welcome Back'), findsOneWidget);
     expect(
@@ -47,4 +57,10 @@ void main() {
       navigationSessionIdentity(const AuthState(isLoading: false)),
     );
   });
+}
+
+class _SignedOutAuthNotifier extends AuthNotifier {
+  _SignedOutAuthNotifier() : super() {
+    state = const AuthState(isLoading: false);
+  }
 }

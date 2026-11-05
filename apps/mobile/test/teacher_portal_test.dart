@@ -4,7 +4,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
+import 'package:tms_mobile/core/network/api_exception.dart';
 import 'package:tms_mobile/core/sync/sync.dart';
 import 'package:tms_mobile/features/teacher/data/teacher_portal_repository.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_portal_dto.dart';
@@ -251,6 +253,7 @@ Future<void> _pumpWithRepository(
   WidgetTester tester,
   Widget child,
   _FakeRepository repository,
+  {GoRouter? router}
 ) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -268,7 +271,9 @@ Future<void> _pumpWithRepository(
           ),
         ),
       ],
-      child: MaterialApp(home: child),
+      child: router == null
+          ? MaterialApp(home: child)
+          : MaterialApp.router(routerConfig: router),
     ),
   );
   await tester.pump();
@@ -503,6 +508,43 @@ void main() {
       expect(recipients.single.studentName, 'Saanvi');
     });
 
+    test('sendMessage rejects unauthorized contacts before transport', () async {
+      var requestCount = 0;
+      final dio = ApiClient.buildDio(
+        baseUrl: 'https://test.invalid',
+        extraInterceptors: [
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              requestCount++;
+              handler.reject(
+                DioException(requestOptions: options),
+              );
+            },
+          ),
+        ],
+      );
+      final repository = TeacherPortalRepository(dio: dio);
+      const unauthorized = TeacherMessageContact(
+        studentId: '',
+        studentName: 'Direct message',
+        gradeName: 'Teacher',
+        parentId: 'staff-1',
+        parentName: 'Unassigned Staff',
+      );
+
+      await expectLater(
+        repository.sendMessage(unauthorized, 'Should be rejected'),
+        throwsA(
+          isA<ApiException>().having(
+            (error) => error.kind,
+            'kind',
+            ApiErrorKind.forbidden,
+          ),
+        ),
+      );
+      expect(requestCount, 0);
+    });
+
     test('filters unauthorized direct staff chats from conversation contacts',
         () async {
       final dio = ApiClient.buildDio(
@@ -673,10 +715,32 @@ void main() {
       );
       await tester.binding.setSurfaceSize(const Size(420, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
+      final router = GoRouter(
+        initialLocation: '/teacher/home',
+        routes: [
+          GoRoute(
+            path: '/teacher/home',
+            builder: (context, state) => TeacherHomeScreen(
+              initialTab: switch (state.uri.queryParameters['tab']) {
+                'attendance' => 1,
+                'classes' => 2,
+                'more' => 3,
+                _ => 0,
+              },
+            ),
+          ),
+          GoRoute(
+            path: '/teacher/timetable',
+            builder: (context, state) => const TeacherTimetableScreen(),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
       await _pumpWithRepository(
         tester,
         const TeacherHomeScreen(),
         repository,
+        router: router,
       );
 
       await tester.tap(find.byType(NavigationDestination).at(3));
@@ -697,6 +761,7 @@ void main() {
       expect(find.text('Attendance history'), findsOneWidget);
       await tester.scrollUntilVisible(find.text('EXCUSED'), 300);
       expect(find.text('EXCUSED'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('home focuses on clock, teaching actions, and today timetable',

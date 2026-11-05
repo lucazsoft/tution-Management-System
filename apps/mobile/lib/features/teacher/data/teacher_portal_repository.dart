@@ -180,7 +180,9 @@ class TeacherPortalRepository {
       return byConversation.values.toList();
     } on DioException catch (error) {
       if (error.response?.statusCode == 404) {
-        return available;
+        return available
+            .where((contact) => contact.isAuthorizedParentContact)
+            .toList();
       }
       throw _typed(error);
     }

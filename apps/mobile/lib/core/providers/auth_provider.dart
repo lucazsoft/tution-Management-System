@@ -61,7 +61,7 @@ class AuthState {
       RoleCodes.teacher => '/teacher/home',
       RoleCodes.student => '/student/home',
       RoleCodes.parent => '/parent/home',
-      _ => '/unsupported-role',
+      _ => '/login',
     };
   }
 }

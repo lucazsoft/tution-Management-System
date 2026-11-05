@@ -52,7 +52,9 @@ class AuthUser {
     }
 
     final role = normalizeRoleCode(rawRole);
-    if (role == null) {
+    // Never turn an unknown server role into a mobile session with a fallback
+    // role. Mobile access requires an explicitly supported account role.
+    if (role == null || role == RoleCodes.webPortalOnly) {
       throw const AuthFailure(
         'Your account role is not supported by this mobile app.',
       );

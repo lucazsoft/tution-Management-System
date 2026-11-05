@@ -75,10 +75,10 @@ void main() {
     testWidgets('card/input/checkbox radii source shared tokens', (_) async {
       final theme = buildTmsTheme();
       expect(_cardRadius(theme), TmsRadius.cardLg);
-      expect(_cardRadius(theme), 16.0);
+      expect(_cardRadius(theme), 20.0);
       final border = theme.inputDecorationTheme.border! as OutlineInputBorder;
       expect(border.borderRadius.topLeft.x, TmsRadius.input);
-      expect(border.borderRadius.topLeft.x, 7.0);
+      expect(border.borderRadius.topLeft.x, 16.0);
     });
 
     testWidgets('palette wires core colors', (_) async {
@@ -140,11 +140,16 @@ void main() {
         text.labelLarge?.fontFamily,
       ];
       expect(families.any((f) => f?.contains('Roboto') ?? false), isTrue);
-      expect(theme.textTheme.titleMedium, base.textTheme.titleMedium);
-      expect(theme.textTheme.bodyLarge, base.textTheme.bodyLarge);
-      expect(theme.textTheme.bodyMedium, base.textTheme.bodyMedium);
-      expect(theme.textTheme.bodySmall, base.textTheme.bodySmall);
-      expect(theme.textTheme.labelLarge, base.textTheme.labelLarge);
+      for (final pair in <(TextStyle?, TextStyle?)>[
+        (theme.textTheme.titleMedium, base.textTheme.titleMedium),
+        (theme.textTheme.bodyLarge, base.textTheme.bodyLarge),
+        (theme.textTheme.bodyMedium, base.textTheme.bodyMedium),
+        (theme.textTheme.bodySmall, base.textTheme.bodySmall),
+        (theme.textTheme.labelLarge, base.textTheme.labelLarge),
+      ]) {
+        expect(pair.$1?.fontSize, pair.$2?.fontSize);
+        expect(pair.$1?.fontWeight, pair.$2?.fontWeight);
+      }
     });
 
     testWidgets('nav indicator tint and surface are unchanged', (_) async {

@@ -1,13 +1,17 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nepali_utils/nepali_utils.dart';
 import 'package:tms_mobile/core/network/api_exception.dart';
 import 'package:tms_mobile/core/sync/sync.dart';
 import 'package:tms_mobile/features/student/data/student_portal_repository.dart';
 import 'package:tms_mobile/features/student/models/student_portal_dto.dart';
 import 'package:tms_mobile/features/student/screens/student_timetable_screen.dart';
 import 'package:tms_mobile/features/student/viewmodels/student_timetable_viewmodel.dart';
+import 'package:tms_mobile/features/student/widgets/nepal_date_time.dart';
+import 'package:tms_mobile/shared/widgets/academic_calendar.dart';
 
 Map<String, dynamic> _portalJson() => {
       'studentProfile': {
@@ -175,9 +179,31 @@ void main() {
         'Saturday',
         'Sunday'
       ];
+      final expectedDate = !kIsWeb &&
+              defaultTargetPlatform == TargetPlatform.android
+          ? () {
+              final bikramSambat = today.toNepaliDateTime();
+              return '${nepaliDigits(bikramSambat.day)} '
+                  '${academicNepaliMonths[bikramSambat.month - 1]} '
+                  '${nepaliDigits(bikramSambat.year)} BS';
+            }()
+          : '${today.day} ${const [
+              'January',
+              'February',
+              'March',
+              'April',
+              'May',
+              'June',
+              'July',
+              'August',
+              'September',
+              'October',
+              'November',
+              'December',
+            ][today.month - 1]} ${today.year}';
       expect(
           find.text('Today · ${dayNames[today.weekday - 1]}'), findsOneWidget);
-      expect(find.textContaining('${today.day} '), findsWidgets);
+      expect(find.text(expectedDate), findsOneWidget);
       expect(find.text('Mathematics'), findsOneWidget);
       expect(find.widgetWithText(NavigationDestination, 'Timetable'),
           findsOneWidget);

@@ -275,11 +275,12 @@ class StudentHomeScreen extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: TmsSpace.md),
               child: Column(
                 children: [
-                  for (final session in portal.todaySessions.take(4))
+                  for (final session in portal.todaySessions.take(2))
                     TodayTimetableTile(
                       startTime: session.time,
                       endTime: session.endTime,
                       subject: session.subject,
+                      typeLabel: session.typeLabel,
                       details: '${session.teacher} · ${session.room}',
                     ),
                 ],
@@ -718,10 +719,9 @@ class _StudentWelcomeCardState extends State<_StudentWelcomeCard> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final icon = Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
                                 color: Colors.white.withValues(alpha: .14),
@@ -729,9 +729,8 @@ class _StudentWelcomeCardState extends State<_StudentWelcomeCard> {
                               ),
                               child: const Icon(Icons.school_rounded,
                                   color: Colors.white, size: 26),
-                            ),
-                            const Spacer(),
-                            Container(
+                            );
+                            final dateAndClock = Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 8),
                               decoration: BoxDecoration(
@@ -754,8 +753,10 @@ class _StudentWelcomeCardState extends State<_StudentWelcomeCard> {
                                     ),
                                   ),
                                   const SizedBox(height: 2),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
+                                  Wrap(
+                                    alignment: WrapAlignment.end,
+                                    spacing: 4,
+                                    runSpacing: 2,
                                     children: [
                                       Text(
                                         nepalClockLabel(_now),
@@ -765,7 +766,6 @@ class _StudentWelcomeCardState extends State<_StudentWelcomeCard> {
                                             color: Colors.white70,
                                             fontSize: 11),
                                       ),
-                                      const SizedBox(width: 4),
                                       const Text('Nepal time',
                                           style: TextStyle(
                                               color: Colors.white70,
@@ -774,8 +774,34 @@ class _StudentWelcomeCardState extends State<_StudentWelcomeCard> {
                                   ),
                                 ],
                               ),
-                            ),
-                          ],
+                            );
+
+                            if (constraints.maxWidth < 360) {
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: icon,
+                                  ),
+                                  const SizedBox(height: TmsSpace.sm),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: dateAndClock,
+                                  ),
+                                ],
+                              );
+                            }
+
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                icon,
+                                const Spacer(),
+                                dateAndClock,
+                              ],
+                            );
+                          },
                         ),
                         const SizedBox(height: TmsSpace.md),
                         Text(

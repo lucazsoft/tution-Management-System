@@ -211,7 +211,16 @@ class _FakeParentPortalRepository extends ParentPortalRepository {
           },
         ],
         'insights': const [],
-        'remarks': const [],
+        'remarks': [
+          {
+            'id': 'remark-api',
+            'subject': 'API Science',
+            'author': 'API Teacher',
+            'message': 'API progress remark',
+            'date': '6 Sep 2026',
+            'signal': 'Improving',
+          },
+        ],
       });
 }
 
@@ -296,6 +305,7 @@ Future<void> _pumpPortalScreen(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        parentPortalRepositoryProvider.overrideWith((ref) => repository),
         parentPortalProvider.overrideWith(
           (ref) => ParentPortalViewModel(repository: repository),
         ),
@@ -924,7 +934,10 @@ void main() {
     final repository = _FakeParentPortalRepository();
     await _pumpPortalScreen(tester, const ParentHomeScreen(), repository);
 
-    expect(find.text('API Child One'), findsWidgets);
+    expect(
+      find.text('API Child One · Grade 8'),
+      findsOneWidget,
+    );
     expect(find.text('80%'), findsWidgets);
     expect(find.text('Aarav'), findsNothing);
 
@@ -973,13 +986,38 @@ void main() {
 
   testWidgets('attendance renders API records without demo dates',
       (tester) async {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final now = DateTime.now();
+    final expectedDate = '${now.day} ${months[now.month - 1]} ${now.year}';
     await _pumpPortalScreen(
       tester,
       const ParentAttendanceScreen(),
-      _FakeParentPortalRepository(),
+      _FakeParentPortalRepository(attendance: [
+        {
+          'id': 'attendance-current-month',
+          'date': expectedDate,
+          'occurredAt': now.toIso8601String(),
+          'subject': 'API Mathematics',
+          'session': 'Morning API Class',
+          'state': 'Present',
+        },
+      ]),
     );
 
-    expect(find.text('6 Sep 2026'), findsOneWidget);
+    expect(find.text(expectedDate), findsOneWidget);
     expect(find.textContaining('Morning API Class'), findsOneWidget);
     expect(find.text('Fri, Jul 18'), findsNothing);
   });
@@ -1018,11 +1056,13 @@ void main() {
 
   testWidgets('academics renders API remarks without demo curriculum',
       (tester) async {
+    final repository = _FakeParentPortalRepository();
     await _pumpPortalScreen(
       tester,
       const ParentAcademicsScreen(),
-      _FakeParentPortalRepository(),
+      repository,
     );
+    await tester.pumpAndSettle();
 
     expect(find.text('API progress remark'), findsOneWidget);
     expect(find.text('API Science'), findsWidgets);

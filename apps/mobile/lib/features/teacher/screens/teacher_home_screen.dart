@@ -111,12 +111,12 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
         onDestinationSelected: (i) {
           if (i == 2) {
             context.push('/teacher/messages');
-          } else if (i == 3) {
-            context.push('/teacher/timetable');
           } else {
             final tab = i == 1
                 ? 'attendance'
-                : i == 4
+                : i == 3
+                    ? 'classes'
+                    : i == 4
                     ? 'more'
                     : null;
             context
@@ -1038,10 +1038,9 @@ class _ClockCardState extends State<_ClockCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final icon = Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: .14),
@@ -1056,9 +1055,8 @@ class _ClockCardState extends State<_ClockCard> {
                               : Colors.white,
                           size: 26,
                         ),
-                      ),
-                      const Spacer(),
-                      Container(
+                      );
+                      final dateTime = Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
@@ -1085,8 +1083,31 @@ class _ClockCardState extends State<_ClockCard> {
                             ),
                           ],
                         ),
-                      ),
-                    ],
+                      );
+
+                      if (constraints.maxWidth < 360) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Align(alignment: Alignment.centerLeft, child: icon),
+                            const SizedBox(height: 12),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: dateTime,
+                            ),
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          icon,
+                          const Spacer(),
+                          dateTime,
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
                   Text(

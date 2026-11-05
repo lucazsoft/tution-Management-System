@@ -8,6 +8,7 @@ class TodayTimetableTile extends StatelessWidget {
     required this.endTime,
     required this.subject,
     required this.details,
+    this.typeLabel,
     this.onTap,
   });
 
@@ -15,6 +16,7 @@ class TodayTimetableTile extends StatelessWidget {
   final String endTime;
   final String subject;
   final String details;
+  final String? typeLabel;
   final VoidCallback? onTap;
 
   @override
@@ -60,6 +62,33 @@ class TodayTimetableTile extends StatelessWidget {
                           .textTheme
                           .bodySmall
                           ?.copyWith(color: kColorMutedText)),
+                  if (typeLabel != null && typeLabel!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: kColorPrimary.withValues(alpha: .08),
+                        borderRadius: BorderRadius.circular(TmsRadius.pill),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        child: Text(
+                          typeLabel!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelSmall
+                              ?.copyWith(
+                                color: kColorPrimary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

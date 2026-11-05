@@ -46,8 +46,8 @@ void main() {
       );
     });
 
-    test('redirects unknown roles safely to the web/PWA handoff screen', () {
-      expect(authenticatedAs('UNKNOWN').roleRedirectPath, '/unsupported-role');
+    test('sends unknown roles back to login', () {
+      expect(authenticatedAs('UNKNOWN').roleRedirectPath, '/login');
     });
   });
 

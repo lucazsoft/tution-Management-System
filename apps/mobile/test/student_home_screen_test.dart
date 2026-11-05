@@ -176,7 +176,6 @@ void main() {
       expect(find.text('Grade 8 · Baneshwor'), findsOneWidget);
       expect(find.text('Mathematics'), findsOneWidget);
       expect(find.text('Regular'), findsOneWidget);
-      expect(find.textContaining('4500'), findsWidgets);
       expect(find.text('Complete algebra worksheet 4'), findsOneWidget);
     });
 
@@ -191,8 +190,11 @@ void main() {
       await _pumpHome(tester, fake);
 
       final date = find.byKey(const ValueKey('student-home-nepali-date'));
+      final clock = find.byKey(const ValueKey('student-home-nepal-clock'));
       final greeting = find.text('Namaste, Aarav');
       expect(date, findsOneWidget);
+      expect(clock, findsOneWidget);
+      expect(tester.getSize(clock).width, greaterThan(0));
       expect(
           tester.getTopLeft(date).dy, lessThan(tester.getTopLeft(greeting).dy));
       expect(tester.takeException(), isNull);

@@ -37,8 +37,8 @@ abstract final class TmsRadius {
   static const double checkbox = r4;
   static const double control = r7;
   static const double card = r12;
-  static const double cardLg = r16;
-  static const double input = r7;
+  static const double cardLg = r20;
+  static const double input = r16;
   static const double modal = r18;
   static const double pill = r20;
 }

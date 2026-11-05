@@ -44,17 +44,17 @@ void main() {
       expect(user.role, 'JANITOR');
     });
 
-    test('maps non-mobile roles to the web/PWA handoff without mobile access',
-        () {
-      final user = AuthUser.fromJson({
-        'user': {
-          'id': 'user-1',
-          'email': 'unknown@example.com',
-          'role': 'Super Admin',
-        },
-      });
-
-      expect(user.role, RoleCodes.webPortalOnly);
+    test('rejects unsupported roles instead of creating a mobile session', () {
+      expect(
+        () => AuthUser.fromJson({
+          'user': {
+            'id': 'user-1',
+            'email': 'unknown@example.com',
+            'role': 'Super Admin',
+          },
+        }),
+        throwsA(isA<AuthFailure>()),
+      );
     });
   });
 }
