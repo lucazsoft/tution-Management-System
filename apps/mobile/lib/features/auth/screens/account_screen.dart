@@ -210,21 +210,32 @@ class _AccountScreenState extends State<AccountScreen> {
                       'Your contact verification and sign-in protection are managed separately.',
                   children: [
                     _DetailRow(
-                      label: 'Login email',
+                      label: account.loginEmailGenerated
+                          ? 'Login ID'
+                          : 'Login email',
                       value: account.email,
-                      status: account.emailVerified
-                          ? 'Verified'
-                          : 'Verification not recorded',
-                      verified: account.emailVerified,
+                      status: account.loginEmailGenerated
+                          ? 'Issued by your institution'
+                          : account.emailVerified
+                              ? 'Verified'
+                              : 'Verification not recorded',
+                      verified: account.loginEmailGenerated ||
+                          account.emailVerified,
                     ),
                     _DetailRow(
                       label: 'Security mobile',
-                      value: account.phone.isEmpty
-                          ? 'No mobile number saved'
-                          : account.phone,
-                      status: account.mobileVerified
-                          ? 'Verified'
-                          : 'Verification required',
+                      value: account.usesParentPhone
+                          ? "Your parent's phone"
+                          : account.phone.isEmpty
+                              ? 'No mobile number saved'
+                              : account.phone,
+                      status: account.usesParentPhone
+                          ? (account.mobileVerified
+                              ? 'Codes go to your parent'
+                              : 'Parent must verify their phone')
+                          : account.mobileVerified
+                              ? 'Verified'
+                              : 'Verification required',
                       verified: account.mobileVerified,
                     ),
                     _DetailRow(
@@ -253,8 +264,9 @@ class _AccountScreenState extends State<AccountScreen> {
                       ListTile(
                         leading: const Icon(Icons.phone_android_rounded),
                         title: const Text('Change mobile number'),
-                        subtitle: const Text(
-                            'Password and SMS verification required'),
+                        subtitle: Text(account.usesParentPhone
+                            ? "Uses your parent's number. Ask the school to change it."
+                            : 'Password and SMS verification required'),
                         trailing: const Icon(Icons.chevron_right_rounded),
                         enabled: account.canManageSecurityMobile,
                         onTap: () => context.push(_mobileRoute),

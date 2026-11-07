@@ -76,3 +76,24 @@ export function validateRuntimeConfig(env: Environment = process.env): RuntimeCo
 
   return { authSecret, authUrl, webOrigin };
 }
+
+const HOSTNAME = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+
+/**
+ * Domain for generated login emails (docs/planphone.md). These addresses are
+ * login IDs only and never receive mail, so the domain must be one this
+ * institution controls: a stranger can then never own a generated mailbox.
+ * Defaults to `login.<web host>` so an existing deployment keeps starting.
+ */
+export function loginEmailDomain(env: Environment = process.env): string {
+  const configured = env.LOGIN_EMAIL_DOMAIN?.trim().toLowerCase();
+  if (configured) {
+    if (!HOSTNAME.test(configured)) throw new Error('LOGIN_EMAIL_DOMAIN must be a bare hostname such as login.example.com.');
+    return configured;
+  }
+  const webHost = new URL(required(env, 'WEB_ORIGIN')).hostname.toLowerCase();
+  // localhost, bare hosts and IPs are not mail domains; use a reserved test TLD.
+  const local = webHost === 'localhost' || webHost.endsWith('.localhost') || !webHost.includes('.') || /^[\d.]+$/.test(webHost);
+  const fallback = `login.${webHost}`;
+  return !local && HOSTNAME.test(fallback) ? fallback : 'login.tms.test';
+}

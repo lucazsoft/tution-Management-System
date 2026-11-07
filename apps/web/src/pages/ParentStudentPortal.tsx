@@ -28,6 +28,7 @@ import { errorMessage } from '../services/api/client';
 import { api } from '../services/api';
 import { submitConnectIpsForm } from '../utils/connectips';
 import { ChangePasswordForm } from '../components/ChangePasswordForm';
+import { ChildPasswordReset } from '../features/parent/ChildPasswordReset';
 import { InvoiceDocumentDialog } from '../components/InvoiceDocument';
 import { toDualDateLabel } from '../utils/nepaliDate';
 import { PaymentCheckoutDialog } from '../components/PaymentCheckoutDialog';
@@ -291,7 +292,7 @@ function FeesView({ child }: { child: ParentChild }) {
 
 function ProfileView() {
   const { children } = useParentData();
-  return <div className="parent-view"><section className="parent-card"><SectionHeader title="Linked students" description={`${children.length} student account${children.length === 1 ? '' : 's'} connected to your profile.`} /><div className="parent-profile-children">{children.map((child) => <article key={child.id}><StudentAvatar name={child.name} photoUrl={child.photoUrl} size="lg" /><div><h3>{child.name}</h3><p>{child.grade} · {child.branch}</p><small>Roll {child.rollNumber}</small></div><ParentStatus label={child.blocked ? 'Blocked' : 'Active'} tone={child.blocked ? 'error' : 'success'} iconName={child.blocked ? 'lock' : 'verified'} /></article>)}</div></section></div>;
+  return <div className="parent-view"><section className="parent-card"><SectionHeader title="Linked students" description={`${children.length} student account${children.length === 1 ? '' : 's'} connected to your profile.`} /><div className="parent-profile-children">{children.map((child) => <article key={child.id}><StudentAvatar name={child.name} photoUrl={child.photoUrl} size="lg" /><div><h3>{child.name}</h3><p>{child.grade} · {child.branch}</p><small>Roll {child.rollNumber}</small>{child.loginId ? <small style={{ display: 'block' }}>Login ID: <strong>{child.loginId}</strong></small> : null}{child.usesParentPhone && child.loginId ? <div style={{ marginTop: 8 }}><small style={{ display: 'block', marginBottom: 6 }}>Uses your phone for login codes.</small><ChildPasswordReset childName={child.name} loginId={child.loginId} /></div> : null}</div><ParentStatus label={child.blocked ? 'Blocked' : 'Active'} tone={child.blocked ? 'error' : 'success'} iconName={child.blocked ? 'lock' : 'verified'} /></article>)}</div></section></div>;
 }
 function CertificatesView({ child }: { child: ParentChild }) {
   const { certificates } = useParentData();

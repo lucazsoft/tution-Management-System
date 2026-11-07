@@ -407,8 +407,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               enabled: !isLoading,
               onChanged: _clearErrorOnEdit,
               decoration: InputDecoration(
-                labelText: 'Email Address',
+                labelText: 'Email or login ID',
                 hintText: 'e.g. teacher@tms.edu.np',
+                // Students and parents may have a generated login ID
+                // (docs/planphone.md); it arrives by SMS with the password.
+                helperText: 'Students and parents: use the login ID sent by SMS.',
                 prefixIcon: const Icon(Icons.email_outlined),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
