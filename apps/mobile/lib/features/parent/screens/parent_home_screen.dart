@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tms_mobile/core/theme/app_theme.dart';
 import 'package:tms_mobile/features/parent/models/parent_portal.dart';
+import 'package:tms_mobile/features/parent/widgets/child_login_card.dart';
 import 'package:tms_mobile/features/parent/widgets/child_switcher_bar.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_navigation.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_portal_state_view.dart';
@@ -34,6 +35,10 @@ class ParentHomeScreen extends ConsumerWidget {
                   const SizedBox(height: TmsSpace.md),
                   const ChildSwitcherBar(),
                   const SizedBox(height: TmsSpace.md),
+                  if (child.loginId.isNotEmpty) ...[
+                    ChildLoginCard(child: child),
+                    const SizedBox(height: TmsSpace.md),
+                  ],
                   _DayHero(child: child),
                   const SizedBox(height: TmsSpace.md),
                   _SummaryGrid(portal: portal, child: child),

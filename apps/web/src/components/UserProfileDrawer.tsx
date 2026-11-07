@@ -31,6 +31,7 @@ export interface Profile {
       admissionRecord: Record<string, any> | null;
       emergencyContact: string;
       studentId: string;
+      usesParentPhone?: boolean;
       grade: string | null;
       gradeTuition: number;
       monthlyFee: number;
@@ -91,7 +92,7 @@ export function UserProfileDrawer({ userId, onClose, onChanged }: UserProfileDra
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [grades, setGrades] = useState<Array<{ id: string; name: string }>>([]);
-  const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', gradeName: '', contractType: 'FIXED' as 'FIXED' | 'HOUR_RATE', compensationAmount: '' });
+  const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', usesParentPhone: false, gradeName: '', contractType: 'FIXED' as 'FIXED' | 'HOUR_RATE', compensationAmount: '' });
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [enrollOpen, setEnrollOpen] = useState(false);
   const [activities, setActivities] = useState<Array<{ id: string; name: string; classes: Array<{ id: string; name: string }> }>>([]);
@@ -187,6 +188,7 @@ export function UserProfileDrawer({ userId, onClose, onChanged }: UserProfileDra
       firstName,
       lastName: rest.join(' '),
       phone: profile.phone,
+      usesParentPhone: Boolean(profile.detail.student?.usesParentPhone),
       gradeName: profile.detail.student?.grade ?? '',
       contractType: staff?.contractType ?? 'FIXED',
       compensationAmount: String(staff?.contractType === 'HOUR_RATE' ? staff.salaryStructure.hourlyRate ?? '' : staff?.salaryStructure.baseMonthlySalary ?? ''),
@@ -198,10 +200,12 @@ export function UserProfileDrawer({ userId, onClose, onChanged }: UserProfileDra
   const saveEdit = async () => {
     setBusy(true);
     try {
-      const changes: { firstName: string; lastName: string; phone: string; gradeId?: string | null; contractType?: 'FIXED' | 'HOUR_RATE'; baseMonthlySalary?: number; hourlyRate?: number } = {
-        firstName: form.firstName.trim(), lastName: form.lastName.trim(), phone: form.phone.trim(),
+      const changes: { firstName: string; lastName: string; phone: string; usesParentPhone?: boolean; gradeId?: string | null; contractType?: 'FIXED' | 'HOUR_RATE'; baseMonthlySalary?: number; hourlyRate?: number } = {
+        firstName: form.firstName.trim(), lastName: form.lastName.trim(), phone: form.usesParentPhone ? '' : form.phone.trim(),
       };
       if (isStudent) {
+        // Sent only when toggled, so editing a name never re-validates an old phone.
+        if (form.usesParentPhone !== Boolean(profile?.detail.student?.usesParentPhone)) changes.usesParentPhone = form.usesParentPhone;
         const g = grades.find((x) => x.name === form.gradeName);
         changes.gradeId = form.gradeName ? (g?.id ?? null) : null;
       }
@@ -419,7 +423,13 @@ export function UserProfileDrawer({ userId, onClose, onChanged }: UserProfileDra
                       <input value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} placeholder="First name" style={editInput} />
                       <input value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} placeholder="Last name" style={editInput} />
                     </div>
-                    <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="Phone" style={editInput} />
+                    <input value={form.usesParentPhone ? '' : form.phone} disabled={form.usesParentPhone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder={form.usesParentPhone ? "Uses the parent's number" : 'Phone'} aria-label="Phone" style={editInput} />
+                    {isStudent ? (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                        <input type="checkbox" checked={form.usesParentPhone} onChange={(e) => { const checked = e.target.checked; setForm((f) => ({ ...f, usesParentPhone: checked, phone: checked ? '' : f.phone })); }} />
+                        Use parent's number as primary
+                      </label>
+                    ) : null}
                     {profile.detail.staff ? (
                       <fieldset style={{ border: 0, padding: 0, margin: 0, display: 'grid', gap: 8 }}>
                         <legend style={{ fontSize: 12, fontWeight: 700 }}>Compensation</legend>

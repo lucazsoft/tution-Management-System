@@ -124,6 +124,10 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
           blocked: student.enrollments.some((enrollment) => enrollment.status === 'BLOCKED') || student.invoices.some((invoice) => invoice.status === 'OVERDUE'),
           attendanceRate: total ? Math.round(((counts.PRESENT ?? 0) / total) * 100) : 0,
           outstanding,
+          // Phone-linked logins (docs/planphone.md): the child's login ID, and
+          // whether their reset codes come to this parent's phone.
+          loginId: student.user.email,
+          usesParentPhone: student.usesGuardianPhone,
         };
       })
     );

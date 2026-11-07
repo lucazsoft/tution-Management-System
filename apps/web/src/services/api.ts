@@ -474,7 +474,7 @@ export const api = {
         connections: { courses: string[]; teachers: string[]; parents: string[] };
       }>(`/users/${userId}/analytics`);
     },
-    update: async (userId: string, changes: { firstName?: string; lastName?: string; phone?: string; status?: string; gradeId?: string | null; contractType?: 'FIXED' | 'HOUR_RATE'; baseMonthlySalary?: number; hourlyRate?: number }) => {
+    update: async (userId: string, changes: { firstName?: string; lastName?: string; phone?: string; usesParentPhone?: boolean; status?: string; gradeId?: string | null; contractType?: 'FIXED' | 'HOUR_RATE'; baseMonthlySalary?: number; hourlyRate?: number }) => {
       return request<{ message: string; droppedEnrollments?: number }>(`/users/${userId}`, { method: 'PUT', body: JSON.stringify(changes) });
     },
     deactivate: async (userId: string) => {

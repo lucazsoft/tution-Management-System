@@ -1,4 +1,5 @@
 import { trustedSecurityMobile } from '../utils/security-mobile';
+import { resolveSecurityMobile } from '../utils/linked-security-mobile';
 import { calendarAccessWhere } from '../services/calendar-access';
 import { Router, Response } from 'express';
 import prisma from '../utils/db';
@@ -33,6 +34,7 @@ import {
   type AdmissionDetails,
   type AdmissionSettlement,
 } from '../services/admission-service';
+import { deliverablePhone, findExistingParent, parseAdmissionParent, parseAdmissionStudent, readYesNo } from '../services/admission-identity';
 import { privateImageUrl, storePrivateBytes } from '../services/object-storage';
 import { normalizeStudentPhoto } from '../services/student-photo';
 import { classAverageByAssessment, classAverageOnScale, type PublishedScoreLike } from '../utils/result-averages';
@@ -165,15 +167,21 @@ router.get('/me/account', authMiddleware, async (req: TenantRequest, res: Respon
     userRoles: { select: { id: true, role: { select: { name: true } }, branchId: true, branch: { select: { name: true, tenantId: true } } } },
     id: true, firstName: true, lastName: true, email: true, emailVerified: true, phone: true, image: true,
     securityMobile: true, securityMobileVerifiedAt: true, twoFactorEnabled: true, tenant: { select: { name: true } },
+    status: true, loginEmailGenerated: true, student: { select: { usesGuardianPhone: true } },
   } });
   if (!account) return res.status(404).json({ error: 'Account not found.' });
-  const { securityMobile, securityMobileVerifiedAt, userRoles, image, ...profile } = account;
-  const mobileVerified = Boolean(trustedSecurityMobile(account));
+  const { securityMobile, securityMobileVerifiedAt, userRoles, image, status, student, ...profile } = account;
+  const usesParentPhone = Boolean(student?.usesGuardianPhone);
+  // A guardian-linked student's codes go to the parent's verified phone.
+  const linkedMobile = usesParentPhone ? await resolveSecurityMobile({ ...account, status }) : null;
+  const mobileVerified = usesParentPhone ? Boolean(linkedMobile) : Boolean(trustedSecurityMobile(account));
   const roles = userRoles.filter(assignment => !assignment.branch || assignment.branch.tenantId === req.tenantId)
     .map(assignment => ({ id: assignment.id, name: assignment.role.name, branchId: assignment.branchId, branchName: assignment.branch?.name ?? null }));
   const tenantAdmin = isTenantAdmin(req.user!);
-  return res.json({ ...profile, photoUrl: await privateImageUrl(image), roles, mobileVerified, mobileVerifiedAt: mobileVerified ? securityMobileVerifiedAt : null,
-    capabilities: { manageInstitution: tenantAdmin, manageSecurityMobile: true } });
+  return res.json({ ...profile, photoUrl: await privateImageUrl(image), roles, mobileVerified,
+    mobileVerifiedAt: mobileVerified ? (linkedMobile?.via === 'GUARDIAN' ? linkedMobile.guardianVerifiedAt : securityMobileVerifiedAt) : null,
+    usesParentPhone,
+    capabilities: { manageInstitution: tenantAdmin, manageSecurityMobile: !usesParentPhone } });
   } catch { return res.status(500).json({ error: 'Unable to load or save your account. Please try again.' }); }
 });
 
@@ -263,7 +271,7 @@ router.get('/me', authMiddleware, async (req: TenantRequest, res: Response) => {
 // Admission creates inactive Student/Parent accounts and a branch-priced invoice.
 // Logins are activated and delivered by SMS only after that invoice is paid.
 router.post('/admissions', authMiddleware, async (req: TenantRequest, res: Response) => {
-  const admissionShape = parseStrictKeys(req.body, ['branchId', 'gradeId', 'classId', 'classIds', 'student', 'parent', 'admissionDetails']);
+  const admissionShape = parseStrictKeys(req.body, ['branchId', 'gradeId', 'classId', 'classIds', 'student', 'parent', 'admissionDetails', 'existingParentUserId']);
   if (!admissionShape.success) return res.status(400).json({ error: admissionShape.error });
   const caller = req.user as UserPayload;
   const tenantAdmin = isTenantAdmin(caller);
@@ -276,12 +284,19 @@ router.post('/admissions', authMiddleware, async (req: TenantRequest, res: Respo
     return res.status(403).json({ error: 'Only the Tenant Admin or assigned Branch Admin may create admissions.' });
   }
 
-  const studentFields = validateIdentityFields(admissionShape.data.student);
-  const parentFields = validateIdentityFields(admissionShape.data.parent);
+  // Emails are optional (a login ID is generated); a student either has a
+  // phone or uses the parent's number. See docs/planphone.md.
+  const studentInput = parseAdmissionStudent(admissionShape.data.student);
+  if (!studentInput.success) return res.status(400).json({ error: studentInput.error });
+  const parentInput = parseAdmissionParent(admissionShape.data.parent);
+  if (!parentInput.success) return res.status(400).json({ error: parentInput.error });
+  const studentFields = studentInput.data;
+  const parentFields = parentInput.data;
+  const existingParentUserId = typeof admissionShape.data.existingParentUserId === 'string' ? admissionShape.data.existingParentUserId.trim() : '';
   const admissionDetails = validateAdmissionDetails(admissionShape.data.admissionDetails);
-  if (!branchId || !gradeId || classIds.length > 20 || !studentFields || !parentFields || !admissionDetails.success) {
+  if (!branchId || !gradeId || classIds.length > 20 || !admissionDetails.success) {
     return res.status(400).json({
-      error: admissionDetails.success ? 'Branch, grade, and complete student and primary guardian identity details are required.' : admissionDetails.error,
+      error: admissionDetails.success ? 'Branch and grade are required.' : admissionDetails.error,
     });
   }
 
@@ -290,11 +305,17 @@ router.post('/admissions', authMiddleware, async (req: TenantRequest, res: Respo
   const { branch, grade, regularClasses } = placement.data;
   const regularClass = regularClasses[0];
 
-  if (studentFields.email === parentFields.email) {
+  if (studentFields.email && studentFields.email === parentFields.email) {
     return res.status(400).json({ error: 'Student and parent must use different email addresses.' });
   }
-  const conflict = await findConflictingAccount([studentFields.email, parentFields.email]);
-  if (conflict) return res.status(409).json({ error: `An account already exists for ${conflict}.` });
+  if (studentFields.email) {
+    const conflict = await findConflictingAccount([studentFields.email]);
+    if (conflict) return res.status(409).json({ error: `An account already exists for ${conflict}.` });
+  }
+  const existingParent = await findExistingParent(req.tenantId!, parentFields, existingParentUserId || undefined);
+  if (existingParent.kind === 'conflict') {
+    return res.status(existingParent.status).json({ error: existingParent.error, parentChoices: existingParent.parentChoices });
+  }
 
   const admittedAt = new Date(admissionDetails.data.admittedAt);
   if (Number.isNaN(admittedAt.getTime())) {
@@ -307,6 +328,7 @@ router.post('/admissions', authMiddleware, async (req: TenantRequest, res: Respo
       placement: placement.data,
       student: studentFields,
       parent: parentFields,
+      existingParent: existingParent.kind === 'parent' ? existingParent : undefined,
       details: admissionDetails.data,
       admittedAt,
       admittedBy: { id: req.user!.id, name: `${req.user!.firstName} ${req.user!.lastName}`.trim() },
@@ -330,6 +352,10 @@ router.post('/admissions', authMiddleware, async (req: TenantRequest, res: Respo
         classId: regularClass?.id ?? null,
         classIds: regularClasses.map((item) => item.id),
         admissionNumber: result.admissionNumber,
+        studentLoginId: result.studentUser.email,
+        parentLoginId: result.parentUser.email,
+        studentUsesParentPhone: result.student.usesGuardianPhone,
+        linkedExistingParent: result.linkedExistingParent,
         admittedAt: admittedAt.toISOString(),
         status: result.student.admissionStatus,
         invoiceId: result.invoice.id,
@@ -340,7 +366,7 @@ router.post('/admissions', authMiddleware, async (req: TenantRequest, res: Respo
           branchAddress: branch.address,
           gradeName: grade.name,
           className: regularClasses.length ? regularClasses.map((item) => `${item.course.name} · ${item.name}`).join(', ') : 'Regular grade admission',
-          student: { ...studentFields, ...admissionDetails.data },
+          student: { ...studentFields, email: result.studentUser.email, ...admissionDetails.data },
           primaryGuardian: result.admissionRecord.primaryGuardian,
           admittedBy: result.admissionRecord.admittedBy,
         },
@@ -408,7 +434,7 @@ router.get('/', authMiddleware, async (req: TenantRequest, res: Response) => {
       orderBy: { createdAt: 'desc' },
       include: {
         userRoles: { include: { role: true, branch: true } },
-        student: { select: { id: true, grade: { select: { id: true, name: true } }, studentParents: { select: { parent: { select: { user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } } } } } } } },
+        student: { select: { id: true, usesGuardianPhone: true, grade: { select: { id: true, name: true } }, studentParents: { select: { isPrimary: true, parent: { select: { user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } } } } } } } },
       },
     });
 
@@ -418,12 +444,14 @@ router.get('/', authMiddleware, async (req: TenantRequest, res: Response) => {
         name: `${u.firstName} ${u.lastName}`,
         email: u.email,
         phone: u.phone,
+        loginEmailGenerated: u.loginEmailGenerated,
+        usesParentPhone: u.student?.usesGuardianPhone ?? false,
         photoUrl: await privateImageUrl(u.image),
         status: u.status,
         gradeId: u.student?.grade?.id ?? null,
         gradeName: u.student?.grade?.name ?? null,
         studentId: u.student?.id ?? null,
-        parents: u.student?.studentParents.map((link) => ({ id: link.parent.user.id, name: `${link.parent.user.firstName} ${link.parent.user.lastName}`.trim(), email: link.parent.user.email, phone: link.parent.user.phone })) ?? [],
+        parents: u.student?.studentParents.map((link) => ({ id: link.parent.user.id, name: `${link.parent.user.firstName} ${link.parent.user.lastName}`.trim(), email: link.parent.user.email, phone: link.parent.user.phone, isPrimary: link.isPrimary })) ?? [],
         roles: u.userRoles.map((ur) => ({
           role: ur.role.name,
           branchId: ur.branchId,
@@ -1064,6 +1092,8 @@ router.get('/:id/profile', authMiddleware, async (req: TenantRequest, res: Respo
         admissionRecord: user.student.admissionRecord,
         emergencyContact: user.student.emergencyContact,
         studentId: user.student.id,
+        // "Use parent's number as primary" (docs/planphone.md).
+        usesParentPhone: user.student.usesGuardianPhone,
         grade: user.student.grade?.name ?? null,
         gradeTuition,
         monthlyFee: billing.recurringTotal,
@@ -1557,7 +1587,7 @@ router.post('/', authMiddleware, async (req: TenantRequest, res: Response) => {
 // now without being billed a second time.
 
 const BULK_ADMISSION_FIELDS = [
-  'firstName', 'lastName', 'email', 'phone',
+  'firstName', 'lastName', 'email', 'phone', 'useParentPhone',
   'admissionDateBs', 'admissionTime', 'feeAlreadyPaid',
   'branchName', 'gradeName', 'subjects',
   'dateOfBirthBs', 'gender', 'bloodGroup', 'nationality', 'permanentAddress', 'temporaryAddress', 'school', 'medicalNotes',
@@ -1626,6 +1656,8 @@ interface BulkAdmissionResult {
   admissionFee?: number;
   feeSettled?: boolean;
   tenureYear?: number;
+  parentLoginId?: string;
+  linkedExistingParent?: boolean;
   loginsSent?: boolean;
   warning?: string;
   error?: string;
@@ -1776,10 +1808,6 @@ router.post('/admissions/bulk', authMiddleware, async (req: TenantRequest, res: 
       fail('Primary Parent must be "Father", "Mother", or "Optional parent".');
       continue;
     }
-    if (!guardian.email) {
-      fail(`${primaryParent} is the primary parent, so their email is required to create the parent login.`);
-      continue;
-    }
 
     // 6. Hand the assembled row to the admission form's own validators.
     const details: Record<string, string> = {
@@ -1816,22 +1844,27 @@ router.post('/admissions/bulk', authMiddleware, async (req: TenantRequest, res: 
       continue;
     }
 
-    const studentFields = validateIdentityFields({
-      firstName: field('firstName'), lastName: field('lastName'), email: field('email'), phone: field('phone'),
+    // Emails may be blank (login IDs are generated). The student needs a phone
+    // or useParentPhone = yes; the primary parent always needs a phone.
+    const studentInput = parseAdmissionStudent({
+      firstName: field('firstName'), lastName: field('lastName'), email: normalizeEmail(field('email')), phone: field('phone'),
+      useGuardianPhone: field('useParentPhone'),
     });
-    if (!studentFields || !studentFields.phone) {
-      fail('First Name, Last Name, a valid Email, and Phone are required for the student.');
+    if (!studentInput.success) {
+      fail(studentInput.error.replace('useGuardianPhone', 'Use Parent Phone'));
       continue;
     }
     const guardianName = splitFullName(guardian.name);
-    const parentFields = validateIdentityFields({
-      firstName: guardianName.firstName, lastName: guardianName.lastName, email: guardian.email, phone: guardian.phone,
+    const parentInput = parseAdmissionParent({
+      firstName: guardianName.firstName, lastName: guardianName.lastName, email: normalizeEmail(guardian.email), phone: guardian.phone,
     });
-    if (!parentFields || !parentFields.phone) {
-      fail(`${primaryParent} needs a name, a valid email, and a phone number to receive the parent login.`);
+    if (!parentInput.success) {
+      fail(`${primaryParent}: ${parentInput.error}`);
       continue;
     }
-    if (studentFields.email === parentFields.email) {
+    const studentFields = studentInput.data;
+    const parentFields = parentInput.data;
+    if (studentFields.email && studentFields.email === parentFields.email) {
       fail('The student and the primary parent must use different email addresses.');
       continue;
     }
@@ -1844,13 +1877,25 @@ router.post('/admissions/bulk', authMiddleware, async (req: TenantRequest, res: 
     }
 
     // 8. Email collisions, inside this file and against existing accounts.
-    if (seenEmails.has(studentFields.email) || seenEmails.has(parentFields.email)) {
-      fail('Duplicate email address within this file.');
+    // A parent email repeated in the file is a sibling and links below; only a
+    // repeated student email is a genuine duplicate.
+    if (studentFields.email && seenEmails.has(studentFields.email)) {
+      fail('Duplicate student email address within this file.');
       continue;
     }
-    const conflict = await findConflictingAccount([studentFields.email, parentFields.email]);
-    if (conflict) {
-      fail(`An account already exists for ${conflict}.`);
+    if (studentFields.email) {
+      const conflict = await findConflictingAccount([studentFields.email]);
+      if (conflict) {
+        fail(`An account already exists for ${conflict}.`);
+        continue;
+      }
+    }
+    // Siblings, including ones earlier in this same file, link to one parent.
+    const existingParent = await findExistingParent(req.tenantId!, parentFields);
+    if (existingParent.kind === 'conflict') {
+      fail(existingParent.parentChoices
+        ? `${existingParent.error} Admit this student from the admission form to choose.`
+        : existingParent.error);
       continue;
     }
 
@@ -1860,6 +1905,7 @@ router.post('/admissions/bulk', authMiddleware, async (req: TenantRequest, res: 
         placement: placement.data,
         student: studentFields,
         parent: parentFields,
+        existingParent: existingParent.kind === 'parent' ? existingParent : undefined,
         details: admissionDetails.data as AdmissionDetails,
         admittedAt,
         admittedBy,
@@ -1872,13 +1918,14 @@ router.post('/admissions/bulk', authMiddleware, async (req: TenantRequest, res: 
         },
         now,
       });
-      seenEmails.add(studentFields.email);
-      seenEmails.add(parentFields.email);
+      seenEmails.add(created.studentUser.email);
 
       const result: BulkAdmissionResult = {
         row: rowNo,
         name: `${studentFields.firstName} ${studentFields.lastName}`,
-        email: studentFields.email,
+        email: created.studentUser.email,
+        parentLoginId: created.parentUser.email,
+        linkedExistingParent: created.linkedExistingParent,
         status: 'created',
         admissionNumber: created.admissionNumber,
         admissionDateBs: await toBsDateString(admittedAt),
@@ -1963,6 +2010,29 @@ router.put('/:id', authMiddleware, async (req: TenantRequest, res: Response) => 
   if (typeof req.body?.phone === 'string') data.phone = req.body.phone.trim();
   if (['ACTIVE', 'INACTIVE', 'SUSPENDED'].includes(req.body?.status)) data.status = req.body.status;
 
+  // "Use parent's number as primary" (docs/planphone.md). Ticking it clears the
+  // student's own phone; unticking it requires a deliverable student phone.
+  let phoneLinkUpdate: { usesGuardianPhone: boolean } | null = null;
+  if (user.student && 'usesParentPhone' in (req.body ?? {})) {
+    const usesParentPhone = readYesNo(req.body.usesParentPhone);
+    if (usesParentPhone === null) return res.status(400).json({ error: 'usesParentPhone must be true or false.' });
+    if (usesParentPhone) {
+      if (typeof req.body.phone === 'string' && req.body.phone.trim()) {
+        return res.status(400).json({ error: "Enter the student's phone number or tick 'Use parent's number as primary', not both." });
+      }
+      data.phone = '';
+    } else {
+      const ownPhone = typeof req.body.phone === 'string' ? req.body.phone.trim() : user.phone;
+      if (!deliverablePhone(ownPhone)) {
+        return res.status(400).json({ error: "Enter the student's own 10-digit phone number before unticking 'Use parent's number as primary'." });
+      }
+      data.phone = ownPhone;
+    }
+    phoneLinkUpdate = { usesGuardianPhone: usesParentPhone };
+  } else if (user.student?.usesGuardianPhone && typeof req.body?.phone === 'string' && req.body.phone.trim()) {
+    return res.status(400).json({ error: "This student uses the parent's number. Untick 'Use parent's number as primary' to give them their own phone." });
+  }
+
   let compensationUpdate: { contractType: SupportedContractType; salaryStructure: ReturnType<typeof salaryStructureFor> } | null = null;
   if (user.staffRecord && ['contractType', 'baseMonthlySalary', 'hourlyRate'].some((field) => field in (req.body ?? {}))) {
     const contractType = typeof req.body.contractType === 'string' ? req.body.contractType.trim() : user.staffRecord.contractType;
@@ -1993,7 +2063,7 @@ router.put('/:id', authMiddleware, async (req: TenantRequest, res: Response) => 
     }
   }
 
-  if (Object.keys(data).length === 0 && !gradeUpdate && !compensationUpdate) {
+  if (Object.keys(data).length === 0 && !gradeUpdate && !compensationUpdate && !phoneLinkUpdate) {
     return res.status(400).json({ error: 'Nothing to update.' });
   }
 
@@ -2001,7 +2071,9 @@ router.put('/:id', authMiddleware, async (req: TenantRequest, res: Response) => 
 
   try {
     if (Object.keys(data).length > 0) await prisma.user.update({ where: { id: user.id }, data });
-    if (gradeUpdate && user.student) await prisma.student.update({ where: { id: user.student.id }, data: gradeUpdate });
+    if ((gradeUpdate || phoneLinkUpdate) && user.student) {
+      await prisma.student.update({ where: { id: user.student.id }, data: { ...gradeUpdate, ...phoneLinkUpdate } });
+    }
     if (compensationUpdate && user.staffRecord) {
       await prisma.staffRecord.update({ where: { id: user.staffRecord.id }, data: compensationUpdate });
     }

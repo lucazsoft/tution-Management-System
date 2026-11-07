@@ -166,7 +166,7 @@ export function LoginPage() {
             <form className="auth-form" onSubmit={handleSubmit} noValidate>
               <div className="auth-field">
                 <label className="auth-label" htmlFor="login-email">
-                  Email
+                  Email or login ID
                 </label>
                 <div className="auth-input-wrap">
                   <span className="material-symbols-outlined auth-input-icon">mail</span>
@@ -188,7 +188,9 @@ export function LoginPage() {
                     required
                   />
                 </div>
-                {emailTouched && emailError ? <p className="auth-helper-text auth-helper-text--error">{emailError}</p> : null}
+                {emailTouched && emailError
+                  ? <p className="auth-helper-text auth-helper-text--error">{emailError}</p>
+                  : <p className="auth-helper-text">Students and parents: use the login ID sent to you by SMS.</p>}
               </div>
 
               <div className="auth-field">

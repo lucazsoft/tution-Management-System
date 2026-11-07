@@ -27,8 +27,9 @@ interface Column {
 const COLUMNS: Column[] = [
   { header: 'First Name', key: 'firstName', required: true },
   { header: 'Last Name', key: 'lastName', required: true },
-  { header: 'Email', key: 'email', required: true, hint: 'Student login ID' },
-  { header: 'Phone', key: 'phone', required: true, hint: 'Receives the login SMS' },
+  { header: 'Email', key: 'email', hint: 'Optional: blank generates a login ID' },
+  { header: 'Phone', key: 'phone', hint: "Student's own phone; blank if Use Parent Phone is yes" },
+  { header: 'Use Parent Phone', key: 'useParentPhone', hint: "yes if the student has no phone: their login goes to the primary parent's phone" },
   { header: 'Admission Date (BS)', key: 'admissionDateBs', required: true, hint: 'Bikram Sambat, YYYY-MM-DD' },
   { header: 'Admission Time', key: 'admissionTime', hint: 'Nepal time HH:mm, defaults to 10:00' },
   { header: 'Fee Already Paid', key: 'feeAlreadyPaid', required: true, hint: 'yes for students who already paid' },
@@ -45,11 +46,11 @@ const COLUMNS: Column[] = [
   { header: 'Medical Notes', key: 'medicalNotes' },
   { header: 'Father Name', key: 'fatherName', required: true },
   { header: 'Father Phone', key: 'fatherPhone', required: true },
-  { header: 'Father Email', key: 'fatherEmail', hint: 'Required if Primary Parent is Father' },
+  { header: 'Father Email', key: 'fatherEmail', hint: 'Optional: blank generates a login ID' },
   { header: 'Father Occupation', key: 'fatherOccupation' },
   { header: 'Mother Name', key: 'motherName', required: true },
   { header: 'Mother Phone', key: 'motherPhone', required: true },
-  { header: 'Mother Email', key: 'motherEmail', hint: 'Required if Primary Parent is Mother' },
+  { header: 'Mother Email', key: 'motherEmail', hint: 'Optional: blank generates a login ID' },
   { header: 'Mother Occupation', key: 'motherOccupation' },
   { header: 'Optional Parent Name', key: 'optionalParentName' },
   { header: 'Optional Parent Phone', key: 'optionalParentPhone' },
@@ -89,7 +90,17 @@ interface ImportResult {
 const csvCell = (value: string) => `"${value.replace(/"/g, '""')}"`;
 const isFeePaid = (value: string) => FEE_PAID_VALUES.includes(value.trim().toLowerCase());
 
-/** The email column that must be filled for the chosen primary parent. */
+const YES_VALUES = ['yes', 'y', 'true', '1'];
+const NO_VALUES = ['', 'no', 'n', 'false', '0'];
+
+/** The phone column that must be filled for the chosen primary parent. */
+function primaryParentPhoneKey(primaryParent: string): string {
+  if (primaryParent === 'Mother') return 'motherPhone';
+  if (primaryParent === 'Optional parent') return 'optionalParentPhone';
+  return 'fatherPhone';
+}
+
+/** The email column of the chosen primary parent (optional; blank generates a login ID). */
 function primaryParentEmailKey(primaryParent: string): string {
   if (primaryParent === 'Mother') return 'motherEmail';
   if (primaryParent === 'Optional parent') return 'optionalParentEmail';
@@ -156,7 +167,7 @@ export function BulkStudentImport({ branches, grades = [], onClose, onImported }
     const sampleGrade = grades.find((grade) => grade.billingMode !== 'SUBJECT')?.name ?? grades[0]?.name ?? 'Class 10';
     const sample: RowRecord = {
       firstName: 'Aarav', lastName: 'Koirala',
-      email: 'aarav.koirala@example.com', phone: '9800000001',
+      email: '', phone: '', useParentPhone: 'yes',
       admissionDateBs: '2080-03-15', admissionTime: '10:00', feeAlreadyPaid: 'yes',
       branchName: branches[0]?.name ?? 'Damak Main Center', gradeName: sampleGrade, subjects: '',
       dateOfBirthBs: '2065-05-10', gender: 'Male', bloodGroup: 'O+', nationality: 'Nepali',
@@ -264,11 +275,23 @@ export function BulkStudentImport({ branches, grades = [], onClose, onImported }
       problems.push('Primary Parent must be Father, Mother, or Optional parent');
     } else if (primary) {
       const guardianEmail = (row[primaryParentEmailKey(primary)] ?? '').trim();
-      if (!guardianEmail) {
-        problems.push(`${primary} is the primary parent, so their email is required`);
-      } else if (guardianEmail.toLowerCase() === (row.email ?? '').trim().toLowerCase()) {
+      if (!(row[primaryParentPhoneKey(primary)] ?? '').trim()) {
+        problems.push(`${primary} is the primary parent, so their phone is required`);
+      }
+      if (guardianEmail && guardianEmail.toLowerCase() === (row.email ?? '').trim().toLowerCase()) {
         problems.push('The student and the primary parent need different email addresses');
       }
+    }
+
+    // A student has their own phone, or uses the primary parent's — not both.
+    const useParentPhone = (row.useParentPhone ?? '').trim().toLowerCase();
+    const studentPhone = (row.phone ?? '').trim();
+    if (!YES_VALUES.includes(useParentPhone) && !NO_VALUES.includes(useParentPhone)) {
+      problems.push('Use Parent Phone must be yes or no');
+    } else if (YES_VALUES.includes(useParentPhone) && studentPhone) {
+      problems.push('Leave Phone blank when Use Parent Phone is yes');
+    } else if (!YES_VALUES.includes(useParentPhone) && !studentPhone) {
+      problems.push("Add the student's Phone, or set Use Parent Phone to yes");
     }
 
     return problems;
