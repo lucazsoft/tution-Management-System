@@ -423,13 +423,7 @@ export function UserProfileDrawer({ userId, onClose, onChanged }: UserProfileDra
                       <input value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} placeholder="First name" style={editInput} />
                       <input value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} placeholder="Last name" style={editInput} />
                     </div>
-                    <input value={form.usesParentPhone ? '' : form.phone} disabled={form.usesParentPhone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder={form.usesParentPhone ? "Uses the parent's number" : 'Phone'} aria-label="Phone" style={editInput} />
-                    {isStudent ? (
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                        <input type="checkbox" checked={form.usesParentPhone} onChange={(e) => { const checked = e.target.checked; setForm((f) => ({ ...f, usesParentPhone: checked, phone: checked ? '' : f.phone })); }} />
-                        Use parent's number as primary
-                      </label>
-                    ) : null}
+                    <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="Phone" style={editInput} />
                     {profile.detail.staff ? (
                       <fieldset style={{ border: 0, padding: 0, margin: 0, display: 'grid', gap: 8 }}>
                         <legend style={{ fontSize: 12, fontWeight: 700 }}>Compensation</legend>

@@ -16,8 +16,8 @@ interface StudentProfileDrawerContentProps {
   busy: boolean;
   editing: boolean;
   grades: Array<{ id: string; name: string }>;
-  form: { firstName: string; lastName: string; phone: string; gradeName: string; contractType: 'FIXED' | 'HOUR_RATE'; compensationAmount: string };
-  setForm: React.Dispatch<React.SetStateAction<{ firstName: string; lastName: string; phone: string; gradeName: string; contractType: 'FIXED' | 'HOUR_RATE'; compensationAmount: string }>>;
+  form: { firstName: string; lastName: string; phone: string; usesParentPhone: boolean; gradeName: string; contractType: 'FIXED' | 'HOUR_RATE'; compensationAmount: string };
+  setForm: React.Dispatch<React.SetStateAction<{ firstName: string; lastName: string; phone: string; usesParentPhone: boolean; gradeName: string; contractType: 'FIXED' | 'HOUR_RATE'; compensationAmount: string }>>;
   onStartEdit: () => void;
   onCancelEdit: () => void;
   onSaveEdit: () => Promise<void>;
@@ -151,7 +151,7 @@ export function StudentProfileDrawerContent(props: StudentProfileDrawerContentPr
       {props.editing ? <form className="student-profile-edit" onSubmit={(event) => { event.preventDefault(); void props.onSaveEdit(); }} aria-busy={props.busy}>
         <div><label htmlFor="student-first-name">First name</label><input id="student-first-name" autoComplete="given-name" required value={props.form.firstName} onChange={(event) => props.setForm((form) => ({ ...form, firstName: event.target.value }))} /></div>
         <div><label htmlFor="student-last-name">Last name</label><input id="student-last-name" autoComplete="family-name" required value={props.form.lastName} onChange={(event) => props.setForm((form) => ({ ...form, lastName: event.target.value }))} /></div>
-        <div className="is-wide"><label htmlFor="student-phone">Phone</label><input id="student-phone" type="tel" autoComplete="tel" value={props.form.phone} onChange={(event) => props.setForm((form) => ({ ...form, phone: event.target.value }))} /></div>
+        <div className="is-wide"><label htmlFor="student-phone">Phone</label><input id="student-phone" type="tel" autoComplete="tel" disabled={props.form.usesParentPhone} placeholder={props.form.usesParentPhone ? "Uses the parent's number" : undefined} value={props.form.usesParentPhone ? '' : props.form.phone} onChange={(event) => props.setForm((form) => ({ ...form, phone: event.target.value }))} /><label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, fontSize: 13 }}><input type="checkbox" checked={props.form.usesParentPhone} onChange={(event) => { const checked = event.target.checked; props.setForm((form) => ({ ...form, usesParentPhone: checked, phone: checked ? '' : form.phone })); }} />Use parent's number as primary</label></div>
         <div className="is-wide"><label htmlFor="student-grade">Grade</label><select id="student-grade" value={props.form.gradeName} onChange={(event) => props.setForm((form) => ({ ...form, gradeName: event.target.value }))}><option value="">No grade</option>{props.grades.map((grade) => <option key={grade.id} value={grade.name}>{grade.name}</option>)}</select></div>
         <div className="student-profile-edit-actions"><Button type="submit" disabled={props.busy}>{props.busy ? 'Saving…' : 'Save changes'}</Button><Button type="button" variant="outline" disabled={props.busy} onClick={props.onCancelEdit}>Cancel</Button></div>
       </form> : <>
