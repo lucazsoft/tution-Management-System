@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/router/app_router.dart';
 import 'package:tms_mobile/features/auth/data/auth_service.dart';
@@ -11,7 +12,14 @@ void main() {
   GoogleFonts.config.allowRuntimeFetching = false;
 
   testWidgets('shows login screen by default', (tester) async {
-    await tester.pumpWidget(const ProviderScope(child: TMSApp()));
+    // The real notifier restores the session over the network first and shows
+    // an endless spinner while it waits, so start from a settled signed-out
+    // state, which is what a fresh install reaches.
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(ProviderScope(
+      overrides: [authProvider.overrideWith((ref) => _SignedOutAuth())],
+      child: const TMSApp(),
+    ));
     await tester.pumpAndSettle();
 
     expect(find.text('Welcome Back'), findsOneWidget);
@@ -47,4 +55,10 @@ void main() {
       navigationSessionIdentity(const AuthState(isLoading: false)),
     );
   });
+}
+
+class _SignedOutAuth extends AuthNotifier {
+  _SignedOutAuth() : super() {
+    state = const AuthState(isLoading: false);
+  }
 }

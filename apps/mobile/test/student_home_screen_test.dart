@@ -180,6 +180,51 @@ void main() {
       expect(find.text('Complete algebra worksheet 4'), findsOneWidget);
     });
 
+    group('overdue fees banner', () {
+      Future<void> pumpWith(
+        WidgetTester tester, {
+        required bool blocked,
+        required String invoiceState,
+      }) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        final json = _portalJson();
+        (json['studentProfile'] as Map<String, dynamic>)['blocked'] = blocked;
+        ((json['invoices'] as List).single as Map<String, dynamic>)['state'] =
+            invoiceState;
+        await _pumpHome(
+          tester,
+          _FakePortalRepository()
+            ..portalToReturn = StudentPortal.fromJson(json),
+        );
+      }
+
+      testWidgets('warns about overdue dues under the greeting',
+          (tester) async {
+        await pumpWith(tester, blocked: false, invoiceState: 'Overdue');
+        expect(find.text('Fee dues overdue'), findsOneWidget);
+        expect(
+          find.text(
+              'NPR 4500 is overdue. View what is owed and the payment QR.'),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('says blocked when the enrollment is blocked',
+          (tester) async {
+        await pumpWith(tester, blocked: true, invoiceState: 'Overdue');
+        expect(find.text('Blocked — fee dues'), findsOneWidget);
+        expect(find.byIcon(Icons.lock_rounded), findsOneWidget);
+      });
+
+      testWidgets('is hidden when nothing is overdue', (tester) async {
+        await pumpWith(tester, blocked: false, invoiceState: 'Due soon');
+        expect(find.text('Fee dues overdue'), findsNothing);
+        expect(find.text('Blocked — fee dues'), findsNothing);
+      });
+    });
+
     testWidgets('keeps Nepal date above the blue greeting without overflow',
         (tester) async {
       tester.view.physicalSize = const Size(320, 900);

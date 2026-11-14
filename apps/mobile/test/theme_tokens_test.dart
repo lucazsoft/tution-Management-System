@@ -64,8 +64,10 @@ void main() {
       expect(TmsRadius.checkbox, TmsRadius.r4);
       expect(TmsRadius.control, TmsRadius.r7);
       expect(TmsRadius.card, TmsRadius.r12);
-      expect(TmsRadius.cardLg, TmsRadius.r20);
-      expect(TmsRadius.input, TmsRadius.r16);
+      // Retuned in 97da467 (Sep 2026 UI refresh): large cards 20 → 16,
+      // inputs 16 → 7 to match the control radius.
+      expect(TmsRadius.cardLg, TmsRadius.r16);
+      expect(TmsRadius.input, TmsRadius.r7);
       expect(TmsRadius.modal, TmsRadius.r18);
       expect(TmsRadius.pill, TmsRadius.r20);
     });
