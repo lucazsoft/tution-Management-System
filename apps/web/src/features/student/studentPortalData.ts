@@ -86,17 +86,6 @@ export interface Invoice {
   document: InvoiceDocumentData;
 }
 
-export interface NepalPayPayload {
-  invoiceId: string;
-  merchantName: string;
-  merchantCity: string;
-  amount: number;
-  currency: string;
-  currencyCode: string;
-  studentName: string;
-  qrString: string;
-}
-
 export interface AcademicEvent {
   id: string;
   date: string;

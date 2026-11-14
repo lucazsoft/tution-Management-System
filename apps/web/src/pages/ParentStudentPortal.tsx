@@ -1,10 +1,8 @@
 import { AcademicCalendarView } from '../components/calendar/AcademicCalendarView';
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import QRCode from 'qrcode';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { invoiceTotal } from '../features/parent/parentPortalData';
 import {
-  loadParentNepalPayQr,
   loadParentPortal,
   markParentNotificationsRead,
   parentFileUrl,
@@ -25,8 +23,6 @@ import type {
   ParentView as OriginalParentView,
 } from '../features/parent/parentPortalTypes';
 import { errorMessage } from '../services/api/client';
-import { api } from '../services/api';
-import { submitConnectIpsForm } from '../utils/connectips';
 import { ChangePasswordForm } from '../components/ChangePasswordForm';
 import { ChildPasswordReset } from '../features/parent/ChildPasswordReset';
 import { InvoiceDocumentDialog } from '../components/InvoiceDocument';
@@ -241,40 +237,9 @@ function LeaveView({ child, refresh }: { child: ParentChild; refresh: () => void
   return <div className="parent-view"><section className="parent-card"><SectionHeader title="Leave history" description={`Planned leave and emergency departures for ${child.name}.`} />{leaves.length ? <div className="parent-leave-list">{leaves.map((leave) => <article key={leave.id} className={leave.state === 'Emergency departure' ? 'is-urgent' : ''}><ParentStatus label={leave.state} tone={toneForLeave(leave.state)} iconName={leave.state === 'Emergency departure' ? 'emergency' : 'event_available'} /><div><h3>{leave.reason}</h3><p>{leave.dates}</p><small>{leave.detail}</small></div></article>)}</div> : <EmptyState title="No leave records" message="Submitted and branch-recorded leave will appear here." iconName="event_available" />}</section><section className="parent-card"><SectionHeader title="Apply for planned leave" description="Branch Admin and assigned teachers are notified." /><form className="parent-form" onSubmit={(event) => void submit(event)}><div className="parent-form-grid"><div><label htmlFor="parent-leave-start">Start date</label><input id="parent-leave-start" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} required /></div><div><label htmlFor="parent-leave-end">End date</label><input id="parent-leave-end" type="date" min={startDate || undefined} value={endDate} onChange={(event) => setEndDate(event.target.value)} aria-invalid={status.includes('End date') ? 'true' : undefined} aria-describedby={status ? 'parent-leave-status' : undefined} required /></div></div><label htmlFor="parent-leave-reason">Reason</label><select id="parent-leave-reason" value={reason} onChange={(event) => setReason(event.target.value)} required><option value="">Choose a reason</option><option>Medical</option><option>Family event</option><option>Travel</option><option>Other</option></select><label htmlFor="parent-leave-details">Details</label><textarea id="parent-leave-details" value={details} onChange={(event) => setDetails(event.target.value)} required placeholder={`For example: ${child.name} has a medical appointment`} />{status ? <p id="parent-leave-status" className={status === 'Leave request submitted.' ? 'parent-form__notice' : 'parent-form__error'} role={status === 'Leave request submitted.' ? 'status' : 'alert'}>{status}</p> : null}<button className="parent-primary-button" type="submit" disabled={submitting} aria-busy={submitting}>{icon('send')}{submitting ? 'Submitting…' : 'Submit leave request'}</button></form></section><div className="parent-info-note">{icon('fact_check')}<span>Once approved, covered attendance is automatically recorded as Absent (Excused).</span></div></div>;
 }
 
-function LegacyPaymentDialog({ invoice, child, onClose }: { invoice: ParentInvoice; child: ParentChild; onClose: () => void }) {
-  const dialogRef = useRef<HTMLElement>(null);
-  const [image, setImage] = useState('');
-  const [error, setError] = useState('');
-  const [method, setMethod] = useState<'CONNECTIPS' | 'QR'>('CONNECTIPS');
-  const [paying, setPaying] = useState(false);
-  const [settings, setSettings] = useState<Awaited<ReturnType<typeof api.finances.getInvoicePaymentSettings>> | null>(null);
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    dialogRef.current?.querySelector<HTMLElement>('button')?.focus();
-    void Promise.all([
-      loadParentNepalPayQr(invoice.id).then((payload) => QRCode.toDataURL(payload.qrString, { width: 360, margin: 2, color: { dark: '#002D72', light: '#FFFFFF' } })),
-      api.finances.getInvoicePaymentSettings(invoice.id),
-    ]).then(([qr, config]) => { setImage(qr); setSettings(config); setMethod(config.connectIpsEnabled ? 'CONNECTIPS' : 'QR'); }).catch((reason) => setError(errorMessage(reason)));
-    return () => { document.body.style.overflow = previousOverflow; };
-  }, [invoice.id]);
-  const keyDown = (event: React.KeyboardEvent<HTMLElement>) => {
-    if (event.key === 'Escape') onClose();
-    if (event.key !== 'Tab') return;
-    const focusable = dialogRef.current?.querySelectorAll<HTMLElement>('button, [href], [tabindex]:not([tabindex="-1"])');
-    if (!focusable?.length) return;
-    const first = focusable[0]; const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-    if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-  };
-  const payOnline = async () => { setPaying(true); setError(''); try { const result = await api.finances.initiateConnectIps(invoice.id); submitConnectIpsForm(result.gatewayUrl, result.fields); } catch (cause) { setError(errorMessage(cause)); setPaying(false); } };
-  const qrSource = settings?.staticQrEnabled && settings.staticQrImageUrl ? settings.staticQrImageUrl : image;
-  return <div className="parent-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section ref={dialogRef} tabIndex={-1} onKeyDown={keyDown} role="dialog" aria-modal="true" aria-labelledby="parent-qr-title" className="parent-modal parent-payment-dialog"><button type="button" className="parent-modal__close" aria-label="Close payment" onClick={onClose}>{icon('close')}</button><span className="parent-eyebrow">SECURE PAYMENT · {child.name}</span><h2 id="parent-qr-title">Complete your payment</h2><p>{invoice.cycle} · {money(invoiceTotal(invoice))}</p>{settings ? <div className="parent-payment-methods" role="radiogroup" aria-label="Payment method">{settings.connectIpsEnabled ? <button type="button" role="radio" aria-checked={method === 'CONNECTIPS'} className={method === 'CONNECTIPS' ? 'is-active' : ''} onClick={() => setMethod('CONNECTIPS')}>{icon('bolt')}<span><strong>Pay online instantly</strong><small>Secure connectIPS login</small></span></button> : null}<button type="button" role="radio" aria-checked={method === 'QR'} className={method === 'QR' ? 'is-active' : ''} onClick={() => setMethod('QR')}>{icon('qr_code_2')}<span><strong>Pay via QR</strong><small>Scan with your payment app</small></span></button></div> : null}{error ? <div className="parent-form__error" role="alert">{error}</div> : method === 'CONNECTIPS' ? <div className="parent-payment-online">{icon('lock')}<p>You’ll be redirected to connectIPS to log in and confirm. The invoice updates only after server verification.</p></div> : qrSource ? <><div className="parent-qr"><img src={qrSource} width="360" height="360" alt={`Payment QR for ${child.name}, invoice ${invoice.id}`} /></div>{settings?.staticQrEnabled ? <dl className="parent-payment-bank"><div><dt>Account name</dt><dd>{settings.accountName || '—'}</dd></div><div><dt>Account number</dt><dd>{settings.accountNumber || '—'}</dd></div><div><dt>Bank</dt><dd>{settings.bankName || '—'}</dd></div></dl> : null}</> : <div className="parent-qr" aria-busy="true" aria-label="Generating payment QR" />}<small>Verify the child, merchant, invoice, and exact amount before confirming.</small>{method === 'CONNECTIPS' ? <button type="button" className="parent-primary-button" disabled={paying} onClick={() => void payOnline()}>{paying ? 'Redirecting…' : 'Pay with connectIPS'}</button> : <button type="button" className="parent-primary-button" onClick={onClose}>Done</button>}</section></div>;
-}
 function PaymentDialog({ invoice, child, onClose }: { invoice: ParentInvoice; child: ParentChild; onClose: () => void }) {
   return <PaymentCheckoutDialog invoiceId={invoice.id} payerName={child.name} description={`${invoice.cycle} · ${invoice.reference}`} amount={invoiceTotal(invoice)} onClose={onClose} />;
 }
-void LegacyPaymentDialog;
 function ParentBillingPlan() {
   const { billing, enrollmentAccess, invoices } = useParentData();
   const admission = invoices.find((invoice) => invoice.invoiceType === 'ADMISSION');
