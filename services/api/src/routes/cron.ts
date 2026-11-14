@@ -4,7 +4,8 @@ import { Prisma } from '@prisma/client';
 import prisma from '../utils/db';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware } from '../middleware/auth';
-import { MockSmsSender } from '../utils/notifications';
+import { getSmsSender } from '../utils/sms';
+import { sendFeeReminders } from '../services/fee-reminders';
 import { PushNotificationService } from '../services/push-notification';
 import { isTenantAdmin } from '../utils/access-control';
 import { reconcilePendingConnectIps } from '../utils/connectips';
@@ -47,18 +48,18 @@ router.post(
     try {
       const logs = [];
       let financialAnomalyAlerts: Awaited<ReturnType<typeof runBranchExpenseAnomalyAlerts>> | undefined;
-      const smsSender = new MockSmsSender();
 
       if (taskName === 'monthly-due-verification') {
         await prisma.$transaction(tx => markOverdueInvoices(tx, req.tenantId!));
 
         logs.push('Marked past-due unpaid invoices OVERDUE and blocked active enrollments in their issuing branches.');
       } else if (taskName === 'fee-reminder-sms') {
-        await smsSender.sendSms(
-          '98510XXXXX',
-          'Dear Parent, your child\'s tuition fees are overdue. Access is currently blocked. Please settle the invoice.'
+        const reminders = await sendFeeReminders(prisma, getSmsSender(), req.tenantId!);
+        logs.push(
+          `Fee reminders for ${reminders.students} student(s) with overdue fees: ${reminders.sent} SMS sent, `
+          + `${reminders.failed} failed, ${reminders.withoutPhone} parent(s) without a mobile number, `
+          + `${reminders.withoutGuardian} student(s) with no linked parent.`,
         );
-        logs.push('Sent overdue SMS alerts to parents of blocked students.');
       } else if (taskName === 'salary-reminder') {
         const tenantAdmins = await prisma.user.findMany({
           where: {
