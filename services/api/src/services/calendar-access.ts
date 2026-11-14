@@ -4,50 +4,88 @@ import { hasRole, isTenantAdmin, managedBranchIds } from '../utils/access-contro
 import type { UserPayload } from '@tms/types';
 
 export const CALENDAR_AUDIENCES = ['ALL', 'STAFF', 'STUDENTS', 'PARENTS'] as const;
+export type CalendarAudience = (typeof CALENDAR_AUDIENCES)[number];
+export type CalendarReader = 'STUDENT' | 'PARENT' | 'TEACHER';
+
+/**
+ * Which event audiences each reader role sees. This single table drives both
+ * calendar visibility and who is notified when an event is published, so an
+ * event never notifies someone whose calendar would not show it.
+ */
+export const READER_AUDIENCES: Record<CalendarReader, CalendarAudience[]> = {
+  STUDENT: ['ALL', 'STUDENTS'],
+  // "Students and their parents" events reach parents through their children.
+  PARENT: ['ALL', 'STUDENTS', 'PARENTS'],
+  TEACHER: ['ALL', 'STAFF', 'STUDENTS'],
+};
+
+/** Readers that are actively notified for each audience. */
+export const AUDIENCE_NOTIFIES: Record<CalendarAudience, CalendarReader[]> = {
+  ALL: ['STUDENT', 'PARENT', 'TEACHER'],
+  STUDENTS: ['STUDENT', 'PARENT'],
+  PARENTS: ['PARENT'],
+  STAFF: ['TEACHER'],
+};
+
+/** Enrollments that currently place a student in a class. */
+export function currentEnrollmentWhere(now = new Date()): Prisma.EnrollmentWhereInput {
+  return {
+    status: { in: ['ACTIVE', 'BLOCKED'] },
+    class: { archivedAt: null },
+    OR: [{ validUntil: null }, { validUntil: { gt: now } }],
+  };
+}
+
 export function readerCalendarWhere(tenantId: string, branchIds: string[], classIds: string[], audiences: string[]): Prisma.AcademicEventWhereInput {
   return { tenantId, audience: { in: audiences }, AND: [
-    { OR: [{ branchId: null }, { branchId: { in: branchIds } }] },
-    { OR: [{ classId: null }, { classId: { in: classIds } }] },
+    { OR: [{ branchId: null }, { branchId: { in: [...new Set(branchIds)] } }] },
+    { OR: [{ classId: null }, { classId: { in: [...new Set(classIds)] } }] },
   ] };
 }
 
 export class CalendarAccessError extends Error {}
 
-/** Build scope from verified roles and database relationships, never client branch IDs. */
+async function parentScope(actor: UserPayload, tenantId: string, studentId?: string) {
+  const students = await prisma.student.findMany({ where: {
+    ...(studentId ? { id: studentId } : {}), user: { tenantId },
+    studentParents: { some: { parent: { userId: actor.id, user: { tenantId } } } },
+  }, include: { enrollments: { where: currentEnrollmentWhere(), include: { class: true } } } });
+  if (!students.length) {
+    if (studentId) throw new CalendarAccessError('Linked student not found.');
+    return null;
+  }
+  const enrollments = students.flatMap((student) => student.enrollments);
+  return readerCalendarWhere(tenantId, enrollments.map((entry) => entry.class.branchId), enrollments.map((entry) => entry.classId), READER_AUDIENCES.PARENT);
+}
+
+async function teacherScope(actor: UserPayload, tenantId: string) {
+  const classes = await prisma.class.findMany({ where: { teacherId: actor.id, archivedAt: null, course: { tenantId } }, select: { id: true, branchId: true } });
+  const branchIds = [...classes.map((entry) => entry.branchId), ...actor.roles.filter((role) => role.roleName === 'Teacher' && role.branchId).map((role) => role.branchId!)];
+  return readerCalendarWhere(tenantId, branchIds, classes.map((entry) => entry.id), READER_AUDIENCES.TEACHER);
+}
+
+async function studentScope(actor: UserPayload, tenantId: string) {
+  const student = await prisma.student.findFirst({ where: { userId: actor.id, user: { tenantId } }, include: { enrollments: { where: currentEnrollmentWhere(), include: { class: true } } } });
+  if (!student) return null;
+  return readerCalendarWhere(tenantId, student.enrollments.map((entry) => entry.class.branchId), student.enrollments.map((entry) => entry.classId), READER_AUDIENCES.STUDENT);
+}
+
+/**
+ * Build scope from verified roles and database relationships, never client
+ * branch IDs. Readers see an event only when it is tenant-wide or targets one
+ * of their branches/classes, and its audience includes their role.
+ */
 export async function calendarAccessWhere(actor: UserPayload, tenantId: string, options: { branchId?: string; studentId?: string; viewerRole?: string } = {}): Promise<Prisma.AcademicEventWhereInput> {
   if (actor.tenantId !== tenantId) throw new CalendarAccessError('Institution access denied.');
   if (options.viewerRole) {
     if (!['Teacher', 'Student', 'Parent', 'Accountant'].includes(options.viewerRole) || !hasRole(actor, options.viewerRole)) throw new CalendarAccessError('Calendar role access denied.');
     actor = { ...actor, roles: actor.roles.filter((role) => role.roleName === options.viewerRole) };
   }
-  // Academic events are institution-managed shared records. Mobile parent,
-  // teacher and student calendars must present one canonical timeline; event
-  // audience metadata remains useful to administrators but must not make the
-  // same institution date disagree between portals.
-  if (hasRole(actor, 'Teacher') || hasRole(actor, 'Student') || hasRole(actor, 'Parent')) {
-    if (options.studentId && hasRole(actor, 'Parent')) {
-      const linked = await prisma.student.findFirst({ where: {
-        id: options.studentId,
-        user: { tenantId },
-        studentParents: { some: { parent: { userId: actor.id, user: { tenantId } } } },
-      }, select: { id: true } });
-      if (!linked) throw new CalendarAccessError('Linked student not found.');
-    }
-    if (options.studentId && hasRole(actor, 'Student')) {
-      // Student identity is always derived from the session; accepting a
-      // selector here would let a client probe another student's id.
-      throw new CalendarAccessError('Student calendar access denied.');
-    }
-    return { tenantId, audience: 'ALL' };
-  }
-  if (options.studentId || hasRole(actor, 'Parent')) {
+  if (options.studentId) {
+    // Student identity is always derived from the session; only a linked
+    // parent may select a child, so a client cannot probe other students.
     if (!hasRole(actor, 'Parent')) throw new CalendarAccessError('A linked parent account is required.');
-    const student = await prisma.student.findFirst({ where: {
-      ...(options.studentId ? { id: options.studentId } : {}), user: { tenantId },
-      studentParents: { some: { parent: { userId: actor.id, user: { tenantId } } } },
-    }, include: { enrollments: { where: { status: { in: ['ACTIVE', 'BLOCKED'] }, class: { archivedAt: null }, OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }] }, include: { class: true } } } });
-    if (!student) throw new CalendarAccessError('Linked student not found.');
-    return readerCalendarWhere(tenantId, student.enrollments.map((entry) => entry.class.branchId), student.enrollments.map((entry) => entry.classId), ['ALL', 'STUDENTS', 'PARENTS']);
+    return (await parentScope(actor, tenantId, options.studentId))!;
   }
   if (isTenantAdmin(actor)) return { tenantId, ...(options.branchId ? { OR: [{ branchId: null }, { branchId: options.branchId }] } : {}) };
   const branches = managedBranchIds(actor);
@@ -60,15 +98,19 @@ export async function calendarAccessWhere(actor: UserPayload, tenantId: string, 
     if (options.branchId && !branchIds.includes(options.branchId)) throw new CalendarAccessError('Branch access denied.');
     return readerCalendarWhere(tenantId, options.branchId ? [options.branchId] : branchIds, [], ['ALL', 'STAFF']);
   }
-  if (hasRole(actor, 'Teacher')) {
-    const classes = await prisma.class.findMany({ where: { teacherId: actor.id, archivedAt: null, course: { tenantId } }, select: { id: true, branchId: true } });
-    const branchIds = [...classes.map((entry) => entry.branchId), ...actor.roles.filter((role) => role.roleName === 'Teacher' && role.branchId).map((role) => role.branchId!)];
-    return readerCalendarWhere(tenantId, branchIds, classes.map((entry) => entry.id), ['ALL', 'STAFF', 'STUDENTS']);
+  // A person can hold several reader roles (e.g. a teacher who is also a
+  // parent); without an explicit viewerRole they see the union of them.
+  const scopes: Prisma.AcademicEventWhereInput[] = [];
+  const missing: string[] = [];
+  if (hasRole(actor, 'Parent')) {
+    const scope = await parentScope(actor, tenantId);
+    if (scope) scopes.push(scope); else missing.push('Linked student not found.');
   }
+  if (hasRole(actor, 'Teacher')) scopes.push(await teacherScope(actor, tenantId));
   if (hasRole(actor, 'Student')) {
-    const student = await prisma.student.findFirst({ where: { userId: actor.id, user: { tenantId } }, include: { enrollments: { where: { status: { in: ['ACTIVE', 'BLOCKED'] }, class: { archivedAt: null }, OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }] }, include: { class: true } } } });
-    if (!student) throw new CalendarAccessError('Student record not found.');
-    return readerCalendarWhere(tenantId, student.enrollments.map((entry) => entry.class.branchId), student.enrollments.map((entry) => entry.classId), ['ALL', 'STUDENTS']);
+    const scope = await studentScope(actor, tenantId);
+    if (scope) scopes.push(scope); else missing.push('Student record not found.');
   }
-  throw new CalendarAccessError('Calendar access is unavailable for this account.');
+  if (!scopes.length) throw new CalendarAccessError(missing[0] ?? 'Calendar access is unavailable for this account.');
+  return scopes.length === 1 ? scopes[0] : { OR: scopes };
 }

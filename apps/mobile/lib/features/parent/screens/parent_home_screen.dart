@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tms_mobile/core/notifications/inbox_unread_provider.dart';
 import 'package:tms_mobile/core/theme/app_theme.dart';
 import 'package:tms_mobile/features/parent/models/parent_portal.dart';
+import 'package:tms_mobile/features/parent/viewmodels/parent_portal_viewmodel.dart';
 import 'package:tms_mobile/features/parent/widgets/child_login_card.dart';
 import 'package:tms_mobile/features/parent/widgets/child_switcher_bar.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_navigation.dart';
@@ -20,6 +22,7 @@ class ParentHomeScreen extends ConsumerWidget {
       backgroundColor: kColorSurface,
       appBar: AppBar(
         title: const Text('Family Overview'),
+        actions: const [_NotificationBell()],
       ),
       bottomNavigationBar: const ParentNavigationBar(selectedIndex: 0),
       body: SafeArea(
@@ -54,6 +57,37 @@ class ParentHomeScreen extends ConsumerWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Bell with a combined unread badge: institution updates (calendar events,
+/// announcements) plus the selected child's alerts.
+class _NotificationBell extends ConsumerWidget {
+  const _NotificationBell();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final inbox = ref.watch(inboxUnreadCountProvider).valueOrNull ?? 0;
+    final child =
+        ref.watch(parentPortalProvider.select((s) => s.portal?.unreadCount)) ??
+            0;
+    final unread = inbox + child;
+    return Semantics(
+      label: '$unread unread notifications',
+      button: true,
+      child: Badge(
+        isLabelVisible: unread > 0,
+        label: Text('$unread'),
+        child: IconButton(
+          tooltip: 'Notifications',
+          onPressed: () async {
+            await context.push('/parent/notifications');
+            if (context.mounted) ref.invalidate(inboxUnreadCountProvider);
+          },
+          icon: const Icon(Icons.notifications_outlined),
         ),
       ),
     );

@@ -10,6 +10,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tms_mobile/shared/widgets/notification_format.dart';
 
 import '../student_design.dart';
 import '../viewmodels/student_notifications_viewmodel.dart';
@@ -171,7 +172,7 @@ class StudentNotificationsScreen extends ConsumerWidget {
                               Text(notice.raw.message),
                               const SizedBox(height: TmsSpace.xs),
                               Text(
-                                notice.raw.time,
+                                formatNotificationTime(notice.raw.time),
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ],

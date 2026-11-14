@@ -3,12 +3,23 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import 'firebase_runtime_config.dart';
 import 'push_notification_service.dart';
 
+/// Android channel used for every TMS alert. The API targets the same id
+/// (`ANDROID_PUSH_CHANNEL_ID`) so background pushes arrive as heads-up alerts.
+const AndroidNotificationChannel tmsUpdatesChannel = AndroidNotificationChannel(
+  'tms_updates',
+  'TMS updates',
+  description: 'School and account updates',
+  importance: Importance.high,
+);
+
 class FirebaseMessagingGateway implements PushMessagingGateway {
-  FirebaseMessagingGateway(this._messaging);
+  FirebaseMessagingGateway(this._messaging, {this.webVapidKey});
 
   final FirebaseMessaging _messaging;
+  final String? webVapidKey;
 
   PushMessage _convert(RemoteMessage message) => PushMessage(
         title: message.notification?.title,
@@ -19,7 +30,8 @@ class FirebaseMessagingGateway implements PushMessagingGateway {
       );
 
   @override
-  Future<String?> getToken() => _messaging.getToken();
+  Future<String?> getToken() =>
+      _messaging.getToken(vapidKey: kIsWeb ? webVapidKey : null);
 
   @override
   Future<PushMessage?> getInitialMessage() async {
@@ -68,6 +80,12 @@ class FlutterLocalNotificationPresenter implements LocalNotificationPresenter {
         if (deepLink != null) onDeepLink(deepLink);
       },
     );
+    // Create the channel before the first background push arrives; Android
+    // otherwise files it under a low-importance default channel.
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(tmsUpdatesChannel);
   }
 
   @override
@@ -102,14 +120,22 @@ Future<PushNotificationService?> initializeFirebasePushNotifications() async {
         };
   if (platform == null) return null;
 
+  // Credentials come from --dart-define (see FirebaseRuntimeConfig); native
+  // builds may instead ship google-services.json / GoogleService-Info.plist.
+  final config = FirebaseRuntimeConfig.current;
+  if (kIsWeb && config == null) return null;
+
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(options: config?.options);
     void openDeepLink(String deepLink) {
       PushNotifications.deepLinkHandler?.call(deepLink);
     }
 
     return PushNotificationService(
-      messaging: FirebaseMessagingGateway(FirebaseMessaging.instance),
+      messaging: FirebaseMessagingGateway(
+        FirebaseMessaging.instance,
+        webVapidKey: config?.webVapidKey,
+      ),
       api: const ApiPushTokenApi(),
       localNotifications:
           FlutterLocalNotificationPresenter(onDeepLink: openDeepLink),

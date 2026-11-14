@@ -400,6 +400,13 @@ router.get('/portal', authMiddleware, async (req: TenantRequest, res: Response) 
         time: formatDate(appointment.updatedAt), occurredAt: appointment.updatedAt.toISOString(), icon: 'event',
         destination: 'appointments', channels: ['Push', 'SMS'], urgent: false, unread: appointment.updatedAt.getTime() >= Date.now() - 7 * 86400000,
       })),
+      // Newly published calendar events stay in the bell until they end.
+      ...events.filter((event) => event.createdAt.getTime() >= Date.now() - 14 * 86400000 && event.endDate.getTime() >= Date.now()).map((event) => ({
+        id: `event-${event.id}`, childId: student.id, title: `${eventKind(event.eventType)}: ${event.title}`,
+        message: `${formatDate(event.startDate)}${event.startDate.toDateString() === event.endDate.toDateString() ? '' : ` – ${formatDate(event.endDate)}`}${event.description ? `. ${event.description}` : ''}`,
+        time: formatDate(event.createdAt), occurredAt: event.createdAt.toISOString(), icon: 'event', destination: 'calendar',
+        channels: ['Push'], urgent: false, unread: true,
+      })),
       ...student.certificates.map((certificate) => ({
         id: `certificate-${certificate.id}`, childId: student.id, title: 'Certificate issued',
         message: `${certificate.template.name} is ready for ${child.name}.`, time: formatDate(certificate.issuedDate),

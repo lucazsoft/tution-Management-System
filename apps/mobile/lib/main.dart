@@ -4,6 +4,7 @@ import 'package:tms_mobile/core/database/app_database.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
 import 'package:tms_mobile/core/notifications/firebase_push_bootstrap.dart';
 import 'package:tms_mobile/core/notifications/push_notification_service.dart';
+import 'package:tms_mobile/core/notifications/push_session_binding.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/router/app_router.dart';
 import 'package:tms_mobile/core/sync/sync_queue.dart';
@@ -42,6 +43,9 @@ class TMSApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(appRouterProvider);
+    // Registers the device for push once signed in and keeps screens fresh
+    // when notifications arrive while the app is open.
+    ref.watch(pushSessionBindingProvider);
     return MaterialApp.router(
       title: 'TMS',
       theme: buildTmsTheme(),

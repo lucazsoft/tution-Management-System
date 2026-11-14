@@ -161,4 +161,52 @@ void main() {
         isNull);
     await service.dispose();
   });
+
+  test('switching accounts re-registers the same device token', () async {
+    final messaging = _FakeMessaging(token: 'device-token');
+    addTearDown(messaging.close);
+    final api = _FakeApi();
+    final service = PushNotificationService(
+      messaging: messaging,
+      api: api,
+      localNotifications: _FakeLocalNotifications(),
+      platform: 'android',
+    );
+    PushNotifications.install(service);
+    addTearDown(() => PushNotifications.install(null));
+
+    await PushNotifications.startAuthenticatedSession('user-a');
+    await PushNotifications.startAuthenticatedSession('user-a');
+    expect(api.registrations, hasLength(1));
+
+    // Same FCM token, different signed-in account: bind it to the new user.
+    await PushNotifications.startAuthenticatedSession('user-b');
+    expect(api.registrations, hasLength(2));
+    await service.dispose();
+  });
+
+  test('foreground pushes are shown and broadcast for live screens', () async {
+    final messaging = _FakeMessaging(token: 'device-token');
+    addTearDown(messaging.close);
+    final local = _FakeLocalNotifications();
+    final service = PushNotificationService(
+      messaging: messaging,
+      api: _FakeApi(),
+      localNotifications: local,
+      platform: 'android',
+    );
+    PushNotifications.install(service);
+    addTearDown(() => PushNotifications.install(null));
+    await PushNotifications.startAuthenticatedSession('user-a');
+
+    final received = PushNotifications.received.first;
+    messaging.messages.add(const PushMessage(
+      title: 'Exam: Finals',
+      data: {'category': 'CALENDAR', 'deepLink': '/student/calendar'},
+    ));
+    final message = await received;
+    expect(message.data['category'], 'CALENDAR');
+    expect(local.shown, hasLength(1));
+    await service.dispose();
+  });
 }

@@ -10,6 +10,11 @@ abstract final class ParentNavigation {
   static const drawerItems = <({String label, IconData icon, String route})>[
     (label: 'Home', icon: Icons.home_outlined, route: '/parent/home'),
     (
+      label: 'Notifications',
+      icon: Icons.notifications_outlined,
+      route: '/parent/notifications'
+    ),
+    (
       label: 'Academics',
       icon: Icons.school_outlined,
       route: '/parent/academics'

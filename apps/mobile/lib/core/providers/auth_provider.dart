@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/core/auth/role_codes.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
+import 'package:tms_mobile/core/notifications/push_notification_service.dart';
 import 'package:tms_mobile/core/sync/sync.dart';
 import 'package:tms_mobile/features/auth/data/auth_service.dart';
 import 'package:tms_mobile/features/auth/data/device_account_vault.dart';
@@ -276,6 +277,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// wipe safely.
   Future<void> logout() async {
     final userId = state.user?.id;
+    // Unregister while the session cookie is still valid, so this device
+    // stops receiving the signed-out account's notifications.
+    await PushNotifications.unregisterForLogout();
     await AuthService.signOut();
     if (userId != null && userId.isNotEmpty) {
       await clearOfflineCache(userId);
