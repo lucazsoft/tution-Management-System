@@ -43,6 +43,10 @@ import { validateRuntimeConfig } from './utils/runtime-config';
 import { monitorCredentialSignIn } from './middleware/auth-security-monitor';
 
 const app = express();
+// Coolify fronts the API with exactly one Traefik hop. Trusting that single hop
+// makes req.ip the real client address instead of the proxy's, which every
+// per-IP rate limit and the login-failure monitor depend on.
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 1));
 const PORT = Number(process.env.PORT) || 3001;
 const runtimeConfig = validateRuntimeConfig();
 const parseLegacyAuthJson = express.json({ limit: '16kb' });

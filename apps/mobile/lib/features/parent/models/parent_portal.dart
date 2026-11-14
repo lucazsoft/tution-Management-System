@@ -52,6 +52,8 @@ class ParentChild {
     required this.blocked,
     required this.attendanceRate,
     required this.outstanding,
+    this.loginId = '',
+    this.usesParentPhone = false,
   });
 
   final String id;
@@ -65,6 +67,13 @@ class ParentChild {
   final int attendanceRate;
   final double outstanding;
 
+  /// The child's login ID: a real email, or one the system generated
+  /// (docs/planphone.md). Empty when the server did not send it.
+  final String loginId;
+
+  /// True when the child uses this parent's number for login and reset codes.
+  final bool usesParentPhone;
+
   factory ParentChild.fromJson(Map<String, dynamic> json) => ParentChild(
         id: _str(json['id']),
         name: _str(json['name'], 'Child'),
@@ -76,6 +85,8 @@ class ParentChild {
         blocked: json['blocked'] == true,
         attendanceRate: (json['attendanceRate'] as num?)?.toInt() ?? 0,
         outstanding: _num(json['outstanding']),
+        loginId: _str(json['loginId']),
+        usesParentPhone: json['usesParentPhone'] == true,
       );
 }
 

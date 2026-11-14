@@ -31,6 +31,8 @@ class PersonalAccount {
     required this.roles,
     required this.canManageSecurityMobile,
     this.photoUrl,
+    this.loginEmailGenerated = false,
+    this.usesParentPhone = false,
   });
 
   factory PersonalAccount.fromJson(Map<String, dynamic> json) =>
@@ -53,6 +55,8 @@ class PersonalAccount {
         canManageSecurityMobile: json['capabilities'] is Map &&
             (json['capabilities'] as Map)['manageSecurityMobile'] == true,
         photoUrl: json['photoUrl']?.toString(),
+        loginEmailGenerated: json['loginEmailGenerated'] == true,
+        usesParentPhone: json['usesParentPhone'] == true,
       );
 
   final String firstName;
@@ -66,6 +70,12 @@ class PersonalAccount {
   final List<AccountRole> roles;
   final bool canManageSecurityMobile;
   final String? photoUrl;
+
+  /// The email is a system-generated login ID, not a mailbox (docs/planphone.md).
+  final bool loginEmailGenerated;
+
+  /// A student whose login and reset codes go to the primary parent's phone.
+  final bool usesParentPhone;
   String get name => '$firstName $lastName'.trim();
   String get initials => [firstName, lastName]
       .where((part) => part.isNotEmpty)

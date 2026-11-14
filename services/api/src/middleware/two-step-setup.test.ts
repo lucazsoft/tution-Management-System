@@ -4,6 +4,8 @@ import { requireVerifiedMobileForSetup } from './two-step-setup';
 let user: any;
 let query: any;
 (prisma as any).user.findFirst = async (args: any) => { query = args.where; return user; };
+// Not a student, so no guardian-linked phone applies.
+(prisma as any).student.findUnique = async () => null;
 async function invoke() {
   let status = 200; let passed = false;
   await requireVerifiedMobileForSetup({ user: { id: 'self' }, tenantId: 'tenant' } as any, { status(code: number) { status = code; return this; }, json() {} } as any, () => { passed = true; });

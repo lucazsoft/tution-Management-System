@@ -339,6 +339,9 @@ model User {
   securityMobile           String?
   securityMobileVerifiedAt DateTime?
   status                   UserStatus               @default(ACTIVE)
+  // True when the system generated this email as a login ID because none was
+  // given. It is never a mailbox: nothing may send mail to it.
+  loginEmailGenerated      Boolean                  @default(false)
   createdAt                DateTime                 @default(now())
   updatedAt                DateTime                 @updatedAt
   userRoles                UserRole[]
@@ -482,6 +485,9 @@ model Student {
   emergencyContact    String
   admissionRecord     Json?
   admissionStatus     AdmissionStatus          @default(PENDING_PAYMENT)
+  // "Use parent's number as primary": the student stores no phone, and login
+  // SMS, password reset and two-step codes go to the primary guardian's phone.
+  usesGuardianPhone   Boolean                  @default(false)
   createdAt           DateTime                 @default(now())
   updatedAt           DateTime                 @updatedAt
   enrollments         Enrollment[]
@@ -706,6 +712,9 @@ model StudentParent {
   student   Student @relation(fields: [studentId], references: [id])
   parentId  String
   parent    Parent  @relation(fields: [parentId], references: [id])
+  // The guardian whose phone a guardian-linked student uses. At most one per
+  // student, enforced by a partial unique index in the migration.
+  isPrimary Boolean @default(false)
 
   @@id([studentId, parentId])
 }

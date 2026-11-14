@@ -90,3 +90,10 @@ assert.doesNotThrow(() => validateRuntimeConfig({
 }));
 
 console.log('Runtime configuration tests passed.');
+
+import { loginEmailDomain } from './runtime-config';
+assert.equal(loginEmailDomain({ LOGIN_EMAIL_DOMAIN: 'Login.Example.com ' }), 'login.example.com');
+assert.equal(loginEmailDomain({ WEB_ORIGIN: 'https://tms.example.com.np' }), 'login.tms.example.com.np');
+assert.equal(loginEmailDomain({ WEB_ORIGIN: 'http://localhost:5173' }), 'login.tms.test');
+assert.throws(() => loginEmailDomain({ LOGIN_EMAIL_DOMAIN: 'https://x.com' }), /bare hostname/);
+console.log('Login email domain tests passed.');

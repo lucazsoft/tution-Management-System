@@ -1,4 +1,4 @@
-import { normaliseAakashPhoneNumber } from './sms';
+import { normaliseAakashPhoneNumber } from './phone';
 
 // Trust belongs to the verified destination, never to a mutable phone field alone.
 export function trustedSecurityMobile(user: {

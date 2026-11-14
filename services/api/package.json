@@ -52,6 +52,7 @@
     "test:push": "ts-node src/utils/push.test.ts",
     "test:ledger": "ts-node src/services/general-ledger.test.ts && ts-node src/routes/ledger.test.ts",
     "admissions:recover": "ts-node src/scripts/recover-admission-deliveries.ts",
+    "test:phone-link": "ts-node src/services/phone-linked-logins.test.ts",
     "test:tenant-admin:integration": "ts-node src/integration/tenant-admin.integration.test.ts",
     "test:leaves": "ts-node src/services/leave-routing.test.ts && ts-node src/routes/leaves.test.ts"
   },

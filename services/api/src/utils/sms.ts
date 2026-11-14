@@ -16,14 +16,10 @@ type AakashSmsResponse = {
   [key: string]: unknown;
 };
 
-export function normaliseAakashPhoneNumber(value: string): string {
-  // Aakash API v3 requires a local 10-digit number in the `to` field.
-  const digits = value.replace(/[\s()-]/g, '');
-  if (/^\+977\d{10}$/.test(digits)) return digits.slice(4);
-  if (/^977\d{10}$/.test(digits)) return digits.slice(3);
-  if (/^\d{10}$/.test(digits)) return digits;
-  return digits;
-}
+// Kept in its own dependency-free module so code that only needs the
+// normaliser does not load (or get stubbed together with) the SMS sender.
+import { normaliseAakashPhoneNumber } from './phone';
+export { normaliseAakashPhoneNumber };
 
 function maskPhoneNumber(value: string): string {
   return `${'*'.repeat(Math.max(0, value.length - 4))}${value.slice(-4)}`;
