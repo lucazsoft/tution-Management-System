@@ -96,9 +96,15 @@ enum LeaveType {
 
 enum LeaveStatus {
   PENDING
-  APPROVED_LEVEL1
-  APPROVED_LEVEL2
+  APPROVED_LEVEL1 // Awaiting Level 2; never counts as approved leave.
+  APPROVED_LEVEL2 // Final approval, whichever level made it.
   REJECTED
+  CANCELLED
+}
+
+enum LeaveSubject {
+  STAFF
+  STUDENT
 }
 
 enum AppointmentStatus {
@@ -343,6 +349,7 @@ model User {
   student                  Student?
   parent                   Parent?
   leaves                   Leave[]
+  leaveDecisions           LeaveDecision[]          @relation("LeaveDecisionActor")
   teacherAttendance        TeacherAttendance[]
   teacherSessions          TeacherSession[]
   assignedClasses          Class[]                  @relation("AssignedClasses")
@@ -937,8 +944,34 @@ model Leave {
   approvedBy     String? // Approver User ID
   remarks        String?
   policySnapshot Json?
+  // Routing is fixed at submission so later policy edits never reroute a request in flight.
+  subjectType          LeaveSubject    @default(STAFF)
+  days                 Int             @default(0) // Working days counted under the submission-time policy
+  requiredLevel        Int             @default(1) // 1 = branch decision is final; 2 = Tenant Admin must also approve
+  escalatesAt          DateTime? // Unanswered PENDING staff requests reach the Tenant Admin after this
+  escalationNotifiedAt DateTime? // Set once Tenant Admins were alerted about the escalation
+  requestedById        String? // Who submitted (a parent for a child's leave); null on legacy rows
+  decisions            LeaveDecision[]
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
+
+  @@index([tenantId, status])
+}
+
+// Append-only audit trail of every leave decision.
+model LeaveDecision {
+  id        String   @id @default(uuid())
+  leaveId   String
+  leave     Leave    @relation(fields: [leaveId], references: [id], onDelete: Cascade)
+  level     Int // 1 = branch, 2 = tenant
+  action    String // APPROVE | REJECT | CANCEL
+  actorId   String
+  actor     User     @relation("LeaveDecisionActor", fields: [actorId], references: [id])
+  remarks   String?
+  escalated Boolean  @default(false) // Tenant Admin decided because the branch did not answer in time
+  createdAt DateTime @default(now())
+
+  @@index([leaveId, createdAt])
 }
 
 // 18. Petty Cash Management

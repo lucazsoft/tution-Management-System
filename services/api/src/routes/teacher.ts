@@ -91,9 +91,10 @@ router.get('/workspace', authMiddleware, async (req: TenantRequest, res: Respons
     const completedSessions = classes.flatMap((item) => item.sessions).filter((item) => ['PRESENT_CONFIRMED', 'PRESENT_UPDATE_PENDING'].includes(item.status));
     const confirmedSessions = completedSessions.filter((item) => item.dailyUpdateSubmitted);
     const presentStamps = stamps.filter((stamp) => ['IN', 'RE_IN'].includes(stamp.stampType));
-    const absentLeaves = leaves.filter((leave) => ['APPROVED_LEVEL1', 'APPROVED_LEVEL2'].includes(leave.status));
-    const attendanceRate = presentStamps.length + absentLeaves.length
-      ? Math.round((presentStamps.length / (presentStamps.length + absentLeaves.length)) * 100)
+    const absentLeaves = leaves.filter((leave) => leave.status === 'APPROVED_LEVEL2');
+    const approvedLeaveDays = absentLeaves.reduce((total, leave) => total + Math.max(1, leave.days), 0);
+    const attendanceRate = presentStamps.length + approvedLeaveDays
+      ? Math.round((presentStamps.length / (presentStamps.length + approvedLeaveDays)) * 100)
       : 0;
     const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
     const presentDays = new Set(presentStamps.filter((stamp) => stamp.timestamp >= monthStart).map((stamp) => stamp.timestamp.toISOString().slice(0, 10))).size;
@@ -110,7 +111,7 @@ router.get('/workspace', authMiddleware, async (req: TenantRequest, res: Respons
         branches: [...new Map(classes.map((item) => [item.branch.id, { id: item.branch.id, name: item.branch.name }])).values()],
       },
       statistics: {
-        attendanceRate, presentDays, requiredDays, approvedLeaveDays: absentLeaves.length,
+        attendanceRate, presentDays, requiredDays, approvedLeaveDays,
         totalSessions: completedSessions.length,
         updateCompliance: completedSessions.length ? Math.round((confirmedSessions.length / completedSessions.length) * 100) : 0,
         assignedClasses: classes.length,
@@ -186,7 +187,7 @@ router.post('/class/:classId/attendance', authMiddleware, async (req: TenantRequ
       return res.status(422).json({ error: 'Every attendance record must belong to this class and use Present or Absent.' });
     }
     const studentUserIds = klass.enrollments.map((item) => item.student.userId);
-    const approvedLeaves = await prisma.leave.findMany({ where: { userId: { in: studentUserIds }, startDate: { lte: end }, endDate: { gte: start }, status: { in: ['APPROVED_LEVEL1', 'APPROVED_LEVEL2'] } } });
+    const approvedLeaves = await prisma.leave.findMany({ where: { userId: { in: studentUserIds }, startDate: { lte: end }, endDate: { gte: start }, status: 'APPROVED_LEVEL2' } });
     const excusedUsers = new Set(approvedLeaves.map((item) => item.userId));
     const normalized: Array<{ studentId: string; status: 'PRESENT' | 'ABSENT' | 'EXCUSED' }> = records.map((item: any) => {
       const enrollment = enrollmentMap.get(item.studentId)!;

@@ -40,7 +40,7 @@
     "test:payroll": "ts-node src/services/payroll-service.test.ts && ts-node src/services/payroll-automation.test.ts && ts-node src/services/payslip-renderer.test.ts && ts-node src/routes/cron-payroll.test.ts",
     "test:social": "ts-node src/services/social-publishing.test.ts && ts-node src/services/social-publishing-store.test.ts && ts-node src/routes/social.test.ts && ts-node src/routes/cron-social.test.ts",
     "test:route-auth": "ts-node src/routes/route-authentication.test.ts",
-    "test:attendance": "ts-node src/routes/attendance.test.ts",
+    "test:attendance": "ts-node src/routes/attendance.test.ts && ts-node src/routes/geo-attendance.test.ts",
     "test:notifications": "ts-node src/routes/notifications.test.ts && ts-node src/services/push-notification.test.ts",
     "test:phase-one-security": "ts-node src/routes/phase-one-security.test.ts",
     "test:phase-two-billing": "ts-node src/routes/phase-two-billing.test.ts",
@@ -53,7 +53,8 @@
     "test:ledger": "ts-node src/services/general-ledger.test.ts && ts-node src/routes/ledger.test.ts",
     "admissions:recover": "ts-node src/scripts/recover-admission-deliveries.ts",
     "test:phone-link": "ts-node src/services/phone-linked-logins.test.ts",
-    "test:tenant-admin:integration": "ts-node src/integration/tenant-admin.integration.test.ts"
+    "test:tenant-admin:integration": "ts-node src/integration/tenant-admin.integration.test.ts",
+    "test:leaves": "ts-node src/services/leave-routing.test.ts && ts-node src/routes/leaves.test.ts"
   },
   "prisma": {
     "seed": "node prisma/seed-runner.cjs"

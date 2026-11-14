@@ -43,7 +43,7 @@ export const DASHBOARD_NAVIGATION: Record<DashboardRole, DashboardNavItem[]> = {
     { section: 'Finance', label: 'Payroll', icon: 'account_balance_wallet', path: '/tenant/payroll' },
     { section: 'Finance', label: 'Petty Cash', icon: 'savings', path: '/tenant/petty-cash' },
     { section: 'Finance', label: 'P&L Reports', icon: 'monitoring', path: '/tenant/pl-reports' },
-    { section: 'Operations', label: 'Leave Requests', icon: 'event_busy', path: '/tenant/leave-requests' },
+    { section: 'Operations', label: 'Leave Management', icon: 'event_busy', path: '/tenant/leave-management' },
     { section: 'Operations', label: 'Resource Logs', icon: 'inventory_2', path: '/tenant/resource-logs' },
     { section: 'Operations', label: 'Certificates', icon: 'workspace_premium', path: '/tenant/certificates' },
     { section: 'Operations', label: 'Academic Calendar', icon: 'date_range', path: '/tenant/academic-calendar' },

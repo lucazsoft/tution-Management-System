@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
-import attendanceRouter from './attendance';
 import prisma from '../utils/db';
+
+// Replace the auth module before loading the router: it validates runtime
+// secrets at import time, and CI runs these suites with no environment.
+const authPath = require.resolve('../utils/auth');
+require.cache[authPath] = { id: authPath, filename: authPath, loaded: true, exports: {
+  auth: { api: { getSession: async () => null } },
+} } as NodeModule;
+const attendanceRouter = require('./attendance').default;
 
 function endpointHandler(path: '/in' | '/out') {
   const layer = (attendanceRouter as any).stack.find(

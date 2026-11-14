@@ -791,7 +791,7 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
 
     const attendance = student.studentAttendance.map((record) => {
       const approvedLeave = leaveRows.find((leave) =>
-        ['APPROVED_LEVEL1', 'APPROVED_LEVEL2'].includes(leave.status)
+        leave.status === 'APPROVED_LEVEL2'
         && leave.startDate <= record.date
         && leave.endDate >= record.date
       );

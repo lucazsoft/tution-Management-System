@@ -3174,6 +3174,19 @@ function Leave({
       setBusy(false);
     }
   };
+  const cancel = async (leaveId: string) => {
+    if (!window.confirm("Cancel this leave request?")) return;
+    setBusy(true);
+    try {
+      await api.teacher.cancelLeave(leaveId);
+      await reload();
+      showToast("Leave request cancelled.", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not cancel the request.", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
   const leaveState = (status: string) =>
     status === "PENDING"
       ? { label: "Awaiting branch review", tone: "warning" as const }
@@ -3181,7 +3194,9 @@ function Leave({
         ? { label: "Awaiting final tenant approval", tone: "warning" as const }
         : status === "APPROVED_LEVEL2"
           ? { label: "Approved", tone: "success" as const }
-          : { label: "Rejected", tone: "error" as const };
+          : status === "CANCELLED"
+            ? { label: "Cancelled", tone: "info" as const }
+            : { label: "Rejected", tone: "error" as const };
   return (
     <div className="teacher-view">
       <section className="teacher-section">
@@ -3189,9 +3204,10 @@ function Leave({
           <div>
             <h2>New leave request</h2>
             <p>
-              {branch?.name || "No branch assigned"} · Casual, sick and
-              early-out requests need branch approval. Long sick leave also
-              needs final tenant approval.
+              {branch?.name || "No branch assigned"} · The Branch Admin
+              approves leave. Leave longer than 3 working days (your timetable
+              days, excluding Saturdays and holidays) and long sick leave also
+              need final Tenant Admin approval.
             </p>
           </div>
         </header>
@@ -3205,7 +3221,7 @@ function Leave({
             <option value="CASUAL">Casual leave</option>
             <option value="SICK">Sick leave</option>
             <option value="EARLY_OUT">Early-out</option>
-            <option value="LONG_SICK">Long sick leave — two approvals</option>
+            <option value="LONG_SICK">Long sick leave</option>
           </select>
           <div className="teacher-form-grid">
             <div>
@@ -3276,11 +3292,32 @@ function Leave({
                       {new Date(leave.endDate).toLocaleDateString()} ·{" "}
                       {leave.reason}
                     </small>
+                    {leave.days ? (
+                      <small>
+                        {leave.days} working day{leave.days === 1 ? "" : "s"} ·{" "}
+                        {leave.requiredLevel === 2
+                          ? "Branch + Tenant approval"
+                          : "Branch approval"}
+                      </small>
+                    ) : null}
                     {leave.status === "APPROVED_LEVEL1" ? (
                       <small>Branch approved · waiting for Tenant Admin</small>
                     ) : null}
+                    {leave.status === "REJECTED" && leave.remarks ? (
+                      <small>Reason: {leave.remarks}</small>
+                    ) : null}
                   </div>
                   <Status tone={state.tone}>{state.label}</Status>
+                  {["PENDING", "APPROVED_LEVEL1"].includes(leave.status) ? (
+                    <button
+                      type="button"
+                      className="teacher-secondary-cta"
+                      disabled={busy}
+                      onClick={() => void cancel(leave.id)}
+                    >
+                      Cancel
+                    </button>
+                  ) : null}
                 </article>
               );
             })}
