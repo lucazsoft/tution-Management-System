@@ -8,6 +8,7 @@ import { getSmsSender } from '../utils/sms';
 import { getPushSender } from '../utils/push';
 import { canAccessBranch, hasBranchPermission, isTenantAdmin } from '../utils/access-control';
 import { recordNotification } from '../services/notification-records';
+import { alertGuardians, departureMessage, departureSummary } from '../services/emergency-departure';
 import {
   countWorkingDays,
   isEscalated,
@@ -474,8 +475,13 @@ router.post(
           id: studentId,
           user: { tenantId: req.tenantId!, userRoles: { some: { branchId } } },
         },
+        include: {
+          user: { select: { firstName: true, lastName: true } },
+          studentParents: { include: { parent: { include: { user: { select: { id: true, phone: true, status: true } } } } } },
+        },
       });
       if (!student) return res.status(404).json({ error: 'Student not found in your institution.' });
+      const branch = await prisma.branch.findFirst({ where: { id: branchId, tenantId: req.tenantId! }, select: { name: true } });
       const at = departureTime ? new Date(departureTime) : new Date();
       const emergencyLeave = await prisma.leave.create({
         data: {
@@ -496,16 +502,33 @@ router.post(
         },
       });
 
-      // Dispatch urgent SMS notification to parents
-      const smsSender = getSmsSender();
-      await smsSender.sendSms(
-        '98510XXXXX',
-        `ALERT: Emergency departure logged for your child. Reason: ${reason}. Please contact the center.`
-      );
+      // Alert every linked guardian. Delivery problems never undo the record;
+      // the response tells staff who was actually reached.
+      const guardians = student.studentParents
+        .map((link) => link.parent.user)
+        .filter((user) => user.status === 'ACTIVE')
+        .map((user) => ({ userId: user.id, phone: user.phone }));
+      const studentName = `${student.user.firstName} ${student.user.lastName}`.trim();
+      const text = departureMessage({
+        studentName,
+        branchName: branch?.name ?? 'the branch',
+        at,
+        reason: String(reason),
+        collectedBy: typeof collectedBy === 'string' ? collectedBy : null,
+      });
+      const delivery = await alertGuardians(getSmsSender(), guardians, text);
+      await notify(guardians.map((guardian) => guardian.userId), {
+        tenantId: req.tenantId!,
+        branchId,
+        entityId: emergencyLeave.id,
+        title: 'Emergency departure',
+        body: text,
+      }).catch(() => undefined);
 
       return res.status(201).json({
-        message: 'Emergency departure successfully registered. Parents notified immediately.',
+        message: departureSummary(delivery),
         leave: emergencyLeave,
+        notified: delivery,
       });
     } catch (error: any) {
       return res.status(500).json({ error: 'Failed to process emergency departure.', details: error.message });

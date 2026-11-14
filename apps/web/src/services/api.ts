@@ -729,7 +729,7 @@ export const api = {
       return request<{ leaves: LeaveRecord[] }>(`/leaves?${params.toString()}`);
     },
     emergencyDeparture: async (payload: { studentId: string; branchId: string; reason: string; collectedBy?: string; departureTime?: string }) =>
-      request<{ message: string; leave: any }>('/leaves/emergency-out', { method: 'POST', body: JSON.stringify(payload) }),
+      request<{ message: string; leave: any; notified?: { guardians: number; attempted: number; sent: number; failed: number; withoutPhone: number } }>('/leaves/emergency-out', { method: 'POST', body: JSON.stringify(payload) }),
     addRemark: async (payload: { studentId: string; subject: string; message: string; parentVisible: boolean }) =>
       request<{ message: string; remark: any }>('/performance/student/remarks', { method: 'POST', body: JSON.stringify(payload) }),
     createPersonalizedClass: async (payload: { branchId: string; name: string; courseId: string; schedule: unknown; feeStructure: unknown }) =>
