@@ -38,7 +38,7 @@ const TenantResourcesPage = lazy(() => import('../pages/TenantOperationsPages').
 const TenantCalendarPage = lazy(() => import('../pages/TenantOperationsPages').then((module) => ({ default: module.TenantCalendarPage })));
 const TenantAdmissionsPage = lazy(() => import('../pages/TenantOperationsPages').then((module) => ({ default: module.TenantAdmissionsPage })));
 const TenantCertificatesPage = lazy(() => import('../pages/TenantOperationsPages').then((module) => ({ default: module.TenantCertificatesPage })));
-const TenantLeaveRequestsPage = lazy(() => import('../pages/TenantOperationsPages').then((module) => ({ default: module.TenantLeaveRequestsPage })));
+const LeaveApprovalWorkspace = lazy(() => import('../features/leave/LeaveApprovalWorkspace').then((module) => ({ default: module.LeaveApprovalWorkspace })));
 const PeopleDirectory = lazy(() => import('../pages/PeopleDirectory').then((module) => ({ default: module.PeopleDirectory })));
 const AcademicCourses = lazy(() => import('../pages/AcademicCourses').then((module) => ({ default: module.AcademicCourses })));
 const AcademicTimetables = lazy(() => import('../pages/AcademicTimetables').then((module) => ({ default: module.AcademicTimetables })));
@@ -304,7 +304,8 @@ const router = createBrowserRouter([
               { path: '/tenant/resource-logs', element: <Suspense fallback={<FullPageSpinner />}><TenantResourcesPage /></Suspense> },
               { path: '/tenant/academic-calendar', element: <Suspense fallback={<FullPageSpinner />}><TenantCalendarPage /></Suspense> },
               { path: '/tenant/certificates', element: <Suspense fallback={<FullPageSpinner />}><TenantCertificatesPage /></Suspense> },
-              { path: '/tenant/leave-requests', element: <Suspense fallback={<FullPageSpinner />}><TenantLeaveRequestsPage /></Suspense> },
+              { path: '/tenant/leave-management', element: <Suspense fallback={<FullPageSpinner />}><LeaveApprovalWorkspace role="tenant" /></Suspense> },
+              { path: '/tenant/leave-requests', element: <Navigate to="/tenant/leave-management" replace /> },
               { path: '/tenant/security', element: <Suspense fallback={<FullPageSpinner />}><SecurityPage /></Suspense> },
               { path: '/tenant/*', element: <RoleWorkspacePlaceholder role="tenant-admin" /> },
             ],

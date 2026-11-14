@@ -26,6 +26,7 @@ import {
   type AutomationStaffInput,
 } from '../services/payroll-automation';
 import { handlePayrollCron } from './cron-payroll';
+import { notifyEscalatedLeaves } from './leaves';
 
 const router = Router();
 
@@ -100,6 +101,9 @@ router.post(
         } catch (dbErr) {
           throw dbErr;
         }
+      } else if (taskName === 'leave-escalation') {
+        const alerted = await notifyEscalatedLeaves(req.tenantId!);
+        logs.push(`Alerted Tenant Admins about ${alerted} leave request(s) unanswered by their branch for 48 hours.`);
       } else if (taskName === 'connectips-revalidate') {
         const result = await reconcilePendingConnectIps({ tenantId: req.tenantId! });
         logs.push(`Revalidated ${result.checked} pending connectIPS payment(s); confirmed ${result.confirmed}.`);
@@ -208,7 +212,7 @@ router.post(
             prisma.leave.findMany({
               where: {
                 userId: record.userId,
-                status: { in: ['APPROVED_LEVEL1', 'APPROVED_LEVEL2'] },
+                status: 'APPROVED_LEVEL2',
                 startDate: { lt: periodEnd },
                 endDate: { gte: periodStart },
               },
