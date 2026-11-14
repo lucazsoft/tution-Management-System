@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { isInvoiceOverdue } from '../utils/billing-rules';
-import { activeGuardians, formatRupees, GUARDIAN_LINKS_INCLUDE, smsGuardians, type SmsSender } from './guardian-sms';
+import { activeGuardians, formatRupees, GUARDIAN_LINKS_INCLUDE, smsGuardians, usablePhone, type SmsSender } from './guardian-sms';
 
 /**
  * Overdue-fee reminder SMS: one message per student with overdue invoices,
@@ -31,12 +31,8 @@ export function feeReminderMessage(input: {
 
 type ReminderDb = Pick<PrismaClient, 'invoice'>;
 
-export async function sendFeeReminders(
-  db: ReminderDb,
-  sender: SmsSender,
-  tenantId: string,
-  now = new Date(),
-): Promise<FeeReminderResult> {
+/** Overdue students with their total owed, one entry per student. */
+async function overdueByStudent(db: ReminderDb, tenantId: string, now: Date) {
   const invoices = await db.invoice.findMany({
     where: { tenantId, status: { in: ['UNPAID', 'OVERDUE'] }, dueDate: { lt: now } },
     select: {
@@ -63,10 +59,47 @@ export async function sendFeeReminders(
     entry.amount += Number(invoice.netPayable);
     byStudent.set(invoice.studentId, entry);
   }
+  return [...byStudent.values()].filter((entry) => entry.amount > 0);
+}
 
-  const result: FeeReminderResult = { students: byStudent.size, sent: 0, failed: 0, withoutPhone: 0, withoutGuardian: 0 };
-  for (const { amount, invoice } of byStudent.values()) {
-    if (amount <= 0) continue;
+export interface FeeReminderPreview {
+  /** Students with overdue fees. */
+  students: number;
+  /** Distinct parent mobile numbers that would receive an SMS. */
+  parentNumbers: number;
+  withoutPhone: number;
+  withoutGuardian: number;
+  /** Total overdue across those students, in rupees. */
+  totalOverdue: number;
+}
+
+/** What [sendFeeReminders] would do right now, without sending anything. */
+export async function previewFeeReminders(db: ReminderDb, tenantId: string, now = new Date()): Promise<FeeReminderPreview> {
+  const preview: FeeReminderPreview = { students: 0, parentNumbers: 0, withoutPhone: 0, withoutGuardian: 0, totalOverdue: 0 };
+  for (const { amount, invoice } of await overdueByStudent(db, tenantId, now)) {
+    preview.students += 1;
+    preview.totalOverdue += amount;
+    const guardians = activeGuardians(invoice.student.studentParents);
+    if (!guardians.length) { preview.withoutGuardian += 1; continue; }
+    const phones = new Set<string>();
+    for (const guardian of guardians) {
+      const phone = usablePhone(guardian.phone);
+      if (phone) phones.add(phone); else preview.withoutPhone += 1;
+    }
+    preview.parentNumbers += phones.size;
+  }
+  return preview;
+}
+
+export async function sendFeeReminders(
+  db: ReminderDb,
+  sender: SmsSender,
+  tenantId: string,
+  now = new Date(),
+): Promise<FeeReminderResult> {
+  const overdue = await overdueByStudent(db, tenantId, now);
+  const result: FeeReminderResult = { students: overdue.length, sent: 0, failed: 0, withoutPhone: 0, withoutGuardian: 0 };
+  for (const { amount, invoice } of overdue) {
     const guardians = activeGuardians(invoice.student.studentParents);
     if (!guardians.length) {
       result.withoutGuardian += 1;

@@ -5,7 +5,7 @@ import prisma from '../utils/db';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware } from '../middleware/auth';
 import { getSmsSender } from '../utils/sms';
-import { sendFeeReminders } from '../services/fee-reminders';
+import { previewFeeReminders, sendFeeReminders } from '../services/fee-reminders';
 import { PushNotificationService } from '../services/push-notification';
 import { isTenantAdmin } from '../utils/access-control';
 import { reconcilePendingConnectIps } from '../utils/connectips';
@@ -31,6 +31,60 @@ import { notifyEscalatedLeaves } from './leaves';
 
 const router = Router();
 
+/**
+ * Reminder and alert tasks offered on the Control Center "Reminders" tab.
+ * Only tasks that really deliver something are listed (petty-cash-reset and
+ * contract-expiry-alerts only log a line today, so they are not offered).
+ */
+export const REMINDER_TASKS = [
+  'fee-reminder-sms',
+  'monthly-due-verification',
+  'leave-escalation',
+  'salary-reminder',
+  'financial-anomaly-alerts',
+  'task-escalation',
+] as const;
+
+/** A second fee-reminder SMS blast inside this window needs explicit confirmation. */
+export const FEE_REMINDER_COOLDOWN_HOURS = 20;
+
+async function lastRun(tenantId: string, taskName: string) {
+  return prisma.automationRun.findFirst({
+    where: { tenantId, taskName },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+// Status for the Control Center Reminders tab: last run of each task and what
+// a fee-reminder send would do right now.
+router.get('/automation', authMiddleware, async (req: TenantRequest, res: Response) => {
+  if (!isTenantAdmin(req.user!)) {
+    return res.status(403).json({ error: 'Only the Tenant Admin may view institution automation.' });
+  }
+  try {
+    const runs = await Promise.all(REMINDER_TASKS.map((taskName) => lastRun(req.tenantId!, taskName)));
+    const starterIds = [...new Set(runs.flatMap((run) => (run ? [run.startedById] : [])))];
+    const starters = starterIds.length
+      ? await prisma.user.findMany({ where: { id: { in: starterIds } }, select: { id: true, firstName: true, lastName: true } })
+      : [];
+    const names = new Map(starters.map((user) => [user.id, `${user.firstName} ${user.lastName}`.trim()]));
+    const feeReminderPreview = await previewFeeReminders(prisma, req.tenantId!);
+    return res.json({
+      tasks: REMINDER_TASKS.map((taskName, index) => {
+        const run = runs[index];
+        return {
+          taskName,
+          lastRun: run ? { at: run.createdAt, by: names.get(run.startedById) ?? 'Unknown user', summary: run.summary } : null,
+        };
+      }),
+      feeReminderPreview,
+      feeReminderCooldownHours: FEE_REMINDER_COOLDOWN_HOURS,
+    });
+  } catch {
+    return res.status(500).json({ error: 'Failed to load automation status.' });
+  }
+});
+
 // Endpoint to trigger cron automation tasks
 router.post(
   '/trigger',
@@ -46,6 +100,18 @@ router.post(
     }
 
     try {
+      if (taskName === 'fee-reminder-sms' && req.body.force !== true) {
+        const previous = await lastRun(req.tenantId!, taskName);
+        const cutoff = Date.now() - FEE_REMINDER_COOLDOWN_HOURS * 3_600_000;
+        if (previous && previous.createdAt.getTime() > cutoff) {
+          return res.status(409).json({
+            error: `Fee reminders were already sent at ${previous.createdAt.toISOString()}. Confirm to send them again.`,
+            code: 'RECENTLY_SENT',
+            lastRunAt: previous.createdAt,
+          });
+        }
+      }
+
       const logs = [];
       let financialAnomalyAlerts: Awaited<ReturnType<typeof runBranchExpenseAnomalyAlerts>> | undefined;
 
@@ -136,6 +202,11 @@ router.post(
       } else {
         return res.status(400).json({ error: `Unknown taskName: ${taskName}.` });
       }
+
+      // History for the Control Center; never fails the task that already ran.
+      await prisma.automationRun.create({
+        data: { tenantId: req.tenantId!, taskName, startedById: req.user!.id, summary: logs.join(' ').slice(0, 2000) },
+      }).catch(() => undefined);
 
       return res.status(200).json({
         message: `Cron automation '${taskName}' executed successfully.`,

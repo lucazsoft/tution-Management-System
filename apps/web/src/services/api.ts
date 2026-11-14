@@ -46,6 +46,20 @@ export interface LeaveQuery {
   subjectType?: string;
 }
 
+export type ReminderTaskName =
+  | 'fee-reminder-sms'
+  | 'monthly-due-verification'
+  | 'leave-escalation'
+  | 'salary-reminder'
+  | 'financial-anomaly-alerts'
+  | 'task-escalation';
+
+export interface AutomationStatus {
+  tasks: Array<{ taskName: ReminderTaskName; lastRun: { at: string; by: string; summary: string } | null }>;
+  feeReminderPreview: { students: number; parentNumbers: number; withoutPhone: number; withoutGuardian: number; totalOverdue: number };
+  feeReminderCooldownHours: number;
+}
+
 export interface BillingInvoice {
   id: string; invoiceType: 'ADMISSION' | 'TUITION' | 'SUBJECT' | 'ACTIVITY'; amount: number; discount: number; fine: number;
   netPayable: number; status: string; overdue: boolean; billingCycleStart: string; billingCycleEnd: string; dueDate: string;
@@ -445,6 +459,16 @@ export const api = {
   },
 
   // Tenant dashboard summary (students, teachers, dues, leaves, per-branch)
+  // Control Center reminders and alerts (Tenant Admin only).
+  automation: {
+    getStatus: async () => request<AutomationStatus>('/cron/automation'),
+    run: async (taskName: ReminderTaskName, force = false) =>
+      request<{ message: string; executionLogs: string[] }>('/cron/trigger', {
+        method: 'POST',
+        body: JSON.stringify({ taskName, ...(force ? { force: true } : {}) }),
+      }),
+  },
+
   tenant: {
     getDashboard: async () => {
       return request<{
