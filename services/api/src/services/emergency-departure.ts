@@ -1,4 +1,4 @@
-import { normaliseAakashPhoneNumber } from '../utils/phone';
+import { smsGuardians, usablePhone, type Guardian, type GuardianSmsResult } from './guardian-sms';
 
 /**
  * Parent alerts for a student's emergency departure.
@@ -9,25 +9,12 @@ import { normaliseAakashPhoneNumber } from '../utils/phone';
  * know when to phone the family themselves.
  */
 
-export interface Guardian {
-  userId: string;
-  phone: string | null;
-}
+export type { Guardian };
+export type DepartureAlertResult = GuardianSmsResult;
+export { usablePhone };
 
-export interface DepartureAlertResult {
-  /** Linked guardians found for the student. */
-  guardians: number;
-  /** Distinct valid numbers an SMS was attempted for. */
-  attempted: number;
-  sent: number;
-  failed: number;
-  /** Guardians with no usable 10-digit mobile number on file. */
-  withoutPhone: number;
-}
-
-interface SmsSender {
-  sendSms(to: string, message: string): Promise<{ success: boolean }>;
-}
+/** One SMS per distinct guardian number; see guardian-sms.ts. */
+export const alertGuardians = smsGuardians;
 
 const NEPAL_OFFSET_MS = 345 * 60_000;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -55,39 +42,6 @@ export function departureMessage(input: {
   const collected = input.collectedBy?.trim() ? ` Collected by: ${clip(input.collectedBy, 60)}.` : '';
   return `ALERT: ${clip(input.studentName, 60)} left ${clip(input.branchName, 60)} early at ${nepalTimeLabel(input.at)}. `
     + `Reason: ${clip(input.reason, 120)}.${collected} Please contact the branch if this is unexpected.`;
-}
-
-/** Valid Nepali mobile number in the 10-digit form the gateway accepts, or null. */
-export function usablePhone(phone: string | null | undefined): string | null {
-  if (!phone) return null;
-  const normalised = normaliseAakashPhoneNumber(phone);
-  return /^9\d{9}$/.test(normalised) ? normalised : null;
-}
-
-export async function alertGuardians(
-  sender: SmsSender,
-  guardians: Guardian[],
-  message: string,
-): Promise<DepartureAlertResult> {
-  const phones = new Set<string>();
-  let withoutPhone = 0;
-  for (const guardian of guardians) {
-    const phone = usablePhone(guardian.phone);
-    if (phone) phones.add(phone);
-    else withoutPhone += 1;
-  }
-  let sent = 0;
-  let failed = 0;
-  for (const phone of phones) {
-    try {
-      const result = await sender.sendSms(phone, message);
-      if (result.success) sent += 1;
-      else failed += 1;
-    } catch {
-      failed += 1;
-    }
-  }
-  return { guardians: guardians.length, attempted: phones.size, sent, failed, withoutPhone };
 }
 
 /** Staff-facing summary of who was reached. */
