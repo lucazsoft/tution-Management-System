@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
+import 'package:tms_mobile/core/notifications/push_notification_service.dart';
+import 'package:tms_mobile/shared/widgets/notification_format.dart';
 import 'package:tms_mobile/features/student/data/student_id_calendar_notifications_repository.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_navigation.dart';
 
@@ -17,14 +21,24 @@ class _TeacherNotificationsScreenState
     extends State<TeacherNotificationsScreen> {
   List<PersistentNotification>? _items;
   String? _error;
+  StreamSubscription<PushMessage>? _pushes;
 
   @override
   void initState() {
     super.initState();
     _load();
+    // Pushes received while the inbox is open appear without a refresh.
+    _pushes = PushNotifications.received.listen((_) => _load());
+  }
+
+  @override
+  void dispose() {
+    _pushes?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() => _error = null);
     try {
       final response = await ApiClient.instance.dio.get<dynamic>(
@@ -78,7 +92,7 @@ class _TeacherNotificationsScreenState
               ),
             ]),
             const Text(
-                'Meeting requests, messages, class updates and institution announcements appear here.'),
+                'Calendar events, meeting requests, messages, class updates and institution announcements appear here.'),
             const SizedBox(height: 16),
             if (items == null && _error == null)
               const Center(child: CircularProgressIndicator())
@@ -110,11 +124,11 @@ class _TeacherNotificationsScreenState
                       ? Theme.of(context).colorScheme.primaryContainer
                       : null,
                   child: ListTile(
-                    leading: Icon(item.unread
-                        ? Icons.notifications_active
-                        : Icons.notifications_none),
+                    leading: Icon(notificationCategoryIcon(item.category,
+                        unread: item.unread)),
                     title: Text(item.title),
-                    subtitle: Text('${item.body}\n${item.createdAt}'),
+                    subtitle: Text(
+                        '${item.body}\n${formatNotificationTime(item.createdAt)}'),
                     isThreeLine: true,
                     onTap: () async {
                       await _markRead(item);

@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:tms_mobile/core/notifications/push_notification_service.dart';
 import 'package:tms_mobile/features/teacher/data/teacher_portal_repository.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_portal_dto.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_navigation.dart';
@@ -12,13 +15,26 @@ class TeacherCalendarScreen extends StatefulWidget {
 
 class _TeacherCalendarScreenState extends State<TeacherCalendarScreen> {
   late Future<List<TeacherAcademicEvent>> _events;
+  StreamSubscription<PushMessage>? _pushes;
+
   @override
   void initState() {
     super.initState();
     _events = TeacherPortalRepository().fetchCalendar();
+    // A newly published event appears while the calendar is open.
+    _pushes = PushNotifications.received
+        .where((message) => message.data['category'] == 'CALENDAR')
+        .listen((_) => _refresh());
+  }
+
+  @override
+  void dispose() {
+    _pushes?.cancel();
+    super.dispose();
   }
 
   Future<void> _refresh() async {
+    if (!mounted) return;
     final next = TeacherPortalRepository().fetchCalendar();
     setState(() => _events = next);
     await next;

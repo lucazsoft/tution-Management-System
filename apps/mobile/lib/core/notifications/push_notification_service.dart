@@ -73,8 +73,18 @@ class PushNotificationService {
   final String _platform;
   final void Function(String deepLink)? _onDeepLink;
   final List<StreamSubscription<dynamic>> _subscriptions = [];
+  final StreamController<PushMessage> _received =
+      StreamController<PushMessage>.broadcast();
   String? _currentToken;
   bool _listenersStarted = false;
+
+  /// Pushes delivered while the app is in the foreground, so open screens can
+  /// refresh (e.g. a calendar showing a just-published event).
+  Stream<PushMessage> get received => _received.stream;
+
+  /// Forget the registered token so the next [initialize] binds this device
+  /// to the newly signed-in account even when FCM returns the same token.
+  void resetRegistration() => _currentToken = null;
 
   Future<void> initialize({required bool authenticated}) async {
     if (!authenticated) return;
@@ -87,6 +97,7 @@ class PushNotificationService {
     _subscriptions.add(_messaging.onTokenRefresh.listen(_registerSafely));
     _subscriptions.add(_messaging.onMessage.listen((message) {
       unawaited(_localNotifications.show(message));
+      _received.add(message);
     }));
     _subscriptions.add(_messaging.onMessageOpenedApp.listen(_openMessage));
     _openMessage(await _messaging.getInitialMessage());
@@ -142,6 +153,7 @@ class PushNotificationService {
     }
     _subscriptions.clear();
     _listenersStarted = false;
+    await _received.close();
   }
 }
 
@@ -149,21 +161,39 @@ class PushNotifications {
   PushNotifications._();
 
   static PushNotificationService? _service;
+  static StreamSubscription<PushMessage>? _forwarder;
+  static final StreamController<PushMessage> _received =
+      StreamController<PushMessage>.broadcast();
+  static String? _sessionUserId;
   static void Function(String deepLink)? deepLinkHandler;
 
+  /// Foreground pushes for the signed-in session.
+  static Stream<PushMessage> get received => _received.stream;
+
   static void install(PushNotificationService? service) {
+    unawaited(_forwarder?.cancel());
     _service = service;
+    _forwarder = service?.received.listen(_received.add);
   }
 
-  static Future<void> startAuthenticatedSession() async {
+  /// Registers this device for [userId]. Safe to call repeatedly; switching
+  /// accounts re-binds the device token to the new user.
+  static Future<void> startAuthenticatedSession([String? userId]) async {
+    final service = _service;
+    if (service == null) return;
+    if (userId != null && userId != _sessionUserId) {
+      service.resetRegistration();
+      _sessionUserId = userId;
+    }
     try {
-      await _service?.initialize(authenticated: true);
+      await service.initialize(authenticated: true);
     } catch (_) {
       // Push setup must never block an otherwise valid authenticated session.
     }
   }
 
   static Future<void> unregisterForLogout() async {
+    _sessionUserId = null;
     try {
       await _service?.unregisterForLogout();
     } catch (_) {

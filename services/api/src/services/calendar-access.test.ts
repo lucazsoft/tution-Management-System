@@ -46,30 +46,59 @@ async function main() {
   assert.ok(matches({ ...staffEvent, branchId: null }, unassigned));
 
   const originalStudent = prisma.student.findFirst;
+  const originalStudents = prisma.student.findMany;
   const originalClass = prisma.class.findMany;
   try {
+    const linked: Record<string, { classId: string; branchId: string }> = {
+      'linked-child': { classId: 'class-a', branchId: 'branch-a' },
+      'sibling': { classId: 'class-s', branchId: 'branch-s' },
+    };
+    prisma.student.findMany = (async (args: any) => {
+      assert.equal(args.where.user.tenantId, 'tenant-a');
+      assert.equal(args.where.studentParents.some.parent.userId, 'viewer');
+      assert.equal(args.where.studentParents.some.parent.user.tenantId, 'tenant-a');
+      const ids = args.where.id ? [args.where.id] : Object.keys(linked);
+      return ids.filter((id) => linked[id]).map((id) => ({ id, enrollments: [{ classId: linked[id].classId, class: { branchId: linked[id].branchId } }] }));
+    }) as any;
     prisma.student.findFirst = (async (args: any) => {
       assert.equal(args.where.user.tenantId, 'tenant-a');
-      if (args.where.studentParents) {
-        assert.equal(args.where.studentParents.some.parent.userId, 'viewer');
-        return args.where.id === 'linked-child' ? { enrollments: [{ classId: 'class-a', class: { branchId: 'branch-a' } }] } : null;
-      }
       assert.equal(args.where.userId, 'viewer');
       return { enrollments: [{ classId: 'class-a', class: { branchId: 'branch-a' } }] };
     }) as any;
+
+    // Parents see their child's branch/class plus tenant-wide events, for
+    // everyone, students-and-parents and parents-only audiences.
     const parent = await calendarAccessWhere(actor('Parent'), 'tenant-a', { studentId: 'linked-child' });
-    assert.deepEqual(parent, { tenantId: 'tenant-a', audience: 'ALL' });
-    assert.ok(matches({ ...event, audience: 'ALL' }, parent));
+    for (const audience of ['ALL', 'STUDENTS', 'PARENTS']) assert.ok(matches({ ...event, audience }, parent));
+    assert.ok(matches({ ...event, branchId: null, classId: null, audience: 'ALL' }, parent));
     assert.equal(matches({ ...event, audience: 'STAFF' }, parent), false);
-    assert.ok(matches({ ...event, classId: 'sibling-class', audience: 'ALL' }, parent));
+    assert.equal(matches({ ...event, classId: 'other-class', audience: 'ALL' }, parent), false);
+    assert.equal(matches({ ...event, branchId: 'branch-b', audience: 'ALL' }, parent), false);
     await assert.rejects(() => calendarAccessWhere(actor('Parent'), 'tenant-a', { studentId: 'unlinked-child' }), CalendarAccessError);
+    // Without a selected child, a parent sees every linked child's events.
+    const family = await calendarAccessWhere(actor('Parent'), 'tenant-a');
+    assert.ok(matches({ ...event, branchId: 'branch-s', classId: 'class-s', audience: 'PARENTS' }, family));
+    assert.ok(matches({ ...event, audience: 'PARENTS' }, family));
+
+    // Students see only their enrolled branch/class; a client branch hint is ignored.
     const own = await calendarAccessWhere(actor('Student'), 'tenant-a', { branchId: 'branch-b' });
-    assert.ok(matches({ ...event, branchId: 'branch-b', audience: 'ALL' }, own));
+    assert.ok(matches({ ...event, audience: 'STUDENTS' }, own));
+    assert.equal(matches({ ...event, branchId: 'branch-b', audience: 'ALL' }, own), false);
+    assert.equal(matches({ ...event, audience: 'PARENTS' }, own), false);
+
     prisma.class.findMany = (async (args: any) => { assert.equal(args.where.teacherId, 'viewer'); assert.equal(args.where.course.tenantId, 'tenant-a'); return [{ id: 'class-a', branchId: 'branch-a' }]; }) as any;
     const teacher = await calendarAccessWhere(actor('Teacher'), 'tenant-a');
     assert.ok(matches({ ...event, audience: 'ALL' }, teacher));
-    assert.ok(matches({ ...event, classId: 'unassigned-class', audience: 'ALL' }, teacher));
-  } finally { prisma.student.findFirst = originalStudent; prisma.class.findMany = originalClass; }
-  console.log('Calendar access checks passed: canonical institution timeline, parent linkage, and denied roles.');
+    assert.ok(matches({ ...event, audience: 'STAFF' }, teacher));
+    assert.equal(matches({ ...event, classId: 'unassigned-class', audience: 'ALL' }, teacher), false);
+    assert.equal(matches({ ...event, audience: 'PARENTS' }, teacher), false);
+
+    // A teacher who is also a parent sees the union of both scopes.
+    const both = { ...actor('Teacher'), roles: [...actor('Teacher').roles, ...actor('Parent').roles] };
+    const union = await calendarAccessWhere(both, 'tenant-a');
+    assert.ok(matches({ ...event, audience: 'STAFF' }, union));
+    assert.ok(matches({ ...event, branchId: 'branch-s', classId: 'class-s', audience: 'PARENTS' }, union));
+  } finally { prisma.student.findFirst = originalStudent; prisma.student.findMany = originalStudents; prisma.class.findMany = originalClass; }
+  console.log('Calendar access checks passed: branch/class/audience targeting, parent linkage, and denied roles.');
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });

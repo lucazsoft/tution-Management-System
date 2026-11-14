@@ -935,6 +935,18 @@ router.get('/me/student-portal', authMiddleware, async (req: TenantRequest, res:
           destination: '/student/attendance',
           unread: leave.updatedAt.getTime() >= Date.now() - 7 * 86400000,
         })),
+      ...calendarRows
+        .filter((event) => event.createdAt.getTime() >= Date.now() - 14 * 86400000 && event.endDate.getTime() >= Date.now())
+        .map((event) => ({
+          id: `event-${event.id}`,
+          title: `${eventKind(event.eventType)}: ${event.title}`,
+          message: `${formatDate(event.startDate)}${event.startDate.toDateString() === event.endDate.toDateString() ? '' : ` – ${formatDate(event.endDate)}`}${event.description ? `. ${event.description}` : ''}`,
+          time: formatDate(event.createdAt),
+          occurredAt: event.createdAt.toISOString(),
+          icon: 'event',
+          destination: '/student/calendar',
+          unread: true,
+        })),
       ...student.certificates.map((certificate) => ({
         id: `certificate-${certificate.id}`,
         title: 'Certificate issued',

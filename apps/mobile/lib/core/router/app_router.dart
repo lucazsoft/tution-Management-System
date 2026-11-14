@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tms_mobile/core/auth/role_codes.dart';
+import 'package:tms_mobile/core/notifications/push_notification_service.dart';
+import 'package:tms_mobile/features/parent/screens/parent_notifications_screen.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/features/auth/screens/login_screen.dart';
@@ -132,7 +134,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   ApiClient.onSessionInvalidated =
       () => ref.read(authProvider.notifier).forceLogout();
 
-  return GoRouter(
+  final router = GoRouter(
     initialLocation: '/auth-loading',
     debugLogDiagnostics: true,
     refreshListenable: authRefresh,
@@ -435,6 +437,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const ParentAppointmentsScreen(),
       ),
       GoRoute(
+          path: '/parent/notifications',
+          builder: (_, __) => const ParentNotificationsScreen()),
+      GoRoute(
           path: '/parent/notices',
           builder: (_, __) =>
               const NoticeBoardScreen(portal: NoticeBoardPortal.parent)),
@@ -534,4 +539,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
     ],
   );
+
+  // Tapping a push (or its in-app banner) opens the deep link it carries;
+  // the redirect guard above still enforces the role boundary.
+  // On a cold start the app may still be on the splash/login route, so the
+  // link replaces it instead of stacking on top.
+  PushNotifications.deepLinkHandler = (deepLink) {
+    final current = router.routerDelegate.currentConfiguration.uri.path;
+    if (current == '/auth-loading' || current == '/login') {
+      router.go(deepLink);
+    } else {
+      router.push(deepLink);
+    }
+  };
+  ref.onDispose(() => PushNotifications.deepLinkHandler = null);
+  return router;
 });

@@ -5,6 +5,7 @@ import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware, hasPermission } from '../middleware/auth';
 import { EventType } from '@tms/types';
 import { canAccessBranch, isTenantAdmin, managedBranchIds } from '../utils/access-control';
+import { notifyCalendarEventPublished } from '../services/calendar-event-notifications';
 
 const router = Router();
 
@@ -15,9 +16,8 @@ router.post(
   hasPermission('manage_branch_calendar'),
   async (req: TenantRequest, res: Response) => {
     const { title, description, eventType, startDate, endDate, branchId, classId } = req.body;
-    // Institution calendar entries are shared by default. Administrators may
-    // still record a narrower audience for reporting, but mobile calendars use
-    // one canonical institution timeline.
+    // Audience and branch/class targeting decide who sees the event on their
+    // calendar and who is notified when it is published.
     const audience = req.body.audience ?? 'ALL';
     if (!CALENDAR_AUDIENCES.includes(audience) || !['HOLIDAY', 'EXAM', 'EVENT', 'FEE_DUE'].includes(eventType)) return res.status(400).json({ error: 'Invalid event type or audience.' });
     if (!Number.isFinite(Date.parse(startDate)) || !Number.isFinite(Date.parse(endDate)) || Date.parse(endDate) < Date.parse(startDate)) return res.status(400).json({ error: 'Choose valid start and end dates.' });
@@ -52,7 +52,9 @@ router.post(
         },
       });
 
-      return res.status(201).json({ message: 'Academic event created successfully.', event });
+      // Delivery is fail-open: the event is saved even if notifying fails.
+      const notified = await notifyCalendarEventPublished(event, { actorId: req.user!.id });
+      return res.status(201).json({ message: 'Academic event created successfully.', event, notified });
     } catch (error: any) {
       return res.status(500).json({ error: 'Failed to create academic event.' });
     }

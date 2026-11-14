@@ -77,6 +77,39 @@ test('provider errors fail open without leaking device tokens', async () => {
   assert.equal(warnings[0]?.event, 'PUSH_DELIVERY_FAILED');
 });
 
+test('multi-user push uses one tenant-scoped token query and prunes dead tokens', async () => {
+  let query: any;
+  let pruned: any;
+  let delivered: string[] = [];
+  const service = createPushNotificationService({
+    tokenStore: {
+      findMany: async (args: any) => { query = args; return [{ token: 'live' }, { token: 'dead' }, { token: 'live' }]; },
+      deleteMany: async (args: any) => { pruned = args; return { count: 1 }; },
+    },
+    provider: {
+      send: async (tokens) => { delivered = tokens; return { successCount: 1, failureCount: 1, invalidTokens: ['dead'] }; },
+    },
+    logger: { warn: () => undefined },
+  });
+
+  const result = await service.sendPushToUsers('tenant-a', ['u1', 'u2', 'u1'], 'Exam: Finals', 'Mon', { deepLink: '/student/calendar' });
+  assert.deepEqual(query, { where: { tenantId: 'tenant-a', userId: { in: ['u1', 'u2'] } }, select: { token: true } });
+  assert.deepEqual(delivered, ['live', 'dead']);
+  assert.deepEqual(pruned, { where: { tenantId: 'tenant-a', token: { in: ['dead'] } } });
+  assert.deepEqual(result, { success: false, sent: 1, failed: 1 });
+});
+
+test('multi-user push with no recipients does not query tokens', async () => {
+  let queried = false;
+  const service = createPushNotificationService({
+    tokenStore: { findMany: async () => { queried = true; return []; } },
+    provider: null,
+    logger: { warn: () => undefined },
+  });
+  assert.deepEqual(await service.sendPushToUsers('tenant-a', [], 'T', 'B'), { success: true, sent: 0, failed: 0, skipped: true });
+  assert.equal(queried, false);
+});
+
 test('Firebase provider is created only with complete credentials', async () => {
   assert.equal(createConfiguredFirebaseProvider({}), null);
   assert.equal(createConfiguredFirebaseProvider({ FIREBASE_PROJECT_ID: 'project-only' }), null);
