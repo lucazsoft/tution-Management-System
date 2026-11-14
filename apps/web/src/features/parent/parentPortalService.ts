@@ -1,5 +1,5 @@
 import { API_BASE_URL, request } from '../../services/api/client';
-import type { NepalPayPayload, ParentPortalDataset } from './parentPortalTypes';
+import type { ParentPortalDataset } from './parentPortalTypes';
 
 export function loadParentPortal(studentId?: string): Promise<ParentPortalDataset> {
   const query = studentId ? `?studentId=${encodeURIComponent(studentId)}` : '';
@@ -44,9 +44,6 @@ export function requestStudentLeave(input: {
   return request('/leaves/request', { method: 'POST', body: JSON.stringify(input) });
 }
 
-export function loadParentNepalPayQr(invoiceId: string): Promise<NepalPayPayload> {
-  return request<NepalPayPayload>(`/finances/nepalpay-qr/${encodeURIComponent(invoiceId)}`);
-}
 
 export function parentFileUrl(path: string) {
   return path.startsWith('/') ? `${API_BASE_URL}${path}` : path;

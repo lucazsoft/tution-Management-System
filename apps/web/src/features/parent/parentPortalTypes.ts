@@ -194,17 +194,6 @@ export interface ParentPortalDataset {
   syllabi?: ParentSyllabus[];
 }
 
-export interface NepalPayPayload {
-  invoiceId: string;
-  merchantName: string;
-  merchantCity: string;
-  amount: number;
-  currency: string;
-  currencyCode: string;
-  studentName: string;
-  qrString: string;
-}
-
 export interface ParentSyllabusTopicLog {
   id: string;
   status: string;

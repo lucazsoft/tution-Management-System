@@ -348,7 +348,6 @@ export const api = {
         invoices: Array<{ id: string; invoiceType: 'ADMISSION' | 'TUITION' | 'SUBJECT' | 'ACTIVITY'; institutionName: string; panNumber: string; vatRate: number; studentName: string; admissionNumber: string | null; gradeName: string | null; branchName: string | null; issuedAt: string; transactionId: string | null; lines: Array<{ label: string; amount: number }>; discount: number; fine: number; netPayable: number; status: string; overdue: boolean; dueDate: string; billingCycleStart: string; billingCycleEnd: string; paymentDate: string | null }>;
       }>(`/finances/students/${studentId}/invoices`);
     },
-    getNepalPayQr: async (invoiceId: string) => request<{ invoiceId: string; merchantName: string; merchantCity: string; amount: number; currency: string; studentName: string; qrString: string }>(`/finances/nepalpay-qr/${encodeURIComponent(invoiceId)}`),
     payInvoice: async (invoiceId: string, transactionId?: string) => {
       return request<{
         message: string;
