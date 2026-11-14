@@ -12,6 +12,7 @@ import 'package:tms_mobile/core/sync/sync.dart';
 
 import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_portal_dto.dart';
+import 'package:tms_mobile/features/teacher/screens/teacher_class_detail_screen.dart';
 import 'package:tms_mobile/features/teacher/viewmodels/teacher_portal_viewmodel.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_record_states.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_navigation.dart';
@@ -123,7 +124,7 @@ class _TeacherTimetableScreenState extends ConsumerState<TeacherTimetableScreen>
     return TabBarView(
       controller: _tabController,
       children: [
-        _TodayList(today: workspace.todayClasses),
+        _TodayList(today: workspace.todayClasses, classes: workspace.classes),
         for (final day in _days) _DayList(day: day, classes: workspace.classes),
       ],
     );
@@ -131,9 +132,10 @@ class _TeacherTimetableScreenState extends ConsumerState<TeacherTimetableScreen>
 }
 
 class _TodayList extends StatelessWidget {
-  const _TodayList({required this.today});
+  const _TodayList({required this.today, required this.classes});
 
   final List<TeacherTodayClass> today;
+  final List<TeacherClassInfo> classes;
 
   @override
   Widget build(BuildContext context) {
@@ -164,6 +166,7 @@ class _TodayList extends StatelessWidget {
           meta: row.slot?.timeLabel ?? item.scheduleLabel ?? item.status ?? '',
           trailing:
               item.dailyUpdateSubmitted ? 'Update sent' : 'Update pending',
+          onTap: _classOpener(context, _classById(classes, item.classId)),
         );
       },
     );
@@ -239,6 +242,7 @@ class _DayList extends StatelessWidget {
               '${session.name}${session.branch == null ? '' : ' • ${session.branch!.name}'}',
           meta: row.slot.timeLabel,
           trailing: '${session.studentCount} students',
+          onTap: _classOpener(context, session),
         );
       },
     );
@@ -296,12 +300,30 @@ int _compareSlotTimes(TeacherScheduleSlot? a, TeacherScheduleSlot? b) {
 String _teacherDayKey(int weekday) =>
     const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][weekday - 1];
 
+TeacherClassInfo? _classById(List<TeacherClassInfo> classes, String id) {
+  for (final klass in classes) {
+    if (klass.id == id) return klass;
+  }
+  return null;
+}
+
+/// Opens the class hub, the same screen the Classes tab opens.
+VoidCallback? _classOpener(BuildContext context, TeacherClassInfo? klass) {
+  if (klass == null) return null;
+  return () => Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => TeacherClassDetailScreen(klass: klass),
+        ),
+      );
+}
+
 class _TimetableCard extends StatelessWidget {
   const _TimetableCard({
     required this.title,
     required this.subtitle,
     required this.meta,
     required this.trailing,
+    this.onTap,
   });
 
   final String title;
@@ -309,54 +331,61 @@ class _TimetableCard extends StatelessWidget {
   final String meta;
   final String trailing;
 
+  /// Opens the class hub; null when the class is not in the workspace.
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              width: 4,
-              height: 56,
-              decoration: BoxDecoration(
-                color: kColorAccent,
-                borderRadius: BorderRadius.circular(TmsRadius.r2),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  Text(subtitle),
-                  if (meta.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(meta, style: Theme.of(context).textTheme.bodySmall),
-                  ],
-                ],
-              ),
-            ),
-            Flexible(
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 4,
+                height: 56,
                 decoration: BoxDecoration(
-                  color: kColorPrimary.withValues(alpha: .08),
-                  borderRadius: BorderRadius.circular(20),
+                  color: kColorAccent,
+                  borderRadius: BorderRadius.circular(TmsRadius.r2),
                 ),
-                child: Text(trailing,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelSmall
-                        ?.copyWith(color: kColorPrimary)),
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 4),
+                    Text(subtitle),
+                    if (meta.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(meta, style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ],
+                ),
+              ),
+              Flexible(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: kColorPrimary.withValues(alpha: .08),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(trailing,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context)
+                          .textTheme
+                          .labelSmall
+                          ?.copyWith(color: kColorPrimary)),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

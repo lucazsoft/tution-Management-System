@@ -106,4 +106,22 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Messages page'), findsOneWidget);
   });
+
+  testWidgets('Classes opens the class list, not the timetable',
+      (tester) async {
+    await pumpPortal(tester);
+    router.go('/teacher/leave');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.descendant(
+      of: find.byType(NavigationBar),
+      matching: find.text('Classes'),
+    ));
+    await tester.pumpAndSettle();
+
+    final uri = router.routeInformationProvider.value.uri;
+    expect(uri.path, '/teacher/home');
+    expect(uri.queryParameters['tab'], 'classes');
+    expect(find.text('Timetable page'), findsNothing);
+  });
 }

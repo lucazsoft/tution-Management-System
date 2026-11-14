@@ -89,9 +89,8 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
         onDestinationSelected: (i) {
           if (i == 2) {
             context.go('/teacher/messages');
-          } else if (i == 3) {
-            context.go('/teacher/timetable');
           } else {
+            // Home, Attendance, Classes and More are tabs of this screen.
             setState(() => _tab = i < 2 ? i : i - 1);
           }
         },

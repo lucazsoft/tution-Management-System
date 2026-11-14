@@ -62,9 +62,9 @@ abstract final class TeacherNavigation {
     final section = sections[index];
     if (section == 'messages') {
       context.go('/teacher/messages');
-    } else if (section == 'classes') {
-      context.go('/teacher/timetable');
     } else {
+      // Classes opens the class list (and from there each class hub); the
+      // timetable stays one tap away from that list and in the drawer.
       context.go(
           section == 'home' ? '/teacher/home' : '/teacher/home?tab=$section');
     }
