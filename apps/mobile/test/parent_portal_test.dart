@@ -841,6 +841,12 @@ void main() {
       _FakeParentPortalRepository(),
     );
 
+    // The screen defaults to the current month; the fixture records are
+    // fixed in Sep 2026, so view all records to keep this independent of
+    // the date the suite runs on.
+    await tester.tap(find.text('All'));
+    await tester.pumpAndSettle();
+
     expect(find.text('6 Sep 2026'), findsOneWidget);
     expect(find.textContaining('Morning API Class'), findsOneWidget);
     expect(find.text('Fri, Jul 18'), findsNothing);

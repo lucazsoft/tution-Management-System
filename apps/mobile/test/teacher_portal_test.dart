@@ -564,14 +564,16 @@ void main() {
       );
       await tester.binding.setSurfaceSize(const Size(420, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
+      // Since 0af1459 the bottom-bar "Classes" item routes to the timetable
+      // via GoRouter, so open the in-home Classes tab (/teacher/home?tab=classes)
+      // directly to cover the class detail hub.
       await _pumpWithRepository(
         tester,
-        const TeacherHomeScreen(),
+        const TeacherHomeScreen(initialTab: 2),
         repository,
       );
-
-      await tester.tap(find.byType(NavigationDestination).at(3));
       await tester.pumpAndSettle();
+
       await tester.tap(find.text('Grade 8 - A'));
       await tester.pumpAndSettle();
 
@@ -656,6 +658,20 @@ void main() {
         'endTime': '14:00',
         'subject': 'Geometry workshop',
       });
+      // The Today tab matches slots against the real weekday, so schedule
+      // today's class on whatever day the suite runs.
+      final todayClass = (body['todayClasses']! as List<dynamic>).single
+          as Map<String, dynamic>;
+      ((todayClass['schedule']! as List<dynamic>).single
+          as Map<String, dynamic>)['day'] = const [
+        'Monday',
+        'Tuesday',
+        'Wednesday',
+        'Thursday',
+        'Friday',
+        'Saturday',
+        'Sunday',
+      ][DateTime.now().weekday - 1];
       final repository = _FakeRepository(
         workspaces: [TeacherWorkspace.fromJson(body)],
       );

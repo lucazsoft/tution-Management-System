@@ -138,6 +138,7 @@ class StudentHomeScreen extends ConsumerWidget {
         const NepalDateTimeHeader(),
         const SizedBox(height: TmsSpace.lg),
         _buildWelcomeCard(context, portal),
+        ..._overdueBanner(context, portal),
         const SizedBox(height: TmsSpace.lg),
         _buildTimetableSection(context, portal),
         const SizedBox(height: TmsSpace.sm),
@@ -164,6 +165,7 @@ class StudentHomeScreen extends ConsumerWidget {
               const NepalDateTimeHeader(),
               const SizedBox(height: TmsSpace.lg),
               _buildWelcomeCard(context, portal),
+              ..._overdueBanner(context, portal),
               const SizedBox(height: TmsSpace.lg),
               _buildTimetableSection(context, portal),
               const SizedBox(height: TmsSpace.sm),
@@ -215,6 +217,7 @@ class StudentHomeScreen extends ConsumerWidget {
               const NepalDateTimeHeader(),
               const SizedBox(height: TmsSpace.lg),
               _buildWelcomeCard(context, portal),
+              ..._overdueBanner(context, portal),
               const SizedBox(height: TmsSpace.lg),
               _buildTimetableSection(context, portal),
               const SizedBox(height: TmsSpace.sm),
@@ -300,6 +303,55 @@ class StudentHomeScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  /// Overdue fees banner shown under the welcome card on every layout.
+  /// Restored after the Sep 2026 home redesign dropped it.
+  List<Widget> _overdueBanner(BuildContext context, StudentPortal portal) {
+    final overdue = portal.overdueAmount;
+    if (overdue <= 0) return const [];
+    final blocked = portal.profile.blocked;
+    return [
+      const SizedBox(height: TmsSpace.lg),
+      Card(
+        color: StudentColors.error.withValues(alpha: .06),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(TmsRadius.card),
+          onTap: () => context.push('/student/fees'),
+          child: Padding(
+            padding: const EdgeInsets.all(TmsSpace.md),
+            child: Row(
+              children: [
+                Icon(
+                  blocked ? Icons.lock_rounded : Icons.error_outline_rounded,
+                  color: StudentColors.error,
+                ),
+                const SizedBox(width: TmsSpace.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        blocked ? 'Blocked — fee dues' : 'Fee dues overdue',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(color: StudentColors.error),
+                      ),
+                      const SizedBox(height: TmsSpace.xxs),
+                      Text(
+                        'NPR ${overdue.toStringAsFixed(0)} is overdue. View what is owed and the payment QR.',
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ];
   }
 
   Widget _buildTimetableSection(BuildContext context, StudentPortal portal) {
