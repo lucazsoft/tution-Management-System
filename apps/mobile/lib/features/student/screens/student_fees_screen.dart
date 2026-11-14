@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart' as url_launcher;
 
 import '../data/student_fees_models.dart';
 import '../student_design.dart';
 import '../viewmodels/student_fees_viewmodel.dart';
 import '../widgets/student_scaffold.dart';
-import '../widgets/invoice_payment_settings_sheet.dart';
 import 'package:tms_mobile/core/providers/feature_flags_provider.dart';
+import 'package:tms_mobile/shared/payments/invoice_payment_sheet.dart';
 
 /// Injectable gateway launcher so widget tests can substitute a fake
 /// instead of calling url_launcher directly.
@@ -139,91 +137,17 @@ class StudentFeesScreen extends ConsumerWidget {
       current: current,
       onSelect: viewModel.selectInvoice,
       onRefresh: viewModel.refresh,
-      onShowQr: () {
-        showModalBottomSheet<void>(
-          context: context,
-          showDragHandle: true,
-          isScrollControlled: true,
-          builder: (context) => InvoicePaymentSettingsSheet(
-            invoiceId: current.id,
-            onConnectIps: viewModel.startPayment,
-          ),
-        );
-      },
-      onStartPayment: viewModel.startPayment,
+      onShowQr: () => showInvoicePaymentSheet(
+        context,
+        invoiceId: current.id,
+        amount: current.netPayable,
+        title: 'Pay ${current.cycle}',
+        subtitle: 'Reference ${current.paymentReference ?? current.id}',
+        onConnectIps: viewModel.startPayment,
+        onSubmitted: viewModel.refresh,
+      ),
       onConfirmReturn: viewModel.confirmReturn,
       onDismissNotice: viewModel.dismissNotice,
-    );
-  }
-}
-
-/// Bottom-sheet content rendering the NepalPay payload as a scannable QR
-/// code, keeping the amount/merchant/reference text and the copy-payload
-/// fallback. An empty payload shows a message instead of a broken code.
-class NepalPayQrSheet extends StatelessWidget {
-  const NepalPayQrSheet({super.key, required this.qr, required this.invoice});
-
-  final NepalPayQr qr;
-  final ApiStudentInvoice invoice;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('Nepal Pay', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: TmsSpace.xs),
-          Text('Scan to pay NPR ${qr.amount.toStringAsFixed(0)}'),
-          const SizedBox(height: TmsSpace.lg),
-          Container(
-            width: 220,
-            alignment: Alignment.center,
-            padding: const EdgeInsets.all(TmsSpace.md),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: StudentColors.border),
-              borderRadius: BorderRadius.circular(TmsRadius.card),
-            ),
-            child: qr.qrString.isEmpty
-                ? SelectableText(
-                    'QR payload unavailable',
-                    style: Theme.of(context).textTheme.bodySmall,
-                    textAlign: TextAlign.center,
-                  )
-                : QrImageView(
-                    data: qr.qrString,
-                    version: QrVersions.auto,
-                    size: 200,
-                    semanticsLabel:
-                        'NepalPay QR for NPR ${qr.amount.toStringAsFixed(0)}',
-                  ),
-          ),
-          const SizedBox(height: TmsSpace.md),
-          Text(
-            '${qr.merchantName} · Ref ${invoice.paymentReference ?? invoice.id}',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: TmsSpace.xs),
-          Text(
-            'Verify the merchant and amount in your payment app before confirming.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: TmsSpace.md),
-          OutlinedButton.icon(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: qr.qrString));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('QR payload copied.')),
-              );
-            },
-            icon: const Icon(Icons.copy_rounded),
-            label: const Text('Copy payload'),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -277,7 +201,6 @@ class _StudentFeesContent extends StatelessWidget {
     required this.onSelect,
     required this.onRefresh,
     required this.onShowQr,
-    required this.onStartPayment,
     required this.onConfirmReturn,
     required this.onDismissNotice,
   });
@@ -287,7 +210,6 @@ class _StudentFeesContent extends StatelessWidget {
   final ValueChanged<String> onSelect;
   final VoidCallback onRefresh;
   final VoidCallback onShowQr;
-  final VoidCallback onStartPayment;
   final ValueChanged<String> onConfirmReturn;
   final VoidCallback onDismissNotice;
 
@@ -497,39 +419,10 @@ class _StudentFeesContent extends StatelessWidget {
                                 BorderRadius.circular(TmsRadius.control),
                           ),
                         ),
-                        onPressed: state.isQrLoading || !current.qrAvailable
-                            ? null
-                            : onShowQr,
-                        icon: state.isQrLoading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.qr_code_2_rounded),
-                        label: Text(current.qrAvailable
-                            ? 'Show payment instructions'
-                            : 'Already paid'),
-                      ),
-                    ),
-                    const SizedBox(height: TmsSpace.sm),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: state.isHandoffLoading ||
-                                current.state == ApiFeeState.paid
-                            ? null
-                            : onStartPayment,
-                        icon: state.isHandoffLoading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.account_balance_rounded),
-                        label: const Text('Pay with connectIPS'),
+                        onPressed: current.qrAvailable ? onShowQr : null,
+                        icon: const Icon(Icons.qr_code_2_rounded),
+                        label: Text(
+                            current.qrAvailable ? 'Pay with QR' : 'Already paid'),
                       ),
                     ),
                   ],

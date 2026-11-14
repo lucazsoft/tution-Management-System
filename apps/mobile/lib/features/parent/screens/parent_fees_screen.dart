@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tms_mobile/core/theme/app_colors.dart';
 import 'package:tms_mobile/features/parent/models/parent_portal.dart';
+import 'package:tms_mobile/features/parent/viewmodels/parent_portal_viewmodel.dart';
 import 'package:tms_mobile/features/parent/widgets/child_switcher_bar.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_navigation.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_portal_state_view.dart';
 import 'package:tms_mobile/shared/models/app_models.dart';
+import 'package:tms_mobile/shared/payments/invoice_payment_sheet.dart';
 import 'package:tms_mobile/shared/widgets/status_chip.dart';
 
 class ParentFeesScreen extends ConsumerWidget {
@@ -100,7 +102,11 @@ class ParentFeesScreen extends ConsumerWidget {
                   )
                 else
                   for (final invoice in portal.invoices) ...[
-                    _InvoiceCard(invoice: invoice),
+                    _InvoiceCard(
+                      invoice: invoice,
+                      childName: child.name,
+                      onPaid: () => ref.read(parentPortalProvider.notifier).refresh(),
+                    ),
                     const SizedBox(height: 12),
                   ],
               ],
@@ -113,9 +119,17 @@ class ParentFeesScreen extends ConsumerWidget {
 }
 
 class _InvoiceCard extends StatelessWidget {
-  const _InvoiceCard({required this.invoice});
+  const _InvoiceCard({
+    required this.invoice,
+    required this.childName,
+    required this.onPaid,
+  });
 
   final ParentInvoice invoice;
+  final String childName;
+
+  /// Refreshes the portal after a receipt is submitted.
+  final VoidCallback onPaid;
 
   @override
   Widget build(BuildContext context) => Card(
@@ -168,16 +182,17 @@ class _InvoiceCard extends StatelessWidget {
             ],
             if (invoice.qrAvailable && !invoice.isPaid) ...[
               const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Online payment handoff is not available in this build.',
-                    ),
-                  ),
+              FilledButton.icon(
+                onPressed: () => showInvoicePaymentSheet(
+                  context,
+                  invoiceId: invoice.id,
+                  amount: invoice.netPayable,
+                  title: 'Pay ${invoice.cycle}',
+                  subtitle: '$childName · Reference ${invoice.reference}',
+                  onSubmitted: onPaid,
                 ),
-                icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                label: const Text('Online payment'),
+                icon: const Icon(Icons.qr_code_2_rounded, size: 18),
+                label: const Text('Pay with QR'),
               ),
             ],
           ],

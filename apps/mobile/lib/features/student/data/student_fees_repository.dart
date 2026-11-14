@@ -1,12 +1,11 @@
-/// API-backed repository for student invoices, blocked status, NepalPay QR,
-/// and the connectIPS handoff + server-verified return flow.
+/// API-backed repository for student invoices, blocked status and the
+/// connectIPS handoff + server-verified return flow.
 ///
 /// Verified server contracts (read-only, services/api/src):
 /// - `GET /api/users/me/student-portal` (auth, session cookie) →
 ///   `studentProfile { blocked, outstanding, enrollmentId }`, `invoices[]`
 /// - `GET /api/finances/students/:studentId/invoices` (auth) → `invoices[]`
 ///   with `status`, `overdue`, `dueDate`, amounts
-/// - `GET /api/finances/nepalpay-qr/:invoiceId` (auth) → QR payload
 /// - `POST /api/finances/connectips/initiate/:invoiceId` (auth) →
 ///   `{ payment, gatewayUrl, fields }`
 /// - `GET /api/finances/connectips/status/:txnId` (auth) → verified status
@@ -14,6 +13,9 @@
 /// Missing on the server (typed [ApiException] + TODO, never demo data):
 /// - TODO(api): no dedicated single-invoice GET — detail is resolved from
 ///   the fetched invoice list via [invoiceDetail].
+///
+/// The branch payment QR and receipt submission live in
+/// `shared/payments/invoice_payment_repository.dart`.
 library;
 
 import 'package:dio/dio.dart';
@@ -28,29 +30,6 @@ class StudentFeesRepository {
   StudentFeesRepository({Dio? dio}) : _dio = dio ?? ApiClient.instance.dio;
 
   final Dio _dio;
-
-  /// Payment instructions are scoped by the authorized invoice's branch.
-  Future<Map<String, dynamic>> fetchPaymentSettings(String invoiceId) async {
-    for (var attempt = 0;; attempt++) {
-      try {
-        final response = await _dio.get<Map<String, dynamic>>(
-          '/api/finances/invoices/${Uri.encodeComponent(invoiceId)}/payment-settings',
-        );
-        return response.data ?? const {};
-      } on DioException catch (error) {
-        if (attempt >= 2 ||
-            ![
-              DioExceptionType.connectionError,
-              DioExceptionType.connectionTimeout,
-              DioExceptionType.receiveTimeout,
-            ].contains(error.type)) {
-          throw ApiException.from(error);
-        }
-        await Future<void>.delayed(
-            Duration(milliseconds: 300 * (1 << attempt)));
-      }
-    }
-  }
 
   List<ApiStudentInvoice> _cache = const [];
   String? _enrollmentId;
@@ -138,22 +117,6 @@ class StudentFeesRepository {
       kind: ApiErrorKind.notFound,
       message: 'Invoice not found. Refresh the list and try again.',
     );
-  }
-
-  /// NepalPay QR payload for one invoice.
-  Future<NepalPayQr> fetchNepalPayQr(
-    String invoiceId, {
-    CancelToken? cancelToken,
-  }) async {
-    try {
-      final res = await _dio.get<Map<String, dynamic>>(
-        '/api/finances/nepalpay-qr/$invoiceId',
-        cancelToken: cancelToken,
-      );
-      return NepalPayQr.fromJson(res.data ?? const {});
-    } on DioException catch (e) {
-      throw ApiException.from(e);
-    }
   }
 
   /// Starts a connectIPS payment; returns the handoff (post `fields` to
