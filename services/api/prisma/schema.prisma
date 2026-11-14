@@ -958,6 +958,20 @@ model Leave {
   @@index([tenantId, status])
 }
 
+// One row per manual automation run from the Control Center (reminders and
+// alerts), so admins can see when each last ran and duplicate SMS blasts can be
+// refused within a cooldown.
+model AutomationRun {
+  id          String   @id @default(uuid())
+  tenantId    String
+  taskName    String
+  startedById String
+  summary     String
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, taskName, createdAt])
+}
+
 // Append-only audit trail of every leave decision.
 model LeaveDecision {
   id        String   @id @default(uuid())

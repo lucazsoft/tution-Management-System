@@ -1,0 +1,27 @@
+.reminder-center { display: grid; gap: 14px; }
+.reminder-center__intro { color: var(--text-muted); font-size: 14px; }
+.reminder-center__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 14px; }
+
+.reminder-card { display: grid; gap: 10px; align-content: start; height: 100%; }
+.reminder-card__head { display: flex; align-items: flex-start; gap: 12px; }
+.reminder-card__head h3 { font-size: 16px; margin-bottom: 4px; }
+.reminder-card__icon { display: grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 12px; background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); }
+.reminder-card__text { color: var(--text-muted); font-size: 13px; }
+
+.reminder-card__preview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.reminder-card__preview dt { color: var(--text-muted); font-size: 11px; font-weight: 700; }
+.reminder-card__preview dd { margin: 2px 0 0; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.reminder-card__gap { grid-column: 1 / -1; }
+.reminder-card__gap dd { font-weight: 500; font-size: 12px; color: var(--color-warning, #b26a00); }
+
+.reminder-card__last { font-size: 12px; font-weight: 700; color: var(--color-text); }
+.reminder-card__summary, .reminder-card__result { font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+.reminder-card__result { color: var(--color-success, #1b7f3b); }
+
+.reminder-card__confirm { display: grid; gap: 10px; padding: 12px; border: 1px solid color-mix(in srgb, var(--color-error) 40%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--color-error) 6%, transparent); }
+.reminder-card__confirm p { font-size: 13px; font-weight: 600; }
+.reminder-card__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; }
+
+@media (max-width: 480px) {
+  .reminder-card__preview { grid-template-columns: 1fr 1fr; }
+}

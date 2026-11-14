@@ -54,7 +54,7 @@
     "admissions:recover": "ts-node src/scripts/recover-admission-deliveries.ts",
     "test:phone-link": "ts-node src/services/phone-linked-logins.test.ts",
     "test:tenant-admin:integration": "ts-node src/integration/tenant-admin.integration.test.ts",
-    "test:leaves": "ts-node src/services/leave-routing.test.ts && ts-node src/routes/leaves.test.ts && ts-node src/services/emergency-departure.test.ts && ts-node src/routes/emergency-departure.test.ts && ts-node src/services/fee-reminders.test.ts"
+    "test:leaves": "ts-node src/services/leave-routing.test.ts && ts-node src/routes/leaves.test.ts && ts-node src/services/emergency-departure.test.ts && ts-node src/routes/emergency-departure.test.ts && ts-node src/services/fee-reminders.test.ts && ts-node src/routes/cron-automation.test.ts"
   },
   "prisma": {
     "seed": "node prisma/seed-runner.cjs"
