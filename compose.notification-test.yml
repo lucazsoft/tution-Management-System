@@ -1,0 +1,165 @@
+# Private no-send validation only. Managed by Coolify.
+# No public routes, published ports, production data, or outbound runtime network.
+name: tms-notification-private-test
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: tms_notification_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_64_TESTDB}
+    expose:
+    - '5432'
+    volumes:
+    - tms_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U postgres -d tms_notification_test
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+    - notification_private
+    cpus: '0.75'
+    mem_limit: 512m
+    pids_limit: 160
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+    restart: unless-stopped
+  migrate:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://postgres:${SERVICE_PASSWORD_64_TESTDB}@db:5432/tms_notification_test?schema=public
+    command:
+    - npx
+    - prisma
+    - migrate
+    - deploy
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+    - notification_private
+    cpus: '0.75'
+    mem_limit: 768m
+    pids_limit: 160
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+    restart: 'no'
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://postgres:${SERVICE_PASSWORD_64_TESTDB}@db:5432/tms_notification_test?schema=public
+      PORT: 3001
+      NODE_ENV: production
+      BETTER_AUTH_SECRET: ${SERVICE_PASSWORD_64_TESTAUTH}
+      BETTER_AUTH_URL: https://notification-test.invalid
+      WEB_ORIGIN: https://notification-test.invalid
+      PLATFORM_ADMIN_ENABLED: 'false'
+      PLATFORM_ADMIN_PRODUCTION_ACK: ''
+      PUSH_PROVIDER: DISABLED
+      FIREBASE_PROJECT_ID: ''
+      FIREBASE_CLIENT_EMAIL: ''
+      FIREBASE_PRIVATE_KEY: ''
+      PUSH_WEBHOOK_URL: ''
+      PUSH_WEBHOOK_TOKEN: ''
+      SMS_PROVIDER: DISABLED
+      AAKASH_SMS_AUTH_TOKEN: ''
+      NEPALPAY_WEBHOOK_SECRET: ${SERVICE_PASSWORD_64_TESTWEBHOOK}
+      LOGIN_EMAIL_DOMAIN: login.notification-test.invalid
+      TRUST_PROXY_HOPS: '0'
+      SEED_ADMIN_EMAIL: ''
+      SEED_ADMIN_PASSWORD: ''
+      SEED_ADMIN_2FA: 'false'
+      SEED_DEMO: 'false'
+      CONNECTIPS_ENABLED: 'false'
+      CONNECTIPS_ENVIRONMENT: ''
+      CONNECTIPS_PUBLIC_BASE_URL: ''
+      PAYMENT_FRONTEND_BASE_URL: ''
+      CONNECTIPS_MERCHANT_ID: ''
+      CONNECTIPS_APP_ID: ''
+      CONNECTIPS_APP_NAME: ''
+      CONNECTIPS_PFX_BASE64: ''
+      CONNECTIPS_PFX_PASSWORD: ''
+      CONNECTIPS_VALIDATE_PASSWORD: ''
+      CONNECTIPS_GATEWAY_URL: ''
+      CONNECTIPS_VALIDATE_URL: ''
+      STATIC_PAYMENT_QR_ENABLED: 'false'
+      STATIC_PAYMENT_QR_IMAGE_URL: ''
+      STATIC_PAYMENT_ACCOUNT_NAME: ''
+      STATIC_PAYMENT_ACCOUNT_NUMBER: ''
+      STATIC_PAYMENT_BANK_NAME: ''
+      STATIC_PAYMENT_INSTRUCTIONS: ''
+      NODE_OPTIONS: --max-old-space-size=512
+    expose:
+    - '3001'
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+      - CMD
+      - node
+      - -e
+      - fetch('http://localhost:3001/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+    - notification_private
+    cpus: '0.75'
+    mem_limit: 768m
+    pids_limit: 160
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+    restart: unless-stopped
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        TMS_API_BASE_URL: https://notification-test.invalid/api
+        TMS_FIREBASE_API_KEY: ''
+        TMS_FIREBASE_APP_ID: ''
+        TMS_FIREBASE_PROJECT_ID: ''
+        TMS_FIREBASE_MESSAGING_SENDER_ID: ''
+        TMS_FIREBASE_AUTH_DOMAIN: ''
+        TMS_FIREBASE_WEB_VAPID_KEY: ''
+    expose:
+    - '80'
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+    - notification_private
+    cpus: '0.25'
+    mem_limit: 128m
+    pids_limit: 160
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+    restart: unless-stopped
+volumes:
+  tms_postgres_data: null
+networks:
+  notification_private:
+    internal: true
