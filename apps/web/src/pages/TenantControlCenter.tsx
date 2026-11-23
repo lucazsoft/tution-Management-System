@@ -64,7 +64,7 @@ export function TenantControlCenter() {
   const [events, setEvents] = useState<AcademicEvent[]>([]);
   const [publishing, setPublishing] = useState(false);
   const [alerts, setAlerts] = useState<any[]>([]);
-  const [eventForm, setEventForm] = useState({ title: '', description: '', eventType: 'HOLIDAY' as EventType, audience: 'ALL' as EventAudience, classId: '', startDate: '', endDate: '' });
+  const [eventForm, setEventForm] = useState({ title: '', description: '', eventType: 'HOLIDAY' as EventType, audience: 'ALL' as EventAudience, branchId: '', classId: '', startDate: '', endDate: '' });
   const weightTotal = useMemo(() => Object.values(weights).reduce((sum, value) => sum + Number(value || 0), 0), [weights]);
 
   const load = async () => {
@@ -145,12 +145,13 @@ export function TenantControlCenter() {
       await academicEventsApi.createTenantWide({
         ...eventForm,
         title: eventForm.title.trim(),
+        branchId: eventForm.branchId || null,
         classId: eventForm.classId || null,
         startDate,
         endDate,
       });
       showToast('Event published to the selected audience.', 'success');
-      setEventForm({ title: '', description: '', eventType: 'HOLIDAY', audience: 'ALL', classId: '', startDate: '', endDate: '' });
+      setEventForm({ title: '', description: '', eventType: 'HOLIDAY', audience: 'ALL', branchId: '', classId: '', startDate: '', endDate: '' });
       await load();
       setTab('calendar');
     } catch (error) {
@@ -282,7 +283,7 @@ export function TenantControlCenter() {
         <Card hoverable={false}><h3>Publish institution event</h3><form onSubmit={(e) => void publishEvent(e)} style={{ display: 'grid', gap: 12, marginTop: 14 }}>
           <label style={label}>Title<input style={input} value={eventForm.title} onChange={(e) => setEventForm((old) => ({ ...old, title: e.target.value }))} required /></label>
           <label style={label}>Type<select style={input} value={eventForm.eventType} onChange={(e) => setEventForm((old) => ({ ...old, eventType: e.target.value as EventType }))}><option value="HOLIDAY">Holiday</option><option value="EXAM">Exam</option><option value="EVENT">Event</option><option value="FEE_DUE">Fee deadline</option></select></label>
-          <EventTargetFields onReadyChange={setTargetingReady} audience={eventForm.audience} classId={eventForm.classId} onAudienceChange={(audience) => setEventForm((old) => ({ ...old, audience }))} onClassChange={(classId) => setEventForm((old) => ({ ...old, classId }))} />
+          <EventTargetFields onReadyChange={setTargetingReady} audience={eventForm.audience} classId={eventForm.classId} targetBranchId={eventForm.branchId} onTargetBranchChange={(branchId) => setEventForm((old) => ({ ...old, branchId, classId: '' }))} onAudienceChange={(audience) => setEventForm((old) => ({ ...old, audience }))} onClassChange={(classId) => setEventForm((old) => ({ ...old, classId }))} />
           <NepaliDateTimeField label="Starts" value={eventForm.startDate} onChange={(startDate) => setEventForm((old) => ({ ...old, startDate }))} />
           <NepaliDateTimeField label="Ends" value={eventForm.endDate} onChange={(endDate) => setEventForm((old) => ({ ...old, endDate }))} />
           <label style={label}>Description<textarea style={input} value={eventForm.description} onChange={(e) => setEventForm((old) => ({ ...old, description: e.target.value }))} /></label>

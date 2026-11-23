@@ -23,9 +23,15 @@ async function invoke(method: string, path: string, body: any = {}, query: any =
 }
 async function main() {
   const findMany = prisma.class.findMany;
+  const branchFindMany = prisma.branch.findMany;
   const updateMany = prisma.academicEvent.updateMany;
   let writes = 0;
   try {
+    prisma.branch.findMany = (async ({ where }: any) => {
+      assert.equal(where.tenantId, 'tenant-a');
+      assert.deepEqual(where.id.in, ['branch-a'], 'branch admins only see their own branch as a target');
+      return [{ id: 'branch-a', name: 'Branch A' }];
+    }) as any;
     prisma.class.findMany = (async ({ where }: any) => {
       assert.equal(where.course.tenantId, 'tenant-a');
       assert.deepEqual(where.branchId.in, ['branch-a']);
@@ -38,7 +44,9 @@ async function main() {
       writes++; return { count: 1 };
     }) as any;
     assert.equal((await invoke('get', '/options')).status, 403);
-    assert.equal((await invoke('get', '/options', {}, { branchId: 'branch-a' })).payload.classes[0].id, 'class-a');
+    const options = (await invoke('get', '/options', {}, { branchId: 'branch-a' })).payload;
+    assert.equal(options.classes[0].id, 'class-a');
+    assert.deepEqual(options.branches, [{ id: 'branch-a', name: 'Branch A' }]);
     assert.equal((await invoke('get', '/options', {}, { branchId: 'branch-b' })).status, 403);
     assert.equal((await invoke('patch', '/:id/audience', { audience: 'ALL' })).status, 403);
     assert.equal((await invoke('patch', '/:id/audience', { audience: 'ALL', branchId: 'branch-a' })).status, 200);
@@ -55,6 +63,6 @@ async function main() {
     assert.equal((await invoke('get', '/options', {}, { branchId: 'branch-a' })).status, 401);
     assert.equal(writes, 1);
     console.log('Calendar route middleware checks passed: branch context, permissions, authentication, and resource scope.');
-  } finally { prisma.class.findMany = findMany; prisma.academicEvent.updateMany = updateMany; }
+  } finally { prisma.class.findMany = findMany; prisma.branch.findMany = branchFindMany; prisma.academicEvent.updateMany = updateMany; }
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });
