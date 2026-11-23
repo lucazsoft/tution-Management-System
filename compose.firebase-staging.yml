@@ -1,0 +1,11 @@
+# Use with compose.yml only after the reviewed staging release is approved.
+# Private key is generated on the host, never passed to build arguments.
+services:
+  api:
+    environment:
+      FIREBASE_PRIVATE_KEY_FILE: /run/secrets/tms_firebase_key
+    secrets:
+      - tms_firebase_key
+secrets:
+  tms_firebase_key:
+    file: /data/tms-firebase-staging/private.pem
