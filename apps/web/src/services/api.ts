@@ -3,6 +3,63 @@
 import { request } from './api/client';
 import { paymentSettingsApi } from './payment-settings';
 
+export type LeaveStatus = 'PENDING' | 'APPROVED_LEVEL1' | 'APPROVED_LEVEL2' | 'REJECTED' | 'CANCELLED';
+
+export interface LeaveDecisionRecord {
+  level: number;
+  action: 'APPROVE' | 'REJECT' | 'CANCEL';
+  actorName: string;
+  remarks: string | null;
+  escalated: boolean;
+  createdAt: string;
+}
+
+/** A leave request as returned by `GET /leaves`. */
+export interface LeaveRecord {
+  id: string;
+  staffName: string;
+  branchId: string;
+  branchName: string;
+  leaveType: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  status: LeaveStatus;
+  remarks: string | null;
+  approvedBy: string | null;
+  createdAt: string;
+  subjectType: 'STAFF' | 'STUDENT';
+  days: number;
+  requiredLevel: 1 | 2;
+  escalatesAt: string | null;
+  escalated: boolean;
+  /** Whether the signed-in user may approve or reject this request right now. */
+  canAct: boolean;
+  decisions: LeaveDecisionRecord[];
+}
+
+export interface LeaveQuery {
+  scope?: 'awaiting-me' | 'all';
+  branchId?: string;
+  status?: string;
+  leaveType?: string;
+  subjectType?: string;
+}
+
+export type ReminderTaskName =
+  | 'fee-reminder-sms'
+  | 'monthly-due-verification'
+  | 'leave-escalation'
+  | 'salary-reminder'
+  | 'financial-anomaly-alerts'
+  | 'task-escalation';
+
+export interface AutomationStatus {
+  tasks: Array<{ taskName: ReminderTaskName; lastRun: { at: string; by: string; summary: string } | null }>;
+  feeReminderPreview: { students: number; parentNumbers: number; withoutPhone: number; withoutGuardian: number; totalOverdue: number };
+  feeReminderCooldownHours: number;
+}
+
 export interface BillingInvoice {
   id: string; invoiceType: 'ADMISSION' | 'TUITION' | 'SUBJECT' | 'ACTIVITY'; amount: number; discount: number; fine: number;
   netPayable: number; status: string; overdue: boolean; billingCycleStart: string; billingCycleEnd: string; dueDate: string;
@@ -305,7 +362,6 @@ export const api = {
         invoices: Array<{ id: string; invoiceType: 'ADMISSION' | 'TUITION' | 'SUBJECT' | 'ACTIVITY'; institutionName: string; panNumber: string; vatRate: number; studentName: string; admissionNumber: string | null; gradeName: string | null; branchName: string | null; issuedAt: string; transactionId: string | null; lines: Array<{ label: string; amount: number }>; discount: number; fine: number; netPayable: number; status: string; overdue: boolean; dueDate: string; billingCycleStart: string; billingCycleEnd: string; paymentDate: string | null }>;
       }>(`/finances/students/${studentId}/invoices`);
     },
-    getNepalPayQr: async (invoiceId: string) => request<{ invoiceId: string; merchantName: string; merchantCity: string; amount: number; currency: string; studentName: string; qrString: string }>(`/finances/nepalpay-qr/${encodeURIComponent(invoiceId)}`),
     payInvoice: async (invoiceId: string, transactionId?: string) => {
       return request<{
         message: string;
@@ -366,6 +422,8 @@ export const api = {
     saveResultDraft: async (payload: any) => request<{ message: string; resultIds: string[] }>('/teacher/results', { method: 'POST', body: JSON.stringify(payload) }),
     shareResults: async (resultIds: string[]) => request<any>('/teacher/results/share', { method: 'POST', body: JSON.stringify({ resultIds }) }),
     deleteResultDraft: async (resultId: string) => request<void>(`/teacher/results/${encodeURIComponent(resultId)}`, { method: 'DELETE' }),
+    cancelLeave: async (leaveId: string) =>
+      request<{ message: string }>(`/leaves/${encodeURIComponent(leaveId)}/cancel`, { method: 'POST' }),
     requestLeave: async (payload: { branchId: string; leaveType: string; startDate: string; endDate: string; reason: string }) =>
       request<any>('/leaves/request', { method: 'POST', body: JSON.stringify(payload) }),
   },
@@ -401,6 +459,16 @@ export const api = {
   },
 
   // Tenant dashboard summary (students, teachers, dues, leaves, per-branch)
+  // Control Center reminders and alerts (Tenant Admin only).
+  automation: {
+    getStatus: async () => request<AutomationStatus>('/cron/automation'),
+    run: async (taskName: ReminderTaskName, force = false) =>
+      request<{ message: string; executionLogs: string[] }>('/cron/trigger', {
+        method: 'POST',
+        body: JSON.stringify({ taskName, ...(force ? { force: true } : {}) }),
+      }),
+  },
+
   tenant: {
     getDashboard: async () => {
       return request<{
@@ -408,6 +476,7 @@ export const api = {
         activeTeachersCount: number;
         totalOverdueAmountNpr: number;
         pendingLeaveRequestsCount: number;
+        leavesPendingAtBranchesCount?: number;
         branchSummary: Array<{ branchId: string; branchName: string; activeStudents: number; staffCount: number }>;
       }>('/tenant-admin/dashboard');
     },
@@ -474,7 +543,7 @@ export const api = {
         connections: { courses: string[]; teachers: string[]; parents: string[] };
       }>(`/users/${userId}/analytics`);
     },
-    update: async (userId: string, changes: { firstName?: string; lastName?: string; phone?: string; status?: string; gradeId?: string | null; contractType?: 'FIXED' | 'HOUR_RATE'; baseMonthlySalary?: number; hourlyRate?: number }) => {
+    update: async (userId: string, changes: { firstName?: string; lastName?: string; phone?: string; usesParentPhone?: boolean; status?: string; gradeId?: string | null; contractType?: 'FIXED' | 'HOUR_RATE'; baseMonthlySalary?: number; hourlyRate?: number }) => {
       return request<{ message: string; droppedEnrollments?: number }>(`/users/${userId}`, { method: 'PUT', body: JSON.stringify(changes) });
     },
     deactivate: async (userId: string) => {
@@ -679,9 +748,12 @@ export const api = {
       request<{ message: string }>(`/appointments/respond/${encodeURIComponent(appointmentId)}`, { method: 'POST', body: JSON.stringify(payload) }),
     decideLeave: async (leaveId: string, action: 'APPROVE' | 'REJECT', remarks?: string) =>
       request<{ message: string; leave: any }>(`/leaves/approve/${leaveId}`, { method: 'POST', body: JSON.stringify({ action, remarks }) }),
-    getLeaves: async (level: 'L1' | 'L2') => request<{ leaves: Array<{ id: string; staffName: string; branchId: string; branchName: string; leaveType: string; startDate: string; endDate: string; reason: string; status: string; remarks: string | null; approvedBy: string | null; createdAt: string }> }>(`/leaves?level=${level}`),
+    getLeaves: async (query: 'L1' | 'L2' | LeaveQuery) => {
+      const params = new URLSearchParams(typeof query === 'string' ? { level: query } : Object.entries(query).filter(([, value]) => Boolean(value)) as Array<[string, string]>);
+      return request<{ leaves: LeaveRecord[] }>(`/leaves?${params.toString()}`);
+    },
     emergencyDeparture: async (payload: { studentId: string; branchId: string; reason: string; collectedBy?: string; departureTime?: string }) =>
-      request<{ message: string; leave: any }>('/leaves/emergency-out', { method: 'POST', body: JSON.stringify(payload) }),
+      request<{ message: string; leave: any; notified?: { guardians: number; attempted: number; sent: number; failed: number; withoutPhone: number } }>('/leaves/emergency-out', { method: 'POST', body: JSON.stringify(payload) }),
     addRemark: async (payload: { studentId: string; subject: string; message: string; parentVisible: boolean }) =>
       request<{ message: string; remark: any }>('/performance/student/remarks', { method: 'POST', body: JSON.stringify(payload) }),
     createPersonalizedClass: async (payload: { branchId: string; name: string; courseId: string; schedule: unknown; feeStructure: unknown }) =>

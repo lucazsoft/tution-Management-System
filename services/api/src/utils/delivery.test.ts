@@ -7,6 +7,8 @@ let user: any;
 let delivered: any[] = [];
 let providerSuccess = true;
 db.user.findUnique = async ({ where }: any) => user?.email === where.email ? user : null;
+// Not a student, so no guardian-linked phone applies.
+(prisma as any).student.findUnique = async () => null;
 require('./sms').getSmsSender = () => ({ sendSms: async (phone: string, message: string) => {
   delivered.push({ phone, message }); return { success: providerSuccess };
 } });

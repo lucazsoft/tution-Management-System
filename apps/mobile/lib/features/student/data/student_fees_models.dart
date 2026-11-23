@@ -4,7 +4,6 @@
 /// - `GET /api/users/me/student-portal` → `invoices[]`, `studentProfile`
 ///   (`blocked`, `outstanding`, `enrollmentId`), `certificates[]`
 /// - `GET /api/finances/students/:studentId/invoices` → `invoices[]`
-/// - `GET /api/finances/nepalpay-qr/:invoiceId` → QR payload
 /// - `POST /api/finances/connectips/initiate/:invoiceId` →
 ///   `{ payment, gatewayUrl, fields }`
 /// - `GET /api/finances/connectips/status/:txnId` → server-verified status
@@ -94,28 +93,6 @@ class FeeBlockedStatus {
 
   final bool blocked;
   final double outstanding;
-}
-
-/// NepalPay QR payload for one invoice.
-class NepalPayQr {
-  const NepalPayQr({
-    required this.invoiceId,
-    required this.amount,
-    required this.qrString,
-    required this.merchantName,
-  });
-
-  final String invoiceId;
-  final double amount;
-  final String qrString;
-  final String merchantName;
-
-  factory NepalPayQr.fromJson(Map<String, dynamic> json) => NepalPayQr(
-        invoiceId: (json['invoiceId'] ?? '').toString(),
-        amount: (json['amount'] as num?)?.toDouble() ?? 0,
-        qrString: (json['qrString'] ?? '').toString(),
-        merchantName: (json['merchantName'] ?? '').toString(),
-      );
 }
 
 /// connectIPS handoff: post [fields] to [gatewayUrl] in an external browser.

@@ -1,5 +1,5 @@
 import { AccountMenu } from './AccountMenu';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 export interface NavItem {
@@ -45,21 +45,6 @@ export function PageShell({
   });
   const [isCollapsed, setIsCollapsed] = useState(defaultSidebarCollapsed);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-
-  const notifRef = useRef<HTMLDivElement>(null);
-
-  // Close menus on click outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
-        setShowNotifications(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   const toggleTheme = () => {
     const next = theme === 'light' ? 'dark' : 'light';
     setTheme(next);
@@ -161,50 +146,6 @@ export function PageShell({
               {theme === 'light' ? 'dark_mode' : 'light_mode'}
             </span>
           </button>
-
-          {/* Notifications Dropdown */}
-          <div className="topbar-dropdown-wrap" ref={notifRef}>
-            <button 
-              className="topbar-action-btn notification-badge-container" 
-              onClick={() => setShowNotifications(!showNotifications)}
-              aria-label="Notifications"
-            >
-              <span className="material-symbols-outlined">notifications</span>
-              <span className="notification-badge">3</span>
-            </button>
-
-            {showNotifications && (
-              <div className="topbar-dropdown notification-dropdown">
-                <div className="dropdown-header">
-                  <h3>Notifications</h3>
-                  <button className="auth-link" style={{ fontSize: '12px' }}>Mark all read</button>
-                </div>
-                <div className="dropdown-items">
-                  <div className="notification-item">
-                    <span className="material-symbols-outlined notif-icon text-warning">receipt_long</span>
-                    <div>
-                      <p className="notif-text">New petty cash request pending approval</p>
-                      <span className="notif-time">5 mins ago</span>
-                    </div>
-                  </div>
-                  <div className="notification-item">
-                    <span className="material-symbols-outlined notif-icon text-success">domain</span>
-                    <div>
-                      <p className="notif-text">Branch 'Lalitpur Academy' approved</p>
-                      <span className="notif-time">2 hours ago</span>
-                    </div>
-                  </div>
-                  <div className="notification-item">
-                    <span className="material-symbols-outlined notif-icon text-primary">groups</span>
-                    <div>
-                      <p className="notif-text">2 new student enrollments registered</p>
-                      <span className="notif-time">1 day ago</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
 
           <AccountMenu name={userName} role={userRole.replaceAll('_', ' ')} avatar={userAvatar} accountPath={accountPath} securityPath={securityPath} onLogout={onLogout} />
         </div>

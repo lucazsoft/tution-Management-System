@@ -129,6 +129,7 @@ class HomeworkTask {
 
   bool get isOverdue => urgency == 'overdue';
   bool get isDueSoon => urgency == 'soon';
+  bool get canMarkDone => !completed && !isOverdue;
 }
 
 /// One marked attendance session for the signed-in student.

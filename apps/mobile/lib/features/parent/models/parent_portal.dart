@@ -52,6 +52,8 @@ class ParentChild {
     required this.blocked,
     required this.attendanceRate,
     required this.outstanding,
+    this.loginId = '',
+    this.usesParentPhone = false,
   });
 
   final String id;
@@ -65,6 +67,13 @@ class ParentChild {
   final int attendanceRate;
   final double outstanding;
 
+  /// The child's login ID: a real email, or one the system generated
+  /// (docs/planphone.md). Empty when the server did not send it.
+  final String loginId;
+
+  /// True when the child uses this parent's number for login and reset codes.
+  final bool usesParentPhone;
+
   factory ParentChild.fromJson(Map<String, dynamic> json) => ParentChild(
         id: _str(json['id']),
         name: _str(json['name'], 'Child'),
@@ -76,6 +85,8 @@ class ParentChild {
         blocked: json['blocked'] == true,
         attendanceRate: (json['attendanceRate'] as num?)?.toInt() ?? 0,
         outstanding: _num(json['outstanding']),
+        loginId: _str(json['loginId']),
+        usesParentPhone: json['usesParentPhone'] == true,
       );
 }
 
@@ -100,6 +111,10 @@ class ParentContact {
   final String subject;
   final String initials;
   final String role;
+
+  bool isAuthorizedForChild(String selectedChildId) =>
+      (role == 'TEACHER' || role == 'BRANCH_ADMIN') &&
+      (childId.isEmpty || childId == selectedChildId);
 }
 
 class ParentMessageItem {
@@ -109,7 +124,8 @@ class ParentMessageItem {
       required this.teacherId,
       required this.sender,
       required this.text,
-      required this.time});
+      required this.time,
+      this.occurredAt});
   factory ParentMessageItem.fromJson(Map<String, dynamic> json) =>
       ParentMessageItem(
           id: _str(json['id']),
@@ -117,13 +133,15 @@ class ParentMessageItem {
           teacherId: _str(json['teacherId']),
           sender: _str(json['sender']),
           text: _str(json['text']),
-          time: _str(json['time']));
+          time: _str(json['time']),
+          occurredAt: DateTime.tryParse(_str(json['occurredAt'])));
   final String id;
   final String childId;
   final String teacherId;
   final String sender;
   final String text;
   final String time;
+  final DateTime? occurredAt;
 }
 
 class ParentAppointmentItem {
@@ -134,7 +152,9 @@ class ParentAppointmentItem {
       required this.subject,
       required this.requestedTime,
       required this.state,
+      this.scheduledAt,
       this.alternativeTime,
+      this.alternativeAt,
       this.proposalFrom,
       this.responseMessage,
       this.participants = const [],
@@ -147,7 +167,9 @@ class ParentAppointmentItem {
           subject: _str(json['subject']),
           requestedTime: _str(json['requestedTime']),
           state: _str(json['state']),
+          scheduledAt: DateTime.tryParse(_str(json['scheduledAt'])),
           alternativeTime: json['alternativeTime']?.toString(),
+          alternativeAt: DateTime.tryParse(_str(json['alternativeAt'])),
           proposalFrom: json['proposalFrom']?.toString(),
           responseMessage: json['responseMessage']?.toString(),
           isGroup: json['group'] == true,
@@ -162,7 +184,9 @@ class ParentAppointmentItem {
   final String subject;
   final String requestedTime;
   final String state;
+  final DateTime? scheduledAt;
   final String? alternativeTime;
+  final DateTime? alternativeAt;
   final String? proposalFrom;
   final String? responseMessage;
   final List<ParentAppointmentParticipant> participants;
@@ -336,6 +360,8 @@ class ParentLeaveRecord {
   const ParentLeaveRecord({
     required this.id,
     required this.dates,
+    required this.startDate,
+    required this.endDate,
     required this.reason,
     required this.state,
     required this.detail,
@@ -343,6 +369,8 @@ class ParentLeaveRecord {
 
   final String id;
   final String dates;
+  final DateTime? startDate;
+  final DateTime? endDate;
   final String reason;
   final String state;
   final String detail;
@@ -351,6 +379,8 @@ class ParentLeaveRecord {
       ParentLeaveRecord(
         id: _str(json['id']),
         dates: _str(json['dates']),
+        startDate: DateTime.tryParse('${json['startDate'] ?? ''}'),
+        endDate: DateTime.tryParse('${json['endDate'] ?? ''}'),
         reason: _str(json['reason']),
         state: _str(json['state'], 'Pending'),
         detail: _str(json['detail']),

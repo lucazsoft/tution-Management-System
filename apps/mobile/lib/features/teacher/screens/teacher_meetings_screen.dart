@@ -3,7 +3,16 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
+import 'package:tms_mobile/features/teacher/data/teacher_portal_repository.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_navigation.dart';
+import 'package:tms_mobile/shared/widgets/meeting_schedule_fields.dart';
+
+String _teacherMeetingDayKey(DateTime date) =>
+    '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+bool _teacherMeetingDayAvailable(DateTime day, Set<String> holidayKeys) =>
+    day.weekday != DateTime.saturday &&
+    !holidayKeys.contains(_teacherMeetingDayKey(day));
 
 class TeacherMeetingsScreen extends StatefulWidget {
   const TeacherMeetingsScreen({super.key});
@@ -16,6 +25,7 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
   List<Map<String, dynamic>>? _meetings;
   String? _error;
   String? _busyId;
+  Set<String> _holidayKeys = const {};
   Timer? _refreshTimer;
 
   @override
@@ -39,9 +49,28 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
           ? response.data['appointments']
           : null;
       if (rows is! List) throw StateError('Invalid response');
+      var holidayKeys = _holidayKeys;
+      try {
+        final events = await TeacherPortalRepository().fetchCalendar();
+        holidayKeys = <String>{};
+        for (final event in events
+            .where((item) => item.type.toLowerCase().contains('holiday'))) {
+          final end = event.endDate ?? event.startDate;
+          for (var day = DateTime(event.startDate.year, event.startDate.month,
+                  event.startDate.day);
+              !day.isAfter(DateTime(end.year, end.month, end.day));
+              day = day.add(const Duration(days: 1))) {
+            holidayKeys.add(_teacherMeetingDayKey(day));
+          }
+        }
+      } catch (_) {
+        // Keep the last successfully loaded holiday set if the calendar
+        // endpoint is temporarily unavailable.
+      }
       if (mounted) {
         setState(() {
           _meetings = rows.whereType<Map<String, dynamic>>().toList();
+          _holidayKeys = holidayKeys;
           _error = null;
         });
       }
@@ -83,61 +112,143 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
     }
   }
 
-  Future<void> _reschedule(String id) async {
-    final earliest = DateTime.now().add(const Duration(hours: 24));
-    final day = await showDatePicker(
+  Future<void> _editMeeting(Map<String, dynamic> item) async {
+    final id = '${item['id'] ?? ''}';
+    final scheduled = DateTime.tryParse(
+                '${item['alternativeTime'] ?? item['scheduledTime'] ?? ''}')
+            ?.toLocal() ??
+        DateTime.now().add(const Duration(days: 1));
+    final edit = await showModalBottomSheet<_MeetingEditResult>(
       context: context,
-      firstDate: DateTime(earliest.year, earliest.month, earliest.day),
-      lastDate: earliest.add(const Duration(days: 365)),
-      initialDate: earliest,
+      isScrollControlled: true,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (_) => _MeetingEditSheet(
+        studentName: _studentName(item),
+        initialScheduled: scheduled,
+        initialRemarks: '${item['responseRemarks'] ?? item['remarks'] ?? ''}',
+        holidayKeys: _holidayKeys,
+      ),
     );
-    if (day == null || !mounted) return;
-    final clock = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(earliest),
-    );
-    if (clock == null || !mounted) return;
-    final selected =
-        DateTime(day.year, day.month, day.day, clock.hour, clock.minute);
-    if (!selected.isAfter(DateTime.now())) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Choose a future meeting time.')),
-      );
-      return;
+    if (edit == null || !mounted) return;
+    setState(() => _busyId = id);
+    try {
+      await ApiClient.instance.dio
+          .patch<dynamic>('/api/appointments/$id', data: {
+        'scheduledTime': edit.scheduled.toUtc().toIso8601String(),
+        'remarks': edit.remarks,
+      });
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Meeting updated. The parent was notified.')));
+      }
+    } on DioException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error.message ?? 'Update failed.')));
+      }
+    } finally {
+      if (mounted) setState(() => _busyId = null);
     }
-    final remarks = TextEditingController();
-    final proceed = await showDialog<bool>(
+  }
+
+  Future<void> _cancelMeeting(Map<String, dynamic> item) async {
+    final id = '${item['id'] ?? ''}';
+    final note = TextEditingController();
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Propose another time'),
+        title: const Text('Cancel meeting?'),
         content: TextField(
-          controller: remarks,
+          controller: note,
           maxLength: 500,
           maxLines: 3,
-          decoration: InputDecoration(
-            labelText: 'Message to parent',
-            hintText: 'Explain why this time works better',
-            helperText: selected.toString(),
-          ),
+          decoration: const InputDecoration(
+              labelText: 'Reason for cancellation (optional)'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: const Text('Keep meeting'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Send proposal'),
+            child: const Text('Cancel meeting'),
           ),
         ],
       ),
     );
-    final note = remarks.text;
-    remarks.dispose();
-    if (proceed == true && mounted) {
-      await _respond(id, 'PROPOSE_ALTERNATIVE',
-          alternative: selected, remarks: note);
+    final remarks = note.text;
+    note.dispose();
+    if (confirmed != true || !mounted) return;
+    setState(() => _busyId = id);
+    try {
+      await ApiClient.instance.dio
+          .post<dynamic>('/api/appointments/cancel/$id', data: {
+        if (remarks.trim().isNotEmpty) 'remarks': remarks.trim(),
+      });
+      await _load();
+    } on DioException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error.message ?? 'Cancellation failed.')));
+      }
+    } finally {
+      if (mounted) setState(() => _busyId = null);
     }
+  }
+
+  Future<void> _completeMeeting(Map<String, dynamic> item) async {
+    final id = '${item['id'] ?? ''}';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Complete this meeting?'),
+        content: const Text(
+          'This will mark the meeting as completed for both the teacher and parent.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Not yet'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.task_alt_rounded),
+            label: const Text('Meeting completed'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _busyId = id);
+    try {
+      await ApiClient.instance.dio
+          .post<dynamic>('/api/appointments/complete/$id');
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Meeting completed. The parent was notified.'),
+        ));
+      }
+    } on DioException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message ?? 'Update failed.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busyId = null);
+    }
+  }
+
+  String _studentName(Map<String, dynamic> item) {
+    final student =
+        item['student'] is Map ? item['student']['user'] as Map? : null;
+    return student == null
+        ? 'Student'
+        : '${student['firstName'] ?? ''} ${student['lastName'] ?? ''}'.trim();
   }
 
   @override
@@ -184,11 +295,7 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
 
   Widget _meetingCard(Map<String, dynamic> item) {
     final id = '${item['id'] ?? ''}';
-    final student =
-        item['student'] is Map ? item['student']['user'] as Map? : null;
-    final name = student == null
-        ? 'Student'
-        : '${student['firstName'] ?? ''} ${student['lastName'] ?? ''}'.trim();
+    final name = _studentName(item);
     final status = '${item['status'] ?? 'REQUESTED'}';
     final requested = status == 'REQUESTED';
     final proposalFrom = '${item['proposalFrom'] ?? ''}';
@@ -196,6 +303,8 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
         status == 'ALTERNATIVE_PROPOSED' && proposalFrom == 'PARENT';
     final teacherProposed =
         status == 'ALTERNATIVE_PROPOSED' && proposalFrom == 'TEACHER';
+    final completable = ['APPROVED', 'CONFIRMED'].contains(status);
+    final active = !['REJECTED', 'CANCELLED', 'COMPLETED'].contains(status);
     final time = DateTime.tryParse('${item['scheduledTime'] ?? ''}')?.toLocal();
     final alternative =
         DateTime.tryParse('${item['alternativeTime'] ?? ''}')?.toLocal();
@@ -215,11 +324,18 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
           trailing: Chip(label: Text(status.replaceAll('_', ' '))),
         ),
         if (teacherProposed)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: Text('Waiting for the parent to respond.'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Row(
+              children: [
+                const Expanded(
+                    child: Text('Waiting for the parent to respond.')),
+                OutlinedButton.icon(
+                  onPressed: _busyId == id ? null : () => _editMeeting(item),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Edit proposal'),
+                ),
+              ],
             ),
           ),
         if (requested || parentProposed)
@@ -237,9 +353,9 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
                   label: const Text('Decline'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: _busyId == id ? null : () => _reschedule(id),
-                  icon: const Icon(Icons.update),
-                  label: const Text('Reschedule'),
+                  onPressed: _busyId == id ? null : () => _editMeeting(item),
+                  icon: const Icon(Icons.edit_calendar_outlined),
+                  label: const Text('Edit / reschedule'),
                 ),
                 FilledButton.icon(
                   onPressed:
@@ -250,7 +366,148 @@ class _TeacherMeetingsScreenState extends State<TeacherMeetingsScreen> {
               ],
             ),
           ),
+        if (active)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.end,
+              children: [
+                if (!requested && !parentProposed && !teacherProposed)
+                  OutlinedButton.icon(
+                    onPressed: _busyId == id ? null : () => _editMeeting(item),
+                    icon: const Icon(Icons.edit_calendar_outlined),
+                    label: const Text('Reschedule'),
+                  ),
+                TextButton.icon(
+                  onPressed: _busyId == id ? null : () => _cancelMeeting(item),
+                  icon: const Icon(Icons.cancel_outlined),
+                  label: const Text('Cancel meeting'),
+                ),
+                if (completable)
+                  FilledButton.icon(
+                    onPressed:
+                        _busyId == id ? null : () => _completeMeeting(item),
+                    icon: const Icon(Icons.task_alt_rounded),
+                    label: const Text('Meeting completed'),
+                  ),
+              ],
+            ),
+          ),
       ]),
     );
   }
+}
+
+class _MeetingEditResult {
+  const _MeetingEditResult({required this.scheduled, required this.remarks});
+
+  final DateTime scheduled;
+  final String remarks;
+}
+
+class _MeetingEditSheet extends StatefulWidget {
+  const _MeetingEditSheet({
+    required this.studentName,
+    required this.initialScheduled,
+    required this.initialRemarks,
+    required this.holidayKeys,
+  });
+
+  final String studentName;
+  final DateTime initialScheduled;
+  final String initialRemarks;
+  final Set<String> holidayKeys;
+
+  @override
+  State<_MeetingEditSheet> createState() => _MeetingEditSheetState();
+}
+
+class _MeetingEditSheetState extends State<_MeetingEditSheet> {
+  late final TextEditingController _remarks;
+  late DateTime _scheduled;
+  late final DateTime _earliest;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _earliest = DateTime.now().add(const Duration(hours: 1));
+    _scheduled = widget.initialScheduled.isBefore(_earliest)
+        ? _earliest
+        : widget.initialScheduled;
+    _remarks = TextEditingController(text: widget.initialRemarks);
+  }
+
+  @override
+  void dispose() {
+    _remarks.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    if (_remarks.text.trim().isEmpty) {
+      setState(() => _error = 'Add a message for the parent.');
+      return;
+    }
+    if (!_teacherMeetingDayAvailable(_scheduled, widget.holidayKeys)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Meetings cannot be scheduled on Saturdays or holidays.'),
+      ));
+      return;
+    }
+    Navigator.pop(
+      context,
+      _MeetingEditResult(
+        scheduled: _scheduled,
+        remarks: _remarks.text.trim(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          0,
+          20,
+          MediaQuery.viewInsetsOf(context).bottom + 20,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Edit meeting',
+                  style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Student',
+                  prefixIcon: Icon(Icons.school_outlined),
+                ),
+                child: Text(widget.studentName),
+              ),
+              const SizedBox(height: 12),
+              MeetingScheduleFields(
+                reasonController: _remarks,
+                scheduled: _scheduled,
+                earliest: _earliest,
+                selectableDayPredicate: (day) =>
+                    _teacherMeetingDayAvailable(day, widget.holidayKeys),
+                holidayPredicate: (day) =>
+                    widget.holidayKeys.contains(_teacherMeetingDayKey(day)),
+                onScheduledChanged: (value) =>
+                    setState(() => _scheduled = value),
+                actionLabel: 'Save',
+                onAction: _save,
+                reasonError: _error,
+                onReasonChanged: (_) {
+                  if (_error != null) setState(() => _error = null);
+                },
+              ),
+            ],
+          ),
+        ),
+      );
 }

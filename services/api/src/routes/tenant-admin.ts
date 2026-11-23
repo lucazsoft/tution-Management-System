@@ -15,7 +15,8 @@ router.get('/dashboard', authMiddleware, async (req: TenantRequest, res: Respons
   }
 
   try {
-    const [studentCount, teacherCount, overdueInvoices, pendingLeaves, branches] = await Promise.all([
+    const now = new Date();
+    const [studentCount, teacherCount, overdueInvoices, pendingLeaves, pendingAtBranches, branches] = await Promise.all([
       prisma.student.count({ where: { user: { tenantId: req.tenantId!, status: 'ACTIVE' } } }),
       prisma.user.count({
         where: {
@@ -28,7 +29,23 @@ router.get('/dashboard', authMiddleware, async (req: TenantRequest, res: Respons
         where: { tenantId: req.tenantId!, status: { in: ['UNPAID', 'OVERDUE'] } },
         select: { netPayable: true, status: true, dueDate: true },
       }),
-      prisma.leave.count({ where: { tenantId: req.tenantId!, status: 'PENDING' } }),
+      // Only what the Tenant Admin can act on: L2 approvals plus staff requests a branch left unanswered.
+      prisma.leave.count({
+        where: {
+          tenantId: req.tenantId!,
+          OR: [
+            { status: 'APPROVED_LEVEL1' },
+            { status: 'PENDING', subjectType: 'STAFF', escalatesAt: { lte: now } },
+          ],
+        },
+      }),
+      prisma.leave.count({
+        where: {
+          tenantId: req.tenantId!,
+          status: 'PENDING',
+          NOT: { subjectType: 'STAFF', escalatesAt: { lte: now } },
+        },
+      }),
       prisma.branch.findMany({
         where: { tenantId: req.tenantId! },
         orderBy: { createdAt: 'asc' },
@@ -67,6 +84,7 @@ router.get('/dashboard', authMiddleware, async (req: TenantRequest, res: Respons
         .filter((invoice) => isInvoiceOverdue(invoice.status, invoice.dueDate))
         .reduce((sum, invoice) => sum + Number(invoice.netPayable), 0),
       pendingLeaveRequestsCount: pendingLeaves,
+      leavesPendingAtBranchesCount: pendingAtBranches,
       branchSummary,
     });
   } catch {

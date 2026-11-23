@@ -1,0 +1,131 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
+
+void showAndroidExitPrompt(BuildContext context) {
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: const Text(
+          'Press back again to exit',
+          textAlign: TextAlign.center,
+        ),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+}
+
+/// Android-only fallback for consistent system Back behavior.
+class AndroidBackCoordinator extends StatefulWidget {
+  const AndroidBackCoordinator({
+    super.key,
+    required this.router,
+    required this.child,
+    this.onBack,
+  });
+
+  final GoRouter router;
+  final Widget child;
+  final bool Function()? onBack;
+
+  @override
+  State<AndroidBackCoordinator> createState() => _AndroidBackCoordinatorState();
+}
+
+class _AndroidBackCoordinatorState extends State<AndroidBackCoordinator> {
+  static final Expando<_AndroidExitState> _exitStates =
+      Expando<_AndroidExitState>('androidExitStates');
+
+  static const _homeRoutes = {
+    '/student/home',
+    '/parent/home',
+    '/teacher/home',
+    '/branch/home',
+    '/janitor/home',
+    '/tenant/home',
+  };
+
+  bool get _isAndroid =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  String? _portalHome(String location) {
+    for (final prefix in const [
+      '/student/',
+      '/parent/',
+      '/teacher/',
+      '/branch/',
+      '/janitor/',
+      '/tenant/',
+    ]) {
+      if (location.startsWith(prefix)) return '${prefix}home';
+    }
+    return null;
+  }
+
+  void _handleBack(bool didPop, Object? result) {
+    if (didPop || !_isAndroid) return;
+    final router = widget.router;
+    final exitState = _exitStates[router] ??= _AndroidExitState();
+    final uri = router.routeInformationProvider.value.uri;
+    final location = uri.path;
+
+    if (widget.onBack?.call() == true) {
+      exitState.lastHomeBack = null;
+      return;
+    }
+
+    // Dashboard tabs encoded in the query string are still sub-pages. Back
+    // returns to the dashboard before enabling the double-back exit gesture.
+    if (_homeRoutes.contains(location) && uri.hasQuery) {
+      exitState.lastHomeBack = null;
+      router.go(location);
+      return;
+    }
+
+    if (!_homeRoutes.contains(location)) {
+      exitState.lastHomeBack = null;
+      const parentDestinations = <String, String>{
+        '/teacher/attendance': '/teacher/timetable',
+      };
+      final destination = parentDestinations[location];
+      if (destination != null) {
+        router.go(destination);
+        return;
+      }
+      final home = _portalHome(location);
+      if (home != null) router.go(home);
+      return;
+    }
+
+    final now = DateTime.now();
+    if (exitState.lastHomeBack != null &&
+        now.difference(exitState.lastHomeBack!) <= const Duration(seconds: 2)) {
+      exitState.lastHomeBack = null;
+      SystemNavigator.pop();
+      return;
+    }
+    exitState.lastHomeBack = now;
+    showAndroidExitPrompt(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_isAndroid) return widget.child;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: _handleBack,
+      child: widget.child,
+    );
+  }
+}
+
+class _AndroidExitState {
+  DateTime? lastHomeBack;
+}

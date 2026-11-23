@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   createConfiguredFirebaseProvider,
+  pushTokenErrorIsPermanent,
   createPushNotificationService,
 } from './push-notification';
 
@@ -58,7 +59,7 @@ test('push delivery safely skips when Firebase is not configured', async () => {
   });
 
   const result = await service.sendPush('tenant-a', 'user-a', 'Title', 'Body');
-  assert.deepEqual(result, { success: true, sent: 0, failed: 0, skipped: true });
+  assert.deepEqual(result, { success: false, sent: 0, failed: 0, skipped: true });
   assert.equal(JSON.stringify(warnings).includes('secret-device-token'), false);
   assert.equal(warnings[0]?.event, 'PUSH_PROVIDER_UNCONFIGURED');
 });
@@ -67,7 +68,7 @@ test('provider errors fail open without leaking device tokens', async () => {
   const warnings: Array<Record<string, unknown>> = [];
   const service = createPushNotificationService({
     tokenStore: { findMany: async () => [{ token: 'secret-device-token' }] },
-    provider: { send: async () => { throw new Error('provider unavailable'); } },
+    provider: { send: async () => { throw new Error('provider unavailable: secret-device-token'); } },
     logger: { warn: (entry) => warnings.push(entry) },
   });
 
@@ -77,10 +78,67 @@ test('provider errors fail open without leaking device tokens', async () => {
   assert.equal(warnings[0]?.event, 'PUSH_DELIVERY_FAILED');
 });
 
+test('multi-user push uses one tenant-scoped token query and prunes dead tokens', async () => {
+  let query: any;
+  let pruned: any;
+  let delivered: string[] = [];
+  const service = createPushNotificationService({
+    tokenStore: {
+      findMany: async (args: any) => { query = args; return [{ token: 'live' }, { token: 'dead' }, { token: 'live' }]; },
+      deleteMany: async (args: any) => { pruned = args; return { count: 1 }; },
+    },
+    provider: {
+      send: async (tokens) => { delivered = tokens; return { successCount: 1, failureCount: 1, invalidTokens: ['dead'] }; },
+    },
+    logger: { warn: () => undefined },
+  });
+
+  const result = await service.sendPushToUsers('tenant-a', ['u1', 'u2', 'u1'], 'Exam: Finals', 'Mon', { deepLink: '/student/calendar' });
+  assert.deepEqual(query, { where: { tenantId: 'tenant-a', userId: { in: ['u1', 'u2'] } }, select: { token: true } });
+  assert.deepEqual(delivered, ['live', 'dead']);
+  assert.deepEqual(pruned, { where: { tenantId: 'tenant-a', token: { in: ['dead'] } } });
+  assert.deepEqual(result, { success: false, sent: 1, failed: 1 });
+});
+
+test('multi-user push with no recipients does not query tokens', async () => {
+  let queried = false;
+  const service = createPushNotificationService({
+    tokenStore: { findMany: async () => { queried = true; return []; } },
+    provider: null,
+    logger: { warn: () => undefined },
+  });
+  assert.deepEqual(await service.sendPushToUsers('tenant-a', [], 'T', 'B'), { success: false, sent: 0, failed: 0, skipped: true });
+  assert.equal(queried, false);
+});
+
+test('a recipient with no registered device is skipped, not delivered', async () => {
+  const service = createPushNotificationService({
+    tokenStore: { findMany: async () => [] },
+    provider: { send: async () => { throw new Error('must not send'); } },
+    logger: { warn: () => undefined },
+  });
+  assert.deepEqual(await service.sendPush('tenant-a', 'user-a', 'Title', 'Body'),
+    { success: false, sent: 0, failed: 0, skipped: true });
+});
+
+test('Firebase is opt-in even when credential-shaped values exist', async () => {
+  assert.equal(createConfiguredFirebaseProvider({
+    PUSH_PROVIDER: 'DISABLED', FIREBASE_PROJECT_ID: 'test-project',
+    FIREBASE_CLIENT_EMAIL: 'service@example.test', FIREBASE_PRIVATE_KEY: 'test-only',
+  }), null);
+});
+
+test('payload errors do not permanently remove registration tokens', async () => {
+  assert.equal(pushTokenErrorIsPermanent('messaging/invalid-argument'), false);
+  assert.equal(pushTokenErrorIsPermanent('messaging/registration-token-not-registered'), true);
+  assert.equal(pushTokenErrorIsPermanent('messaging/invalid-registration-token'), true);
+});
+
 test('Firebase provider is created only with complete credentials', async () => {
   assert.equal(createConfiguredFirebaseProvider({}), null);
-  assert.equal(createConfiguredFirebaseProvider({ FIREBASE_PROJECT_ID: 'project-only' }), null);
+  assert.equal(createConfiguredFirebaseProvider({ PUSH_PROVIDER: 'FIREBASE', FIREBASE_PROJECT_ID: 'project-only' }), null);
   assert.equal(createConfiguredFirebaseProvider({
+    PUSH_PROVIDER: 'FIREBASE',
     FIREBASE_PROJECT_ID: 'project',
     FIREBASE_CLIENT_EMAIL: 'firebase@example.test',
     FIREBASE_PRIVATE_KEY: 'not-a-real-private-key',

@@ -107,7 +107,7 @@ export async function runBranchExpenseAnomalyAlerts(input: {
           destination: 'finances',
           entityId: anomaly.branchId,
         });
-        if (typeof result === 'object' && result !== null && 'success' in result && result.success === false) {
+        if (typeof result !== 'object' || result === null || !('success' in result) || result.success !== true || ('skipped' in result && result.skipped === true) || ('sent' in result && result.sent === 0)) {
           failed += 1;
         } else {
           delivered += 1;

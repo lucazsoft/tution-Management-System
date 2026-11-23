@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'dart:async';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tms_mobile/core/network/api_exception.dart';
 import 'package:tms_mobile/features/teacher/data/teacher_portal_repository.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_portal_dto.dart';
@@ -12,11 +15,55 @@ String _date(DateTime value) =>
     '${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
 Future<String?> _pickImageData() async {
   final file = await ImagePicker()
-      .pickImage(source: ImageSource.gallery, imageQuality: 88);
+      .pickImage(source: ImageSource.gallery, imageQuality: 75, maxWidth: 1800);
   if (file == null) return null;
   final bytes = await file.readAsBytes();
   final extension = file.name.toLowerCase();
   final mime = extension.endsWith('.png') ? 'image/png' : 'image/jpeg';
+  return 'data:$mime;base64,${base64Encode(bytes)}';
+}
+
+Future<String?> _pickAnswerSheet(BuildContext context) async {
+  final source = await showModalBottomSheet<String>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => SafeArea(
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        ListTile(
+          leading: const Icon(Icons.photo_library_outlined),
+          title: const Text('Choose from gallery'),
+          subtitle: const Text('JPG, PNG or WebP image'),
+          onTap: () => Navigator.pop(context, 'gallery'),
+        ),
+        ListTile(
+          leading: const Icon(Icons.folder_open_outlined),
+          title: const Text('Choose from file manager'),
+          subtitle: const Text('PDF, JPG, PNG or WebP'),
+          onTap: () => Navigator.pop(context, 'file'),
+        ),
+      ]),
+    ),
+  );
+  if (source == 'gallery') return _pickImageData();
+  if (source != 'file') return null;
+  final selection = await FilePicker.platform.pickFiles(
+    type: FileType.custom,
+    allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
+    withData: true,
+  );
+  final file = selection?.files.single;
+  final bytes = file?.bytes;
+  if (file == null || bytes == null) return null;
+  if (bytes.length > 8 * 1024 * 1024) {
+    throw const FormatException('Answer sheets must be 8 MB or smaller.');
+  }
+  final extension = file.extension?.toLowerCase();
+  final mime = switch (extension) {
+    'pdf' => 'application/pdf',
+    'png' => 'image/png',
+    'webp' => 'image/webp',
+    _ => 'image/jpeg',
+  };
   return 'data:$mime;base64,${base64Encode(bytes)}';
 }
 
@@ -123,7 +170,8 @@ class _TeacherHomeworkScreenState extends ConsumerState<TeacherHomeworkScreen> {
 
   Future<void> _editHomework(TeacherHomework homework) async {
     final title = TextEditingController(text: homework.title);
-    final instructions = TextEditingController(text: homework.description ?? '');
+    final instructions =
+        TextEditingController(text: homework.description ?? '');
     var due = homework.deadline;
     var attachment = homework.contentUrl;
     final save = await showDialog<bool>(
@@ -247,8 +295,9 @@ class _TeacherHomeworkScreenState extends ConsumerState<TeacherHomeworkScreen> {
   Widget build(BuildContext context) {
     final workspace = ref.watch(teacherPortalViewModelProvider).workspace;
     final classes = workspace?.classes ?? const <TeacherClassInfo>[];
-    if (classes.isNotEmpty && !classes.any((item) => item.id == _classId))
+    if (classes.isNotEmpty && !classes.any((item) => item.id == _classId)) {
       _classId = classes.first.id;
+    }
     final selected = classes.where((item) => item.id == _classId).firstOrNull;
     final recent = [
       for (final klass in classes)
@@ -316,8 +365,9 @@ class _TeacherHomeworkScreenState extends ConsumerState<TeacherHomeworkScreen> {
                 child: OutlinedButton.icon(
                     onPressed: () async {
                       final value = await _pickImageData();
-                      if (value != null && mounted)
+                      if (value != null && mounted) {
                         setState(() => _attachment = value);
+                      }
                     },
                     icon: Icon(_attachment == null
                         ? Icons.attach_file
@@ -403,7 +453,15 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
           ? [_ChapterDraft(null, '')]
           : [
               for (final chapter in syllabus.chapters)
-                _ChapterDraft(chapter.id, chapter.title)
+                _ChapterDraft(
+                  chapter.id,
+                  chapter.title,
+                  status: chapter.status,
+                  topics: [
+                    for (final topic in chapter.topics)
+                      _TopicDraft(topic.id, topic.title),
+                  ],
+                )
             ];
     });
   }
@@ -424,74 +482,232 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
         await repository.createSyllabus(
             classId: klass.id,
             subject: _subject.trim(),
-            chapters: [for (final item in chapters) item.title.trim()]);
+            chapters: [
+              for (final item in chapters)
+                {
+                  'title': item.title.trim(),
+                  'topics': [
+                    for (final topic in item.topics)
+                      if (topic.title.trim().isNotEmpty) topic.title.trim(),
+                  ],
+                },
+            ]);
       } else {
-        await repository.updateSyllabus(
+        final updated = await repository.updateSyllabus(
             syllabusId: syllabus.id,
             subject: _subject.trim(),
             chapters: [
               for (final item in chapters)
                 {'id': item.id, 'title': item.title.trim()}
             ]);
+        final savedChapters = updated['chapters'] is List
+            ? (updated['chapters'] as List).whereType<Map>().toList()
+            : const <Map>[];
+        final retainedChapterIds =
+            chapters.map((chapter) => chapter.id).whereType<String>().toSet();
+        final originalTopics = {
+          for (final chapter in syllabus.chapters)
+            if (retainedChapterIds.contains(chapter.id))
+              for (final topic in chapter.topics) topic.id: topic,
+        };
+        final retainedTopicIds = chapters
+            .expand((chapter) => chapter.topics)
+            .map((topic) => topic.id)
+            .whereType<String>()
+            .toSet();
+        for (final topic in originalTopics.values) {
+          if (!retainedTopicIds.contains(topic.id)) {
+            await repository.deleteSyllabusTopic(
+              syllabusId: syllabus.id,
+              topicId: topic.id,
+            );
+          }
+        }
+        for (var index = 0; index < chapters.length; index++) {
+          final chapter = chapters[index];
+          final chapterId = chapter.id ??
+              (index < savedChapters.length
+                  ? savedChapters[index]['id']?.toString()
+                  : null);
+          if (chapterId == null) continue;
+          final originalChapter = syllabus.chapters
+              .where((item) => item.id == chapter.id)
+              .firstOrNull;
+          if (originalChapter?.status != chapter.status) {
+            await repository.updateChapterProgress(
+              syllabusId: syllabus.id,
+              chapterId: chapterId,
+              status: chapter.status,
+              notes: '',
+            );
+          }
+          for (final topic
+              in chapter.topics.where((item) => item.title.trim().isNotEmpty)) {
+            if (topic.id == null) {
+              await repository.createSyllabusTopic(
+                syllabusId: syllabus.id,
+                chapterId: chapterId,
+                title: topic.title,
+              );
+            } else if (originalTopics[topic.id]?.title != topic.title.trim()) {
+              await repository.updateSyllabusTopic(
+                syllabusId: syllabus.id,
+                topicId: topic.id!,
+                title: topic.title,
+              );
+            }
+          }
+        }
       }
       await ref.read(teacherPortalViewModelProvider.notifier).refresh();
       if (mounted) setState(() => _editing = false);
     } on ApiException catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.message)));
+      }
     }
     if (mounted) setState(() => _savingPlan = false);
   }
 
-  Future<void> _addTopic(
+  Future<void> _addTopics(
       TeacherSyllabus syllabus, TeacherSyllabusChapter chapter) async {
-    final controller = TextEditingController();
-    final title = await showDialog<String>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-              title: Text('Add topic to ${chapter.title}'),
-              content: TextField(
-                  controller: controller,
-                  autofocus: true,
-                  decoration: const InputDecoration(
-                      labelText: 'Topic title', border: OutlineInputBorder())),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(dialogContext),
-                    child: const Text('Cancel')),
-                FilledButton(
-                    onPressed: () =>
-                        Navigator.pop(dialogContext, controller.text.trim()),
-                    child: const Text('Add topic'))
-              ],
-            ));
-    controller.dispose();
-    if (title == null || title.isEmpty) return;
+    final titles = await showDialog<List<String>>(
+      context: context,
+      builder: (_) => _SyllabusListDialog(
+        title: 'Add topics to ${chapter.title}',
+        fieldLabel: 'Topics',
+        helperText: 'Enter one topic per line.',
+        actionLabel: 'Add topics',
+      ),
+    );
+    if (titles == null || titles.isEmpty) return;
     try {
-      await TeacherPortalRepository().createSyllabusTopic(
-          syllabusId: syllabus.id, chapterId: chapter.id, title: title);
+      final repository = TeacherPortalRepository();
+      for (final title in titles) {
+        await repository.createSyllabusTopic(
+            syllabusId: syllabus.id, chapterId: chapter.id, title: title);
+      }
       await ref.read(teacherPortalViewModelProvider.notifier).refresh();
     } on ApiException catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.message)));
+      }
     }
   }
 
   Future<void> _update(TeacherSyllabus syllabus, TeacherSyllabusTopic topic,
-      String status) async {
+      String status, String notes) async {
     setState(() => _busyTopic = topic.id);
     try {
       await TeacherPortalRepository().updateTopicProgress(
-          syllabusId: syllabus.id, topicId: topic.id, status: status);
+          syllabusId: syllabus.id,
+          topicId: topic.id,
+          status: status,
+          notes: notes);
       await ref.read(teacherPortalViewModelProvider.notifier).refresh();
     } on ApiException catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.message)));
+      }
     }
     if (mounted) setState(() => _busyTopic = null);
+  }
+
+  Future<void> _renameTopic(
+    TeacherSyllabus syllabus,
+    TeacherSyllabusTopic topic,
+  ) async {
+    final title = await showDialog<String>(
+      context: context,
+      builder: (_) => _TopicTitleDialog(
+        title: 'Edit topic',
+        initialValue: topic.title,
+        actionLabel: 'Save topic',
+      ),
+    );
+    if (title == null || title == topic.title || !mounted) return;
+    setState(() => _busyTopic = topic.id);
+    try {
+      await TeacherPortalRepository().updateSyllabusTopic(
+        syllabusId: syllabus.id,
+        topicId: topic.id,
+        title: title,
+      );
+      await ref.read(teacherPortalViewModelProvider.notifier).refresh();
+    } on ApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    }
+    if (mounted) setState(() => _busyTopic = null);
+  }
+
+  Future<void> _deleteTopic(
+    TeacherSyllabus syllabus,
+    TeacherSyllabusTopic topic,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete topic?'),
+        content: Text('Remove “${topic.title}” from this chapter?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _busyTopic = topic.id);
+    try {
+      await TeacherPortalRepository().deleteSyllabusTopic(
+        syllabusId: syllabus.id,
+        topicId: topic.id,
+      );
+      await ref.read(teacherPortalViewModelProvider.notifier).refresh();
+    } on ApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    }
+    if (mounted) setState(() => _busyTopic = null);
+  }
+
+  Future<void> _importChapterOutline() async {
+    final chapters = await showDialog<List<String>>(
+      context: context,
+      builder: (_) => const _SyllabusListDialog(
+        title: 'Import chapter outline',
+        fieldLabel: 'Chapter outline',
+        helperText:
+            'Paste one chapter per line. Numbered and bulleted lists are accepted.',
+        actionLabel: 'Add to plan',
+        stripListMarkers: true,
+        minLines: 8,
+        maxLines: 14,
+      ),
+    );
+    if (chapters == null || chapters.isEmpty || !mounted) return;
+    final existing = _chapters.map((item) => item.title.toLowerCase()).toSet();
+    setState(() {
+      _chapters = [
+        ..._chapters.where((item) => item.title.trim().isNotEmpty),
+        for (final chapter in chapters)
+          if (!existing.contains(chapter.toLowerCase()))
+            _ChapterDraft(null, chapter),
+      ];
+    });
   }
 
   @override
@@ -514,6 +730,16 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
             0;
     final total = syllabus?.chapters.length ?? 0;
     final progress = total == 0 ? 0.0 : completed / total;
+    final inProgress = syllabus?.chapters
+            .where((item) => item.status == 'IN_PROGRESS')
+            .length ??
+        0;
+    final remaining = total - completed - inProgress;
+    final topics =
+        syllabus?.chapters.expand((chapter) => chapter.topics).toList() ??
+            const <TeacherSyllabusTopic>[];
+    final completedTopics =
+        topics.where((topic) => topic.status == 'COMPLETED').length;
     return TeacherPortalScaffold(
         title: 'Update syllabus',
         body: ListView(padding: const EdgeInsets.all(16), children: [
@@ -581,6 +807,15 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
                               style: Theme.of(context).textTheme.labelMedium),
                         ]))),
             const SizedBox(height: 16),
+            _TeacherSyllabusMetrics(
+              totalChapters: total,
+              totalTopics: topics.length,
+              completedChapters: completed,
+              completedTopics: completedTopics,
+              inProgressChapters: inProgress,
+              remainingChapters: remaining,
+            ),
+            const SizedBox(height: 16),
             Text('Chapters and topics',
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
@@ -611,9 +846,16 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
                               height: 22,
                               child: CircularProgressIndicator(strokeWidth: 2))
                           : PopupMenuButton<String>(
-                              tooltip: 'Update progress',
-                              onSelected: (status) =>
-                                  _update(syllabus, topic, status),
+                              tooltip: 'Topic actions',
+                              onSelected: (status) async {
+                                if (status == 'EDIT') {
+                                  await _renameTopic(syllabus, topic);
+                                } else if (status == 'DELETE') {
+                                  await _deleteTopic(syllabus, topic);
+                                } else {
+                                  await _update(syllabus, topic, status, '');
+                                }
+                              },
                               itemBuilder: (_) => const [
                                     PopupMenuItem(
                                         value: 'LEFT',
@@ -623,7 +865,14 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
                                         child: Text('In progress')),
                                     PopupMenuItem(
                                         value: 'COMPLETED',
-                                        child: Text('Completed'))
+                                        child: Text('Completed')),
+                                    PopupMenuDivider(),
+                                    PopupMenuItem(
+                                        value: 'EDIT',
+                                        child: Text('Edit topic')),
+                                    PopupMenuItem(
+                                        value: 'DELETE',
+                                        child: Text('Delete topic')),
                                   ]),
                     ),
                   Padding(
@@ -631,9 +880,9 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
                       child: Align(
                           alignment: Alignment.centerLeft,
                           child: TextButton.icon(
-                              onPressed: () => _addTopic(syllabus, chapter),
+                              onPressed: () => _addTopics(syllabus, chapter),
                               icon: const Icon(Icons.add),
-                              label: const Text('Add topic')))),
+                              label: const Text('Add topics')))),
                 ],
               )),
           ]
@@ -651,7 +900,7 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
                       style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 4),
                   const Text(
-                      'Keep chapter names short and in teaching order. Add topics after saving.'),
+                      'Add chapters and break each chapter into editable topics.'),
                   const SizedBox(height: 16),
                   TextFormField(
                       key: ValueKey('subject-$_classId-$_editing'),
@@ -660,36 +909,133 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
                           labelText: 'Subject', border: OutlineInputBorder()),
                       onChanged: (value) => _subject = value),
                   const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                      onPressed: _importChapterOutline,
+                      icon: const Icon(Icons.content_paste_go_outlined),
+                      label: const Text('Paste chapter outline')),
+                  const SizedBox(height: 8),
                   for (var index = 0;
                       index < (_editing ? _chapters.length : 1);
                       index++)
-                    Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Row(children: [
-                          CircleAvatar(radius: 16, child: Text('${index + 1}')),
-                          const SizedBox(width: 10),
-                          Expanded(
-                              child: TextFormField(
+                    Card.outlined(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(children: [
+                              CircleAvatar(
+                                  radius: 16, child: Text('${index + 1}')),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: TextFormField(
                                   key: ValueKey(
-                                      'chapter-$index-${_chapters.elementAtOrNull(index)?.id}'),
-                                  initialValue:
-                                      _chapters.elementAtOrNull(index)?.title ??
-                                          '',
+                                      'chapter-$index-${_chapters[index].id}'),
+                                  initialValue: _chapters[index].title,
                                   decoration: const InputDecoration(
-                                      labelText: 'Chapter name',
-                                      border: OutlineInputBorder()),
-                                  onChanged: (value) {
-                                    if (index < _chapters.length)
-                                      _chapters[index].title = value;
-                                  })),
-                          IconButton(
-                              onPressed: _chapters.length <= 1
-                                  ? null
-                                  : () =>
-                                      setState(() => _chapters.removeAt(index)),
-                              icon: const Icon(Icons.remove_circle_outline),
-                              tooltip: 'Remove chapter'),
-                        ])),
+                                    labelText: 'Chapter name',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  onChanged: (value) =>
+                                      _chapters[index].title = value,
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: _chapters.length <= 1
+                                    ? null
+                                    : () => setState(
+                                        () => _chapters.removeAt(index)),
+                                icon: const Icon(Icons.delete_outline),
+                                tooltip: 'Delete chapter',
+                              ),
+                            ]),
+                            const SizedBox(height: 10),
+                            DropdownButtonFormField<String>(
+                              key: ValueKey(
+                                  'chapter-status-$index-${_chapters[index].id}'),
+                              initialValue: _chapters[index].status,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Chapter progress',
+                                prefixIcon: Icon(Icons.filter_alt_outlined),
+                                border: OutlineInputBorder(),
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'LEFT',
+                                  child: Text('Not started'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'IN_PROGRESS',
+                                  child: Text('In progress'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'COMPLETED',
+                                  child: Text('Completed'),
+                                ),
+                              ],
+                              onChanged: (value) {
+                                if (value != null) {
+                                  _chapters[index].status = value;
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 10),
+                            Text('Topics',
+                                style: Theme.of(context).textTheme.titleSmall),
+                            const SizedBox(height: 6),
+                            for (var topicIndex = 0;
+                                topicIndex < _chapters[index].topics.length;
+                                topicIndex++)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Row(children: [
+                                  const SizedBox(width: 10),
+                                  const Icon(Icons.subdirectory_arrow_right,
+                                      size: 20),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: TextFormField(
+                                      key: ValueKey(
+                                          'topic-$index-$topicIndex-${_chapters[index].topics[topicIndex].id}'),
+                                      initialValue: _chapters[index]
+                                          .topics[topicIndex]
+                                          .title,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Topic title',
+                                        isDense: true,
+                                        border: OutlineInputBorder(),
+                                      ),
+                                      onChanged: (value) => _chapters[index]
+                                          .topics[topicIndex]
+                                          .title = value,
+                                    ),
+                                  ),
+                                  IconButton(
+                                    onPressed: () => setState(() =>
+                                        _chapters[index]
+                                            .topics
+                                            .removeAt(topicIndex)),
+                                    icon: const Icon(Icons.close_rounded),
+                                    tooltip: 'Delete topic',
+                                  ),
+                                ]),
+                              ),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                onPressed: () => setState(() => _chapters[index]
+                                    .topics
+                                    .add(_TopicDraft(null, ''))),
+                                icon: const Icon(Icons.add),
+                                label: const Text('Add topic'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   OutlinedButton.icon(
                       onPressed: () => setState(() =>
                           _chapters = [..._chapters, _ChapterDraft(null, '')]),
@@ -718,10 +1064,283 @@ class _TeacherSyllabusScreenState extends ConsumerState<TeacherSyllabusScreen> {
       );
 }
 
+class _TeacherSyllabusMetrics extends StatelessWidget {
+  const _TeacherSyllabusMetrics({
+    required this.totalChapters,
+    required this.totalTopics,
+    required this.completedChapters,
+    required this.completedTopics,
+    required this.inProgressChapters,
+    required this.remainingChapters,
+  });
+
+  final int totalChapters;
+  final int totalTopics;
+  final int completedChapters;
+  final int completedTopics;
+  final int inProgressChapters;
+  final int remainingChapters;
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = [
+      _TeacherSyllabusMetric(
+        label: 'Total Chapters',
+        value: totalChapters,
+        detail: '$totalTopics ${totalTopics == 1 ? 'topic' : 'topics'} overall',
+        icon: Icons.menu_book_outlined,
+        color: const Color(0xFF1560BD),
+      ),
+      _TeacherSyllabusMetric(
+        label: 'Completed',
+        value: completedChapters,
+        detail:
+            '$completedTopics ${completedTopics == 1 ? 'topic' : 'topics'} done',
+        icon: Icons.check_circle_outline_rounded,
+        color: const Color(0xFF00A67E),
+      ),
+      _TeacherSyllabusMetric(
+        label: 'In Progress',
+        value: inProgressChapters,
+        detail: 'Actively being taught',
+        icon: Icons.pending_outlined,
+        color: const Color(0xFFF4A024),
+      ),
+      _TeacherSyllabusMetric(
+        label: 'Remaining',
+        value: remainingChapters,
+        detail: 'Untouched chapters',
+        icon: Icons.schedule_outlined,
+        color: const Color(0xFF718096),
+      ),
+    ];
+    return LayoutBuilder(builder: (context, constraints) {
+      final columns = constraints.maxWidth >= 640 ? 2 : 1;
+      const gap = 10.0;
+      final width = columns == 1
+          ? constraints.maxWidth
+          : (constraints.maxWidth - gap) / columns;
+      return Wrap(
+        spacing: gap,
+        runSpacing: gap,
+        children: [
+          for (final metric in metrics)
+            SizedBox(
+              width: width,
+              child: _TeacherSyllabusMetricCard(metric: metric),
+            ),
+        ],
+      );
+    });
+  }
+}
+
+class _TeacherSyllabusMetric {
+  const _TeacherSyllabusMetric({
+    required this.label,
+    required this.value,
+    required this.detail,
+    required this.icon,
+    required this.color,
+  });
+  final String label;
+  final int value;
+  final String detail;
+  final IconData icon;
+  final Color color;
+}
+
+class _TeacherSyllabusMetricCard extends StatelessWidget {
+  const _TeacherSyllabusMetricCard({required this.metric});
+  final _TeacherSyllabusMetric metric;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: metric.color.withValues(alpha: .10),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(metric.icon, color: metric.color),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(metric.label,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF667895))),
+                  Text('${metric.value}',
+                      style: Theme.of(context)
+                          .textTheme
+                          .headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w800)),
+                  Text(metric.detail,
+                      style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ),
+          ]),
+        ),
+      );
+}
+
 class _ChapterDraft {
-  _ChapterDraft(this.id, this.title);
+  _ChapterDraft(
+    this.id,
+    this.title, {
+    this.status = 'LEFT',
+    List<_TopicDraft>? topics,
+  }) : topics = topics ?? [];
   final String? id;
   String title;
+  String status;
+  final List<_TopicDraft> topics;
+}
+
+class _TopicDraft {
+  _TopicDraft(this.id, this.title);
+  final String? id;
+  String title;
+}
+
+class _SyllabusListDialog extends StatefulWidget {
+  const _SyllabusListDialog({
+    required this.title,
+    required this.fieldLabel,
+    required this.helperText,
+    required this.actionLabel,
+    this.stripListMarkers = false,
+    this.minLines = 4,
+    this.maxLines = 8,
+  });
+
+  final String title;
+  final String fieldLabel;
+  final String helperText;
+  final String actionLabel;
+  final bool stripListMarkers;
+  final int minLines;
+  final int maxLines;
+
+  @override
+  State<_SyllabusListDialog> createState() => _SyllabusListDialogState();
+}
+
+class _SyllabusListDialogState extends State<_SyllabusListDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final values = _controller.text
+        .split('\n')
+        .map((line) => widget.stripListMarkers
+            ? line
+                .replaceFirst(RegExp(r'^\s*(?:\d+[.)]|[-*\u2022])\s*'), '')
+                .trim()
+            : line.trim())
+        .where((line) => line.isNotEmpty)
+        .toSet()
+        .toList();
+    if (values.isNotEmpty) Navigator.pop(context, values);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(widget.title),
+        scrollable: true,
+        content: SizedBox(
+          width: 420,
+          child: TextField(
+            controller: _controller,
+            autofocus: true,
+            minLines: widget.minLines,
+            maxLines: widget.maxLines,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(
+              labelText: widget.fieldLabel,
+              helperText: widget.helperText,
+              helperMaxLines: 3,
+              alignLabelWithHint: true,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(onPressed: _submit, child: Text(widget.actionLabel)),
+        ],
+      );
+}
+
+class _TopicTitleDialog extends StatefulWidget {
+  const _TopicTitleDialog({
+    required this.title,
+    required this.initialValue,
+    required this.actionLabel,
+  });
+
+  final String title;
+  final String initialValue;
+  final String actionLabel;
+
+  @override
+  State<_TopicTitleDialog> createState() => _TopicTitleDialogState();
+}
+
+class _TopicTitleDialogState extends State<_TopicTitleDialog> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.initialValue);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final value = _controller.text.trim();
+    if (value.isNotEmpty) Navigator.pop(context, value);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(widget.title),
+        content: TextField(
+          controller: _controller,
+          autofocus: true,
+          maxLength: 200,
+          textCapitalization: TextCapitalization.sentences,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _submit(),
+          decoration: const InputDecoration(
+            labelText: 'Topic title',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(onPressed: _submit, child: Text(widget.actionLabel)),
+        ],
+      );
 }
 
 class TeacherResultsScreen extends ConsumerStatefulWidget {
@@ -737,9 +1356,95 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
   final _pass = TextEditingController(text: '40');
   final Map<String, TextEditingController> _scores = {};
   final Map<String, String> _papers = {};
+  Timer? _draftSaveTimer;
+  String? _loadedDraftId;
+  bool _restoringDraft = false;
   bool _saving = false;
+
+  String _draftKey(String definitionId) =>
+      'teacher_result_draft_v1_$definitionId';
+
+  TextEditingController _scoreController(String studentId) {
+    return _scores.putIfAbsent(studentId, () {
+      final controller = TextEditingController();
+      controller.addListener(_scheduleDraftSave);
+      return controller;
+    });
+  }
+
+  void _scheduleDraftSave() {
+    if (_restoringDraft || _definitionId == null) return;
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = Timer(
+      const Duration(milliseconds: 250),
+      () => unawaited(_saveDraftNow()),
+    );
+  }
+
+  Future<void> _saveDraftNow() async {
+    final definitionId = _definitionId;
+    if (definitionId == null || _restoringDraft) return;
+    final payload = jsonEncode({
+      'maximum': _maximum.text,
+      'passMarks': _pass.text,
+      'scores': {
+        for (final entry in _scores.entries) entry.key: entry.value.text,
+      },
+      'papers': _papers,
+      'savedAt': DateTime.now().toIso8601String(),
+    });
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_draftKey(definitionId), payload);
+  }
+
+  Future<void> _restoreDraft(String definitionId) async {
+    if (_loadedDraftId == definitionId) return;
+    _draftSaveTimer?.cancel();
+    _restoringDraft = true;
+    final preferences = await SharedPreferences.getInstance();
+    final encoded = preferences.getString(_draftKey(definitionId));
+    final decoded = encoded == null ? null : jsonDecode(encoded);
+    if (!mounted || _definitionId != definitionId) {
+      _restoringDraft = false;
+      return;
+    }
+    if (decoded is Map<String, dynamic>) {
+      _maximum.text = decoded['maximum']?.toString() ?? '100';
+      _pass.text = decoded['passMarks']?.toString() ?? '40';
+      final scores = decoded['scores'];
+      if (scores is Map<String, dynamic>) {
+        for (final entry in scores.entries) {
+          _scoreController(entry.key).text = entry.value?.toString() ?? '';
+        }
+      }
+      final papers = decoded['papers'];
+      if (papers is Map<String, dynamic>) {
+        _papers
+          ..clear()
+          ..addAll(papers.map((key, value) => MapEntry(key, '$value')));
+      }
+    } else {
+      _maximum.text = '100';
+      _pass.text = '40';
+      for (final controller in _scores.values) {
+        controller.clear();
+      }
+      _papers.clear();
+    }
+    _loadedDraftId = definitionId;
+    _restoringDraft = false;
+    setState(() {});
+  }
+
+  Future<void> _clearDraft(String definitionId) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.remove(_draftKey(definitionId));
+  }
+
   @override
   void dispose() {
+    _draftSaveTimer?.cancel();
+    unawaited(_saveDraftNow());
     _maximum.dispose();
     _pass.dispose();
     for (final value in _scores.values) {
@@ -754,8 +1459,13 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
     final definitions =
         workspace?.resultDefinitions ?? const <TeacherResultDefinition>[];
     if (definitions.isNotEmpty &&
-        !definitions.any((item) => item.id == _definitionId))
+        !definitions.any((item) => item.id == _definitionId)) {
       _definitionId = definitions.first.id;
+    }
+    if (_definitionId != null && _loadedDraftId != _definitionId) {
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _restoreDraft(_definitionId!));
+    }
     final definition =
         definitions.where((item) => item.id == _definitionId).firstOrNull;
     final classes = workspace?.classes ?? const <TeacherClassInfo>[];
@@ -763,7 +1473,7 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
         ? null
         : classes.where((item) => item.id == definition.classId).firstOrNull;
     for (final student in klass?.students ?? const <TeacherStudent>[]) {
-      _scores.putIfAbsent(student.id, TextEditingController.new);
+      _scoreController(student.id);
     }
     Future<void> publish() async {
       final maximum = double.tryParse(_maximum.text);
@@ -771,7 +1481,9 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
       if (definition == null ||
           klass == null ||
           maximum == null ||
-          pass == null) return;
+          pass == null) {
+        return;
+      }
       final marks = <Map<String, dynamic>>[];
       for (final student in klass.students) {
         final score = double.tryParse(_scores[student.id]?.text ?? '');
@@ -780,6 +1492,12 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content:
                   Text('Enter marks and attach a paper for ${student.name}.')));
+          return;
+        }
+        if (score < 0 || score > maximum) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(
+                  '${student.name}’s marks must be between 0 and ${maximum.toStringAsFixed(0)}.')));
           return;
         }
         marks.add(
@@ -794,6 +1512,8 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
             passMarks: pass,
             marks: marks);
         await TeacherPortalRepository().publishResults(ids);
+        await _clearDraft(definition.id);
+        _loadedDraftId = null;
         await ref.read(teacherPortalViewModelProvider.notifier).refresh();
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -820,6 +1540,17 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
           const SizedBox(height: 20),
           const Text(
               'Choose an open assessment, enter every student’s marks, and attach their checked paper as evidence.'),
+          const SizedBox(height: 12),
+          Card(
+            color: const Color(0xFF1560BD).withValues(alpha: .06),
+            child: const ListTile(
+              leading:
+                  Icon(Icons.cloud_done_outlined, color: Color(0xFF1560BD)),
+              title: Text('Draft autosave is on'),
+              subtitle: Text(
+                  'Marks and answer sheets are restored after going back or reopening the app. Drafts remain private until you publish.'),
+            ),
+          ),
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
               initialValue: _definitionId,
@@ -833,12 +1564,24 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
                       child: Text('${item.title} · ${item.subject}',
                           maxLines: 1, overflow: TextOverflow.ellipsis))
               ],
-              onChanged: (value) => setState(() => _definitionId = value)),
+              onChanged: (value) {
+                if (value == null || value == _definitionId) return;
+                unawaited(_saveDraftNow());
+                setState(() {
+                  _definitionId = value;
+                  _loadedDraftId = null;
+                  _papers.clear();
+                  for (final controller in _scores.values) {
+                    controller.clear();
+                  }
+                });
+              }),
           const SizedBox(height: 12),
           Row(children: [
             Expanded(
                 child: TextField(
                     controller: _maximum,
+                    onChanged: (_) => _scheduleDraftSave(),
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
                         labelText: 'Full marks',
@@ -847,6 +1590,7 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
             Expanded(
                 child: TextField(
                     controller: _pass,
+                    onChanged: (_) => _scheduleDraftSave(),
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
                         labelText: 'Pass marks', border: OutlineInputBorder())))
@@ -876,7 +1620,7 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
                             Row(children: [
                               Expanded(
                                   child: TextField(
-                                      controller: _scores[student.id],
+                                      controller: _scoreController(student.id),
                                       keyboardType: TextInputType.number,
                                       decoration: const InputDecoration(
                                           labelText: 'Marks',
@@ -884,29 +1628,71 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
                               const SizedBox(width: 8),
                               OutlinedButton.icon(
                                   onPressed: () async {
-                                    final paper = await _pickImageData();
-                                    if (paper != null && mounted)
-                                      setState(
-                                          () => _papers[student.id] = paper);
+                                    try {
+                                      final paper =
+                                          await _pickAnswerSheet(context);
+                                      if (paper != null && context.mounted) {
+                                        setState(
+                                            () => _papers[student.id] = paper);
+                                        _scheduleDraftSave();
+                                      }
+                                    } on FormatException catch (error) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(SnackBar(
+                                                content: Text(error.message)));
+                                      }
+                                    }
                                   },
                                   icon: Icon(_papers.containsKey(student.id)
                                       ? Icons.check_circle
                                       : Icons.upload_file),
                                   label: Text(_papers.containsKey(student.id)
                                       ? 'Paper added'
-                                      : 'Add paper'))
+                                      : 'Add paper')),
+                              if (_papers.containsKey(student.id))
+                                IconButton(
+                                  tooltip: 'Remove answer sheet',
+                                  onPressed: () {
+                                    setState(() => _papers.remove(student.id));
+                                    _scheduleDraftSave();
+                                  },
+                                  icon: const Icon(Icons.close_rounded),
+                                ),
                             ])
                           ]))),
             const SizedBox(height: 12),
-            FilledButton.icon(
-                onPressed: _saving ? null : publish,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.publish_outlined),
-                label: const Text('Publish results'))
+            Row(children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _saving
+                      ? null
+                      : () async {
+                          await _saveDraftNow();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content:
+                                        Text('Draft saved on this device.')));
+                          }
+                        },
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Text('Save draft'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.icon(
+                    onPressed: _saving ? null : publish,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.publish_outlined),
+                    label: const Text('Publish results')),
+              ),
+            ])
           ]
         ]));
   }

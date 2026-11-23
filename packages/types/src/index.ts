@@ -18,7 +18,7 @@ export type AdmissionStatus = 'PENDING_PAYMENT' | 'READY_FOR_LOGIN' | 'ACTIVE';
 
 export type LeaveType = 'CASUAL' | 'SICK' | 'LONG_SICK' | 'EARLY_OUT';
 
-export type LeaveStatus = 'PENDING' | 'APPROVED_LEVEL1' | 'APPROVED_LEVEL2' | 'REJECTED';
+export type LeaveStatus = 'PENDING' | 'APPROVED_LEVEL1' | 'APPROVED_LEVEL2' | 'REJECTED' | 'CANCELLED';
 
 export type PettyCashStatus =
   | 'PENDING'

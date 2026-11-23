@@ -6,7 +6,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
+import 'package:tms_mobile/core/auth/role_codes.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
+import 'package:tms_mobile/core/router/app_router.dart';
 import 'package:tms_mobile/features/auth/data/auth_service.dart';
 import 'package:tms_mobile/features/auth/data/mock_auth_service.dart';
 
@@ -326,35 +328,63 @@ void main() {
           isLoading: false,
         );
 
-    test('unsupported server roles are rejected, never defaulted', () {
+    AuthUser parse(String role) => AuthUser.fromJson({
+          'user': {
+            'id': 'x',
+            'email': 'x@y.z',
+            'firstName': 'X',
+            'lastName': 'Y',
+            'role': role,
+          },
+        });
+
+    // Since 42bca4d, roles the app does not support are not rejected at
+    // login: they map to WEB_PORTAL_ONLY, which can only reach the
+    // web-portal handoff screen. They must never be defaulted to a real role.
+    test('unsupported server roles map to web-portal-only, never defaulted',
+        () {
       for (final hostile in [
         'SUPER_ADMIN',
         'STAFF',
         'ADMIN',
-        '',
-        'TEACHER,ADMIN'
+        'RECEPTIONIST',
+        'TEACHER,ADMIN',
       ]) {
-        expect(
-          () => AuthUser.fromJson({
-            'user': {
-              'id': 'x',
-              'email': 'x@y.z',
-              'firstName': 'X',
-              'lastName': 'Y',
-              'role': hostile,
-            },
-          }),
-          throwsA(isA<AuthFailure>()),
-          reason: 'role: $hostile',
-        );
-      }
-    });
-
-    test('unknown roles land on login, never a privileged home', () {
-      for (final hostile in ['UNKNOWN', 'SUPER_ADMIN', 'ADMIN', '']) {
-        expect(stateFor(hostile).roleRedirectPath, '/login',
+        expect(parse(hostile).role, RoleCodes.webPortalOnly,
             reason: 'role: $hostile');
       }
+      expect(() => parse(''), throwsA(isA<AuthFailure>()),
+          reason: 'a missing role is still rejected');
+      expect(() => parse('   '), throwsA(isA<AuthFailure>()));
+    });
+
+    test('unknown roles land on the handoff screen, never a privileged home',
+        () {
+      for (final hostile in [
+        'UNKNOWN',
+        'SUPER_ADMIN',
+        'ADMIN',
+        RoleCodes.webPortalOnly,
+      ]) {
+        expect(stateFor(hostile).roleRedirectPath, '/unsupported-role',
+            reason: 'role: $hostile');
+        for (final privileged in [
+          '/tenant/home',
+          '/branch/home',
+          '/teacher/home',
+          '/student/fees',
+        ]) {
+          expect(
+            mobileRoleBoundaryRedirect(
+              authState: stateFor(hostile),
+              location: privileged,
+            ),
+            '/unsupported-role',
+            reason: 'role: $hostile → $privileged',
+          );
+        }
+      }
+      expect(stateFor('').roleRedirectPath, '/unsupported-role');
       expect(stateFor('TEACHER').roleRedirectPath, '/teacher/home');
     });
 

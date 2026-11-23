@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/core/auth/role_codes.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
+import 'package:tms_mobile/core/notifications/push_notification_service.dart';
 import 'package:tms_mobile/core/sync/sync.dart';
 import 'package:tms_mobile/features/auth/data/auth_service.dart';
 import 'package:tms_mobile/features/auth/data/device_account_vault.dart';
@@ -227,6 +228,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(clearError: true);
   }
 
+  Future<void> updateDisplayName(String firstName, String lastName) async {
+    final current = state.user;
+    if (current == null) return;
+    final updated = AuthUser(
+      id: current.id,
+      email: current.email,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      role: current.role,
+      tenantId: current.tenantId,
+      requiresTwoFactor: current.requiresTwoFactor,
+    );
+    state = state.copyWith(user: updated);
+    await ApiClient.saveUser(jsonEncode(updated.toJson()));
+  }
+
   Future<void> send2FACode() async {
     if (!state.isTwoFactorPending || state.pendingEmail == null) {
       throw const AuthFailure('Start sign-in again before requesting a code.');
@@ -276,6 +293,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// wipe safely.
   Future<void> logout() async {
     final userId = state.user?.id;
+    // Unregister while the session cookie is still valid, so this device
+    // stops receiving the signed-out account's notifications.
+    await PushNotifications.unregisterForLogout();
     await AuthService.signOut();
     if (userId != null && userId.isNotEmpty) {
       await clearOfflineCache(userId);

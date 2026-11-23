@@ -74,6 +74,11 @@ db.student.updateMany = async ({ where, data }: any) => {
 };
 db.teacherSession.findFirst = async ({ where }: any) => pendingSession && matches(pendingSession, where) ? pendingSession : null;
 db.branch.findFirst = async () => ({ latitude: 0, longitude: 0, radiusMeters: 100 });
+// This fake counts stamps rather than storing them, so there is never a prior
+// stamp to read back. Returning null keeps the IN sequence guard satisfied and
+// leaves this suite testing what it is about: the daily-update gate. Sequencing
+// itself is covered in routes/attendance.test.ts.
+db.teacherAttendance.findFirst = async () => null;
 db.teacherAttendance.create = async () => { stamps++; return { id: 'stamp' }; };
 const authPath = require.resolve('../utils/auth');
 require.cache[authPath] = { id: authPath, filename: authPath, loaded: true, exports: {

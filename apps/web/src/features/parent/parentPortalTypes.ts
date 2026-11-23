@@ -31,6 +31,10 @@ export interface ParentChild {
   outstanding: number;
   branchId?: string;
   photoUrl?: string | null;
+  /** The child's login ID (a real or generated email). */
+  loginId?: string;
+  /** True when the child's codes go to this parent's phone. */
+  usesParentPhone?: boolean;
 }
 
 export interface ParentProfile {
@@ -188,17 +192,6 @@ export interface ParentPortalDataset {
   events: ParentEvent[];
   notifications: ParentNotification[];
   syllabi?: ParentSyllabus[];
-}
-
-export interface NepalPayPayload {
-  invoiceId: string;
-  merchantName: string;
-  merchantCity: string;
-  amount: number;
-  currency: string;
-  currencyCode: string;
-  studentName: string;
-  qrString: string;
 }
 
 export interface ParentSyllabusTopicLog {

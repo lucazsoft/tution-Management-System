@@ -3,6 +3,7 @@ import prisma from '../utils/db';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware } from '../middleware/auth';
 import { PushNotificationService } from '../services/push-notification';
+import { recordNotification } from '../services/notification-records';
 import { canAccessBranch, hasBranchPermission, hasRole } from '../utils/access-control';
 
 const router = Router();
@@ -63,14 +64,24 @@ router.post(
       });
 
       let notificationDelivered = true;
+      let notificationPersisted: boolean | null = null;
       if (maintenanceTask && assignedStaffId) {
+        // Preserve the same recipient even when no device is registered or FCM fails.
+        notificationPersisted = Boolean(await recordNotification(prisma, {
+          tenantId: req.tenantId!, userId: assignedStaffId, branchId,
+          category: 'MAINTENANCE', title: 'Maintenance task assigned',
+          body: 'Open your task list to review the assigned maintenance work.',
+          destination: '/staff/tasks', entityId: maintenanceTask.id,
+        }));
         try {
-          await PushNotificationService.sendPush(
+          const delivery = await PushNotificationService.sendPush(
             req.tenantId!,
             assignedStaffId,
             'New Maintenance Task Auto-Assigned',
-            `Room ${classroomId} requires check. Reason: ${remarks}`
+            'Open TMS to review your assigned maintenance task.',
+            { entityId: maintenanceTask.id, deepLink: '/janitor/home', webDeepLink: '/staff/tasks' }
           );
+          notificationDelivered = delivery.success && delivery.sent > 0;
         } catch {
           // The records have committed. Do not invite a duplicate POST by
           // reporting a database failure when only notification failed.
@@ -83,6 +94,7 @@ router.post(
         resourceLog,
         maintenanceTask,
         notificationDelivered,
+        notificationPersisted,
       });
     } catch (error: any) {
       return res.status(500).json({ error: 'Failed to log resource condition.', details: error.message });

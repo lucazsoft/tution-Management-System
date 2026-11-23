@@ -168,6 +168,27 @@ class TeacherPortalViewModel extends BaseViewModel<TeacherPortalState> {
     }
   }
 
+  Future<bool> markSessionTaken(String sessionId) async {
+    state = state.copyWith(
+      updatingSessionId: sessionId,
+      clearError: true,
+      clearErrorKind: true,
+    );
+    try {
+      await _repository.markSessionTaken(sessionId);
+      await refresh();
+      state = state.copyWith(clearUpdatingSessionId: true);
+      return true;
+    } on ApiException catch (error) {
+      state = state.copyWith(
+        clearUpdatingSessionId: true,
+        error: error.message,
+        errorKind: error.kind,
+      );
+      return false;
+    }
+  }
+
   Future<bool> saveClassAttendance({
     required String classId,
     required Map<String, String> records,

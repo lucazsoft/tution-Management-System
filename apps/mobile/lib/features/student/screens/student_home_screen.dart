@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:tms_mobile/core/notifications/inbox_unread_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +13,7 @@ import '../viewmodels/student_home_viewmodel.dart';
 import '../widgets/student_scaffold.dart';
 import '../widgets/nepal_date_time.dart';
 import '../../../shared/widgets/academic_calendar.dart';
+import '../../../shared/widgets/today_timetable_tile.dart';
 
 List<PortalEvent> _upcomingEvents(StudentPortal portal) {
   final now = DateTime.now();
@@ -38,6 +42,7 @@ class StudentHomeScreen extends ConsumerWidget {
     final viewModel = ref.read(studentHomeViewModelProvider.notifier);
     final connectivity = ref.watch(connectivityMonitorProvider);
     final portal = state.portal;
+    final accountUnread = ref.watch(inboxUnreadCountProvider).valueOrNull ?? 0;
 
     if (state.isLoading && portal == null) {
       return const StudentScaffold(
@@ -60,6 +65,7 @@ class StudentHomeScreen extends ConsumerWidget {
       );
     }
 
+    final unread = portal.unreadCount + accountUnread;
     final showOfflineBar = connectivity == ConnectivityState.offline;
 
     return StudentScaffold(
@@ -67,14 +73,20 @@ class StudentHomeScreen extends ConsumerWidget {
       selectedIndex: 0,
       actions: [
         Semantics(
-          label: '${portal.unreadCount} unread notifications',
+          label: '$unread unread notifications',
           button: true,
           child: Badge(
-            isLabelVisible: portal.unreadCount > 0,
-            label: Text('${portal.unreadCount}'),
+            isLabelVisible: unread > 0,
+            label: Text('$unread'),
             child: IconButton(
               tooltip: 'Notifications',
-              onPressed: () => context.push('/student/notifications'),
+              onPressed: () async {
+                await context.push('/student/notifications');
+                if (context.mounted) {
+                  ref.invalidate(inboxUnreadCountProvider);
+                  await viewModel.refresh();
+                }
+              },
               icon: const Icon(Icons.notifications_outlined),
             ),
           ),
@@ -135,9 +147,8 @@ class StudentHomeScreen extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
-        const NepalDateTimeHeader(),
-        const SizedBox(height: TmsSpace.lg),
         _buildWelcomeCard(context, portal),
+        ..._overdueBanner(context, portal),
         const SizedBox(height: TmsSpace.lg),
         _buildTimetableSection(context, portal),
         const SizedBox(height: TmsSpace.sm),
@@ -161,9 +172,8 @@ class StudentHomeScreen extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(24, 8, 12, 24),
             children: [
-              const NepalDateTimeHeader(),
-              const SizedBox(height: TmsSpace.lg),
               _buildWelcomeCard(context, portal),
+              ..._overdueBanner(context, portal),
               const SizedBox(height: TmsSpace.lg),
               _buildTimetableSection(context, portal),
               const SizedBox(height: TmsSpace.sm),
@@ -212,9 +222,8 @@ class StudentHomeScreen extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(24, 8, 12, 24),
             children: [
-              const NepalDateTimeHeader(),
-              const SizedBox(height: TmsSpace.lg),
               _buildWelcomeCard(context, portal),
+              ..._overdueBanner(context, portal),
               const SizedBox(height: TmsSpace.lg),
               _buildTimetableSection(context, portal),
               const SizedBox(height: TmsSpace.sm),
@@ -240,97 +249,106 @@ class StudentHomeScreen extends ConsumerWidget {
   }
 
   Widget _buildWelcomeCard(BuildContext context, StudentPortal portal) {
-    final profile = portal.profile;
-    return Material(
-      color: Colors.transparent,
-      child: Ink(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [StudentColors.primaryDark, StudentColors.primary],
-          ),
-          borderRadius: BorderRadius.circular(TmsRadius.card),
-        ),
+    return _StudentWelcomeCard(
+      portal: portal,
+      onTap: () => context.push('/student/timetable'),
+    );
+  }
+
+  /// Overdue fees banner shown under the welcome card on every layout.
+  /// Restored after the Sep 2026 home redesign dropped it.
+  List<Widget> _overdueBanner(BuildContext context, StudentPortal portal) {
+    final overdue = portal.overdueAmount;
+    if (overdue <= 0) return const [];
+    final blocked = portal.profile.blocked;
+    return [
+      const SizedBox(height: TmsSpace.lg),
+      Card(
+        color: StudentColors.error.withValues(alpha: .06),
         child: InkWell(
           borderRadius: BorderRadius.circular(TmsRadius.card),
-          onTap: () => context.push('/student/timetable'),
+          onTap: () => context.push('/student/fees'),
           child: Padding(
-            padding: const EdgeInsets.all(TmsSpace.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.all(TmsSpace.md),
+            child: Row(
               children: [
-                Text(
-                  'Namaste, ${profile.name.split(' ').first}',
-                  style: Theme.of(context)
-                      .textTheme
-                      .displaySmall
-                      ?.copyWith(color: Colors.white),
+                Icon(
+                  blocked ? Icons.lock_rounded : Icons.error_outline_rounded,
+                  color: StudentColors.error,
                 ),
-                const SizedBox(height: TmsSpace.xs),
-                Text(
-                  '${profile.grade} · ${profile.branch}',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(color: Colors.white70),
-                ),
-                const SizedBox(height: TmsSpace.lg),
-                Row(
-                  children: [
-                    const Icon(Icons.schedule_rounded,
-                        color: StudentColors.accent),
-                    const SizedBox(width: TmsSpace.xs),
-                    Expanded(
-                      child: Text(
-                        '${portal.todaySessions.length} sessions today',
+                const SizedBox(width: TmsSpace.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        blocked ? 'Blocked — fee dues' : 'Fee dues overdue',
                         style: Theme.of(context)
                             .textTheme
                             .titleMedium
-                            ?.copyWith(color: Colors.white),
+                            ?.copyWith(color: StudentColors.error),
                       ),
-                    ),
-                    const Icon(Icons.chevron_right_rounded,
-                        color: Colors.white70),
-                  ],
+                      const SizedBox(height: TmsSpace.xxs),
+                      Text(
+                        'NPR ${overdue.toStringAsFixed(0)} is overdue. View what is owed and the payment QR.',
+                      ),
+                    ],
+                  ),
                 ),
+                const Icon(Icons.chevron_right_rounded),
               ],
             ),
           ),
         ),
       ),
-    );
+    ];
   }
 
   Widget _buildTimetableSection(BuildContext context, StudentPortal portal) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(TmsSpace.md),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text("Today's timetable", style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 2),
-              Text('${portal.todaySessions.length} scheduled sessions', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: StudentColors.mutedText)),
-            ])),
-            TextButton(onPressed: () => context.go('/student/timetable'), child: const Text('Full timetable')),
-          ]),
-          const SizedBox(height: TmsSpace.sm),
-          if (portal.todaySessions.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: TmsSpace.md),
-              child: Row(children: [
-                Icon(Icons.event_busy_outlined, color: StudentColors.mutedText),
-                SizedBox(width: TmsSpace.sm),
-                Expanded(child: Text('No sessions scheduled for today.')),
-              ]),
-            )
-          else
-            for (final session in portal.todaySessions.take(4))
-              _StudentSessionRow(session: session),
-        ]),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionHeader(
+          title: "Today's timetable",
+          action: 'Full timetable',
+          onTap: () => context.go('/student/timetable'),
+        ),
+        const SizedBox(height: TmsSpace.sm),
+        if (portal.todaySessions.isEmpty)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(TmsSpace.md),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.event_busy_outlined,
+                    color: StudentColors.mutedText,
+                  ),
+                  SizedBox(width: TmsSpace.sm),
+                  Expanded(child: Text('No sessions scheduled for today.')),
+                ],
+              ),
+            ),
+          )
+        else
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: TmsSpace.md),
+              child: Column(
+                children: [
+                  for (final session in portal.todaySessions.take(2))
+                    TodayTimetableTile(
+                      startTime: session.time,
+                      endTime: session.endTime,
+                      subject: session.subject,
+                      typeLabel: session.typeLabel,
+                      details: '${session.teacher} · ${session.room}',
+                    ),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -690,6 +708,210 @@ class StudentHomeScreen extends ConsumerWidget {
   }
 }
 
+class _StudentWelcomeCard extends StatefulWidget {
+  const _StudentWelcomeCard({required this.portal, required this.onTap});
+  final StudentPortal portal;
+  final VoidCallback onTap;
+
+  @override
+  State<_StudentWelcomeCard> createState() => _StudentWelcomeCardState();
+}
+
+class _StudentWelcomeCardState extends State<_StudentWelcomeCard> {
+  late DateTime _now;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _now = DateTime.now();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = widget.portal.profile;
+    final firstName = profile.name.trim().split(RegExp(r'\s+')).first;
+    return Semantics(
+      label:
+          'Namaste, $firstName. ${nepaliDateLabel(_now)}. ${nepalClockLabel(_now)} Nepal time. ${widget.portal.todaySessions.length} sessions today.',
+      button: true,
+      child: Material(
+        color: Colors.transparent,
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF082F5B), Color(0xFF1769B0)],
+            ),
+            borderRadius: BorderRadius.circular(TmsRadius.cardLg),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF0B3969).withValues(alpha: .22),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(TmsRadius.cardLg),
+            onTap: widget.onTap,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(TmsRadius.cardLg),
+              child: Stack(
+                children: [
+                  const Positioned(
+                    right: -24,
+                    top: -34,
+                    child:
+                        Icon(Icons.circle, size: 142, color: Color(0x14FFFFFF)),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(TmsSpace.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final icon = Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: .14),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: const Icon(Icons.school_rounded,
+                                  color: Colors.white, size: 26),
+                            );
+                            final dateAndClock = Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: .12),
+                                borderRadius: BorderRadius.circular(14),
+                                border:
+                                    Border.all(color: const Color(0x30FFFFFF)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    nepaliDateLabel(_now),
+                                    key: const ValueKey(
+                                        'student-home-nepali-date'),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Wrap(
+                                    alignment: WrapAlignment.end,
+                                    spacing: 4,
+                                    runSpacing: 2,
+                                    children: [
+                                      Text(
+                                        nepalClockLabel(_now),
+                                        key: const ValueKey(
+                                            'student-home-nepal-clock'),
+                                        style: const TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 11),
+                                      ),
+                                      const Text('Nepal time',
+                                          style: TextStyle(
+                                              color: Colors.white70,
+                                              fontSize: 11)),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            );
+
+                            if (constraints.maxWidth < 360) {
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: icon,
+                                  ),
+                                  const SizedBox(height: TmsSpace.sm),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: dateAndClock,
+                                  ),
+                                ],
+                              );
+                            }
+
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                icon,
+                                const Spacer(),
+                                dateAndClock,
+                              ],
+                            );
+                          },
+                        ),
+                        const SizedBox(height: TmsSpace.md),
+                        Text(
+                          'Namaste, $firstName',
+                          style: Theme.of(context)
+                              .textTheme
+                              .displaySmall
+                              ?.copyWith(color: Colors.white),
+                        ),
+                        const SizedBox(height: TmsSpace.xs),
+                        Text(
+                          '${profile.grade} · ${profile.branch}',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(color: Colors.white70),
+                        ),
+                        const SizedBox(height: TmsSpace.md),
+                        Row(
+                          children: [
+                            const Icon(Icons.schedule_rounded,
+                                color: StudentColors.accent),
+                            const SizedBox(width: TmsSpace.xs),
+                            Expanded(
+                              child: Text(
+                                '${widget.portal.todaySessions.length} sessions today',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(color: Colors.white),
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right_rounded,
+                                color: Colors.white70),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Full-screen loading/error/denied/offline message for the home screen.
 class _HomeStateMessage extends StatelessWidget {
   const _HomeStateMessage({
@@ -837,98 +1059,6 @@ class _SectionHeader extends StatelessWidget {
       ],
     );
   }
-}
-
-class _SessionTile extends StatelessWidget {
-  const _SessionTile({required this.session});
-
-  final PortalSession session;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(TmsSpace.md),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 64,
-              child: Column(
-                children: [
-                  Text(
-                    session.time,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(color: StudentColors.primaryDark),
-                    textAlign: TextAlign.center,
-                  ),
-                  Text(
-                    session.endTime,
-                    style: Theme.of(context).textTheme.bodySmall,
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              width: 3,
-              height: 48,
-              margin: const EdgeInsets.symmetric(horizontal: TmsSpace.sm),
-              decoration: BoxDecoration(
-                color: StudentColors.primary,
-                borderRadius: BorderRadius.circular(TmsRadius.pill),
-              ),
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(session.subject,
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: TmsSpace.xxs),
-                  Text(
-                    '${session.teacher} · ${session.room}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-            StudentStatusPill(
-              label: session.typeLabel,
-              icon: Icons.school_outlined,
-              color: StudentColors.info,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StudentSessionRow extends StatelessWidget {
-  const _StudentSessionRow({required this.session});
-  final PortalSession session;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 9),
-        child: Row(children: [
-          SizedBox(
-            width: 58,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(session.time, style: const TextStyle(fontWeight: FontWeight.w800)),
-              Text(session.endTime, style: Theme.of(context).textTheme.bodySmall),
-            ]),
-          ),
-          Container(width: 3, height: 42, color: StudentColors.primary),
-          const SizedBox(width: TmsSpace.sm),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(session.subject, style: const TextStyle(fontWeight: FontWeight.w700)),
-            Text('${session.teacher} · ${session.room}', maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
-          ])),
-        ]),
-      );
 }
 
 class _QuickAction extends StatelessWidget {

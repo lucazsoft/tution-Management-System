@@ -4,13 +4,16 @@ import { Prisma } from '@prisma/client';
 import prisma from '../utils/db';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware } from '../middleware/auth';
-import { MockSmsSender } from '../utils/notifications';
+import { getSmsSender } from '../utils/sms';
+import { previewFeeReminders, sendFeeReminders } from '../services/fee-reminders';
 import { PushNotificationService } from '../services/push-notification';
+import { recordNotification } from '../services/notification-records';
 import { isTenantAdmin } from '../utils/access-control';
 import { reconcilePendingConnectIps } from '../utils/connectips';
 import { generateDailyTeacherSessions } from '../services/timetable-service';
 import { markOverdueInvoices } from '../services/billing-access';
 import { recoverAdmissionDeliveries } from '../services/admission-delivery';
+import { runAutoCheckout } from '../services/auto-checkout';
 import { runBranchExpenseAnomalyAlerts } from '../services/financial-anomaly-alerts';
 import { executeDueSocialPosts, MissingCredentialsAdapter } from '../services/social-publishing';
 import { prismaSocialPublishingRepository } from '../services/social-publishing-store';
@@ -26,8 +29,63 @@ import {
   type AutomationStaffInput,
 } from '../services/payroll-automation';
 import { handlePayrollCron } from './cron-payroll';
+import { notifyEscalatedLeaves } from './leaves';
 
 const router = Router();
+
+/**
+ * Reminder and alert tasks offered on the Control Center "Reminders" tab.
+ * Only tasks that really deliver something are listed (petty-cash-reset and
+ * contract-expiry-alerts only log a line today, so they are not offered).
+ */
+export const REMINDER_TASKS = [
+  'fee-reminder-sms',
+  'monthly-due-verification',
+  'leave-escalation',
+  'salary-reminder',
+  'financial-anomaly-alerts',
+  'task-escalation',
+] as const;
+
+/** A second fee-reminder SMS blast inside this window needs explicit confirmation. */
+export const FEE_REMINDER_COOLDOWN_HOURS = 20;
+
+async function lastRun(tenantId: string, taskName: string) {
+  return prisma.automationRun.findFirst({
+    where: { tenantId, taskName },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+// Status for the Control Center Reminders tab: last run of each task and what
+// a fee-reminder send would do right now.
+router.get('/automation', authMiddleware, async (req: TenantRequest, res: Response) => {
+  if (!isTenantAdmin(req.user!)) {
+    return res.status(403).json({ error: 'Only the Tenant Admin may view institution automation.' });
+  }
+  try {
+    const runs = await Promise.all(REMINDER_TASKS.map((taskName) => lastRun(req.tenantId!, taskName)));
+    const starterIds = [...new Set(runs.flatMap((run) => (run ? [run.startedById] : [])))];
+    const starters = starterIds.length
+      ? await prisma.user.findMany({ where: { id: { in: starterIds } }, select: { id: true, firstName: true, lastName: true } })
+      : [];
+    const names = new Map(starters.map((user) => [user.id, `${user.firstName} ${user.lastName}`.trim()]));
+    const feeReminderPreview = await previewFeeReminders(prisma, req.tenantId!);
+    return res.json({
+      tasks: REMINDER_TASKS.map((taskName, index) => {
+        const run = runs[index];
+        return {
+          taskName,
+          lastRun: run ? { at: run.createdAt, by: names.get(run.startedById) ?? 'Unknown user', summary: run.summary } : null,
+        };
+      }),
+      feeReminderPreview,
+      feeReminderCooldownHours: FEE_REMINDER_COOLDOWN_HOURS,
+    });
+  } catch {
+    return res.status(500).json({ error: 'Failed to load automation status.' });
+  }
+});
 
 // Endpoint to trigger cron automation tasks
 router.post(
@@ -44,20 +102,32 @@ router.post(
     }
 
     try {
+      if (taskName === 'fee-reminder-sms' && req.body.force !== true) {
+        const previous = await lastRun(req.tenantId!, taskName);
+        const cutoff = Date.now() - FEE_REMINDER_COOLDOWN_HOURS * 3_600_000;
+        if (previous && previous.createdAt.getTime() > cutoff) {
+          return res.status(409).json({
+            error: `Fee reminders were already sent at ${previous.createdAt.toISOString()}. Confirm to send them again.`,
+            code: 'RECENTLY_SENT',
+            lastRunAt: previous.createdAt,
+          });
+        }
+      }
+
       const logs = [];
       let financialAnomalyAlerts: Awaited<ReturnType<typeof runBranchExpenseAnomalyAlerts>> | undefined;
-      const smsSender = new MockSmsSender();
 
       if (taskName === 'monthly-due-verification') {
         await prisma.$transaction(tx => markOverdueInvoices(tx, req.tenantId!));
 
         logs.push('Marked past-due unpaid invoices OVERDUE and blocked active enrollments in their issuing branches.');
       } else if (taskName === 'fee-reminder-sms') {
-        await smsSender.sendSms(
-          '98510XXXXX',
-          'Dear Parent, your child\'s tuition fees are overdue. Access is currently blocked. Please settle the invoice.'
+        const reminders = await sendFeeReminders(prisma, getSmsSender(), req.tenantId!);
+        logs.push(
+          `Fee reminders for ${reminders.students} student(s) with overdue fees: ${reminders.sent} SMS sent, `
+          + `${reminders.failed} failed, ${reminders.withoutPhone} parent(s) without a mobile number, `
+          + `${reminders.withoutGuardian} student(s) with no linked parent.`,
         );
-        logs.push('Sent overdue SMS alerts to parents of blocked students.');
       } else if (taskName === 'salary-reminder') {
         const tenantAdmins = await prisma.user.findMany({
           where: {
@@ -67,13 +137,25 @@ router.post(
           },
           select: { id: true },
         });
-        await Promise.all(tenantAdmins.map((admin) => PushNotificationService.sendPush(
+        const inboxResults = await Promise.all(tenantAdmins.map((admin) => recordNotification(prisma, {
+          tenantId: req.tenantId!, userId: admin.id, category: 'PAYROLL',
+          title: 'Payroll calculation reminder',
+          body: 'Open payroll to review the monthly calculation.',
+          destination: '/tenant/payroll',
+        })));
+        const stored = inboxResults.filter(Boolean).length;
+        logs.push(`Payroll inbox: ${stored} record(s) stored, ${inboxResults.length - stored} persistence failure(s).`);
+        const deliveries = await Promise.all(tenantAdmins.map((admin) => PushNotificationService.sendPush(
           req.tenantId!,
           admin.id,
           'Payroll Calculation Reminder',
           'It is the 25th of the month. Please run and calculate payrolls for all staff.',
+          { deepLink: '/tenant/home', webDeepLink: '/tenant/payroll' },
         )));
-        logs.push(`Sent payroll calculation notification to ${tenantAdmins.length} Tenant Admin(s).`);
+        const accepted = deliveries.reduce((sum, result) => sum + (result.sent ?? 0), 0);
+        const failed = deliveries.reduce((sum, result) => sum + (result.failed ?? 0), 0);
+        const skipped = deliveries.filter((result) => result.skipped).length;
+        logs.push(`Payroll reminder: ${accepted} device message(s) accepted by provider, ${failed} failed, ${skipped} recipient(s) skipped. Device delivery is not confirmed.`);
       } else if (taskName === 'petty-cash-reset') {
         logs.push('Petty cash caps reset for all branches.');
       } else if (taskName === 'contract-expiry-alerts') {
@@ -100,6 +182,9 @@ router.post(
         } catch (dbErr) {
           throw dbErr;
         }
+      } else if (taskName === 'leave-escalation') {
+        const alerted = await notifyEscalatedLeaves(req.tenantId!);
+        logs.push(`Alerted Tenant Admins about ${alerted} leave request(s) unanswered by their branch for 48 hours.`);
       } else if (taskName === 'connectips-revalidate') {
         const result = await reconcilePendingConnectIps({ tenantId: req.tenantId! });
         logs.push(`Revalidated ${result.checked} pending connectIPS payment(s); confirmed ${result.confirmed}.`);
@@ -109,6 +194,9 @@ router.post(
       } else if (taskName === 'daily-teacher-sessions') {
         const result = await generateDailyTeacherSessions({ tenantId: req.tenantId! });
         logs.push(`Generated ${result.created} teacher session(s) for ${result.day}; ${result.eligible} scheduled class(es) were eligible.`);
+      } else if (taskName === 'auto-checkout-teachers') {
+        const result = await runAutoCheckout({ tenantId: req.tenantId! });
+        logs.push(`Auto-checkout for ${result.day}: examined ${result.examined} teacher(s); closed ${result.closed} open day(s).`);
       } else if (taskName === 'financial-anomaly-alerts') {
         financialAnomalyAlerts = await runBranchExpenseAnomalyAlerts({ tenantId: req.tenantId! });
         const anomalyLabel = financialAnomalyAlerts.anomalies.length === 1 ? 'anomaly' : 'anomalies';
@@ -131,6 +219,11 @@ router.post(
       } else {
         return res.status(400).json({ error: `Unknown taskName: ${taskName}.` });
       }
+
+      // History for the Control Center; never fails the task that already ran.
+      await prisma.automationRun.create({
+        data: { tenantId: req.tenantId!, taskName, startedById: req.user!.id, summary: logs.join(' ').slice(0, 2000) },
+      }).catch(() => undefined);
 
       return res.status(200).json({
         message: `Cron automation '${taskName}' executed successfully.`,
@@ -208,7 +301,7 @@ router.post(
             prisma.leave.findMany({
               where: {
                 userId: record.userId,
-                status: { in: ['APPROVED_LEVEL1', 'APPROVED_LEVEL2'] },
+                status: 'APPROVED_LEVEL2',
                 startDate: { lt: periodEnd },
                 endDate: { gte: periodStart },
               },

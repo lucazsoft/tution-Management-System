@@ -64,8 +64,10 @@ void main() {
       expect(TmsRadius.checkbox, TmsRadius.r4);
       expect(TmsRadius.control, TmsRadius.r7);
       expect(TmsRadius.card, TmsRadius.r12);
-      expect(TmsRadius.cardLg, TmsRadius.r20);
-      expect(TmsRadius.input, TmsRadius.r16);
+      // Retuned in 97da467 (Sep 2026 UI refresh): large cards 20 → 16,
+      // inputs 16 → 7 to match the control radius.
+      expect(TmsRadius.cardLg, TmsRadius.r16);
+      expect(TmsRadius.input, TmsRadius.r7);
       expect(TmsRadius.modal, TmsRadius.r18);
       expect(TmsRadius.pill, TmsRadius.r20);
     });
@@ -75,10 +77,8 @@ void main() {
     testWidgets('card/input/checkbox radii source shared tokens', (_) async {
       final theme = buildTmsTheme();
       expect(_cardRadius(theme), TmsRadius.cardLg);
-      expect(_cardRadius(theme), 16.0);
       final border = theme.inputDecorationTheme.border! as OutlineInputBorder;
       expect(border.borderRadius.topLeft.x, TmsRadius.input);
-      expect(border.borderRadius.topLeft.x, 7.0);
     });
 
     testWidgets('palette wires core colors', (_) async {
@@ -86,6 +86,24 @@ void main() {
       expect(theme.colorScheme.primary, kColorPrimary);
       expect(theme.colorScheme.secondary, kColorAccent);
       expect(theme.colorScheme.error, kColorError);
+    });
+
+    testWidgets('chips and primary buttons keep readable foreground colors',
+        (_) async {
+      final theme = buildTmsTheme();
+      expect(theme.chipTheme.labelStyle?.color, kColorText);
+      expect(theme.chipTheme.secondaryLabelStyle?.color, kColorPrimaryDark);
+      expect(theme.chipTheme.checkmarkColor, kColorPrimaryDark);
+      expect(
+        theme.filledButtonTheme.style?.foregroundColor
+            ?.resolve(<WidgetState>{}),
+        Colors.white,
+      );
+      expect(
+        theme.outlinedButtonTheme.style?.foregroundColor
+            ?.resolve(<WidgetState>{}),
+        kColorPrimaryDark,
+      );
     });
   });
 
@@ -98,7 +116,8 @@ void main() {
 
     testWidgets('body/label/nav text uses Roboto, display keeps Fraunces',
         (_) async {
-      final theme = buildStudentTheme(ThemeData.light());
+      final base = buildTmsTheme();
+      final theme = buildStudentTheme(base);
       final text = theme.textTheme;
       for (final style in <TextStyle?>[
         text.titleMedium,
@@ -121,6 +140,16 @@ void main() {
         text.labelLarge?.fontFamily,
       ];
       expect(families.any((f) => f?.contains('Roboto') ?? false), isTrue);
+      for (final pair in <(TextStyle?, TextStyle?)>[
+        (theme.textTheme.titleMedium, base.textTheme.titleMedium),
+        (theme.textTheme.bodyLarge, base.textTheme.bodyLarge),
+        (theme.textTheme.bodyMedium, base.textTheme.bodyMedium),
+        (theme.textTheme.bodySmall, base.textTheme.bodySmall),
+        (theme.textTheme.labelLarge, base.textTheme.labelLarge),
+      ]) {
+        expect(pair.$1?.fontSize, pair.$2?.fontSize);
+        expect(pair.$1?.fontWeight, pair.$2?.fontWeight);
+      }
     });
 
     testWidgets('nav indicator tint and surface are unchanged', (_) async {

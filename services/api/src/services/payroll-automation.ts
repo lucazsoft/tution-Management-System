@@ -10,13 +10,14 @@
  * - Income tax slabs (annual): first 500k @1%, next 200k @10%, next 300k @20%,
  *   next 1000k @30%, remainder @36%. Monthly gross is annualized, taxed, then
  *   prorated back to the month.
- * - Attendance: absent days = daysInMonth - presentDays - approvedLeaveDays
+ * - Attendance: absent days = daysInMonth - presentDays - approvedLeaveDays (final approvals only)
  *   (clamped at zero); each absent day deducts baseSalary / daysInMonth.
  */
 
 export const NEPAL_SSF_EMPLOYEE_RATE = 0.11;
 
-const APPROVED_LEAVE_STATUSES = new Set(['APPROVED_LEVEL1', 'APPROVED_LEVEL2']);
+// APPROVED_LEVEL1 means "awaiting Tenant Admin", so it is not approved leave yet.
+const APPROVED_LEAVE_STATUSES = new Set(['APPROVED_LEVEL2']);
 
 const ANNUAL_TAX_SLABS: Array<{ upTo: number; rate: number }> = [
   { upTo: 500_000, rate: 0.01 },

@@ -99,38 +99,41 @@ void main() {
     );
   });
 
-  test('removes only the selected saved account', () async {
+  test('removes only the selected saved account from this device', () async {
     FlutterSecureStorage.setMockInitialValues({});
     final vault = DeviceAccountVault();
-    const parent = AuthUser(
-      id: 'parent-1',
-      email: 'parent@example.com',
-      firstName: 'Parent',
+    const first = AuthUser(
+      id: 'first-user',
+      email: 'first@example.com',
+      firstName: 'First',
       lastName: 'User',
       role: 'PARENT',
     );
-    const teacher = AuthUser(
-      id: 'teacher-1',
-      email: 'teacher@example.com',
-      firstName: 'Teacher',
+    const second = AuthUser(
+      id: 'second-user',
+      email: 'second@example.com',
+      firstName: 'Second',
       lastName: 'User',
-      role: 'TEACHER',
+      role: 'STUDENT',
     );
+
     await vault.saveAccount(
-      user: parent,
-      password: 'parent-password',
+      user: first,
+      password: 'first-password',
       mpin: '1234',
     );
     await vault.saveAccount(
-      user: teacher,
-      password: 'teacher-password',
+      user: second,
+      password: 'second-password',
       mpin: '5678',
     );
 
-    await vault.remove(parent.id);
+    await vault.remove(first.id);
 
-    final accounts = await vault.accounts();
-    expect(accounts, hasLength(1));
-    expect(accounts.single.userId, teacher.id);
+    final remaining = await vault.accounts();
+    expect(remaining, hasLength(1));
+    expect(remaining.single.userId, second.id);
+    expect((await vault.verifyMpin(first.id, '1234')).allowed, isFalse);
+    expect((await vault.verifyMpin(second.id, '5678')).allowed, isTrue);
   });
 }

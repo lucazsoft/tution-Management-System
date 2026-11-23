@@ -91,9 +91,10 @@ router.get('/workspace', authMiddleware, async (req: TenantRequest, res: Respons
     const completedSessions = classes.flatMap((item) => item.sessions).filter((item) => ['PRESENT_CONFIRMED', 'PRESENT_UPDATE_PENDING'].includes(item.status));
     const confirmedSessions = completedSessions.filter((item) => item.dailyUpdateSubmitted);
     const presentStamps = stamps.filter((stamp) => ['IN', 'RE_IN'].includes(stamp.stampType));
-    const absentLeaves = leaves.filter((leave) => ['APPROVED_LEVEL1', 'APPROVED_LEVEL2'].includes(leave.status));
-    const attendanceRate = presentStamps.length + absentLeaves.length
-      ? Math.round((presentStamps.length / (presentStamps.length + absentLeaves.length)) * 100)
+    const absentLeaves = leaves.filter((leave) => leave.status === 'APPROVED_LEVEL2');
+    const approvedLeaveDays = absentLeaves.reduce((total, leave) => total + Math.max(1, leave.days), 0);
+    const attendanceRate = presentStamps.length + approvedLeaveDays
+      ? Math.round((presentStamps.length / (presentStamps.length + approvedLeaveDays)) * 100)
       : 0;
     const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
     const presentDays = new Set(presentStamps.filter((stamp) => stamp.timestamp >= monthStart).map((stamp) => stamp.timestamp.toISOString().slice(0, 10))).size;
@@ -110,7 +111,7 @@ router.get('/workspace', authMiddleware, async (req: TenantRequest, res: Respons
         branches: [...new Map(classes.map((item) => [item.branch.id, { id: item.branch.id, name: item.branch.name }])).values()],
       },
       statistics: {
-        attendanceRate, presentDays, requiredDays, approvedLeaveDays: absentLeaves.length,
+        attendanceRate, presentDays, requiredDays, approvedLeaveDays,
         totalSessions: completedSessions.length,
         updateCompliance: completedSessions.length ? Math.round((confirmedSessions.length / completedSessions.length) * 100) : 0,
         assignedClasses: classes.length,
@@ -166,6 +167,44 @@ router.get('/dashboard', authMiddleware, async (req: TenantRequest, res: Respons
   return res.redirect(307, '/api/teacher/workspace');
 });
 
+router.post('/session/:sessionId/taken', authMiddleware, async (req: TenantRequest, res: Response) => {
+  const { start, end } = dayBounds();
+  try {
+    const present = await prisma.teacherAttendance.findFirst({
+      where: {
+        userId: req.user!.id,
+        timestamp: { gte: start, lte: end },
+        stampType: { in: ['IN', 'RE_IN'] },
+      },
+      select: { id: true },
+    });
+    if (!present) return res.status(403).json({ error: 'Mark yourself present before confirming that this class was taken.' });
+    const session = await prisma.teacherSession.findFirst({
+      where: {
+        id: req.params.sessionId,
+        teacherId: req.user!.id,
+        date: { gte: start, lte: end },
+        class: { course: { tenantId: req.tenantId! } },
+      },
+      select: { id: true, dailyUpdateSubmitted: true },
+    });
+    if (!session) return res.status(404).json({ error: 'Today\'s assigned class session was not found.' });
+    if (!session.dailyUpdateSubmitted) {
+      await prisma.teacherSession.update({
+        where: { id: session.id },
+        data: {
+          status: 'PRESENT_CONFIRMED',
+          dailyUpdateSubmitted: true,
+          updateContent: 'Class taken — confirmed from the teacher timetable.',
+        },
+      });
+    }
+    return res.json({ message: 'Class marked as taken.', sessionId: session.id, taken: true });
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Failed to confirm the class.', details: error.message });
+  }
+});
+
 router.post('/class/:classId/attendance', authMiddleware, async (req: TenantRequest, res: Response) => {
   const { classId } = req.params;
   const date = req.body?.date ? new Date(req.body.date) : new Date();
@@ -186,7 +225,7 @@ router.post('/class/:classId/attendance', authMiddleware, async (req: TenantRequ
       return res.status(422).json({ error: 'Every attendance record must belong to this class and use Present or Absent.' });
     }
     const studentUserIds = klass.enrollments.map((item) => item.student.userId);
-    const approvedLeaves = await prisma.leave.findMany({ where: { userId: { in: studentUserIds }, startDate: { lte: end }, endDate: { gte: start }, status: { in: ['APPROVED_LEVEL1', 'APPROVED_LEVEL2'] } } });
+    const approvedLeaves = await prisma.leave.findMany({ where: { userId: { in: studentUserIds }, startDate: { lte: end }, endDate: { gte: start }, status: 'APPROVED_LEVEL2' } });
     const excusedUsers = new Set(approvedLeaves.map((item) => item.userId));
     const normalized: Array<{ studentId: string; status: 'PRESENT' | 'ABSENT' | 'EXCUSED' }> = records.map((item: any) => {
       const enrollment = enrollmentMap.get(item.studentId)!;
@@ -267,6 +306,10 @@ router.post('/syllabus/:syllabusId/log', authMiddleware, async (req: TenantReque
     const [log] = await prisma.$transaction([
       prisma.dailyLessonLog.create({ data: { syllabusId: syllabus.id, chapterId, teacherId: req.user!.id, classId: syllabus.classId, logDate: date, status, notes: notes?.trim() || null } }),
       prisma.syllabusChapter.update({ where: { id: chapterId }, data: { status } }),
+      // A chapter-level decision is authoritative for every topic in that
+      // chapter. Topic-level updates still recalculate the parent chapter in
+      // the endpoint below, so teacher and student summaries cannot diverge.
+      prisma.syllabusTopic.updateMany({ where: { chapterId }, data: { status } }),
     ]);
     return res.json({ message: 'Daily syllabus progress shared with students.', log });
   } catch (error: any) {

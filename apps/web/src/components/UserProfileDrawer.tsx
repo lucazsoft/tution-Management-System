@@ -31,6 +31,7 @@ export interface Profile {
       admissionRecord: Record<string, any> | null;
       emergencyContact: string;
       studentId: string;
+      usesParentPhone?: boolean;
       grade: string | null;
       gradeTuition: number;
       monthlyFee: number;
@@ -91,7 +92,7 @@ export function UserProfileDrawer({ userId, onClose, onChanged }: UserProfileDra
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [grades, setGrades] = useState<Array<{ id: string; name: string }>>([]);
-  const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', gradeName: '', contractType: 'FIXED' as 'FIXED' | 'HOUR_RATE', compensationAmount: '' });
+  const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', usesParentPhone: false, gradeName: '', contractType: 'FIXED' as 'FIXED' | 'HOUR_RATE', compensationAmount: '' });
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [enrollOpen, setEnrollOpen] = useState(false);
   const [activities, setActivities] = useState<Array<{ id: string; name: string; classes: Array<{ id: string; name: string }> }>>([]);
@@ -187,6 +188,7 @@ export function UserProfileDrawer({ userId, onClose, onChanged }: UserProfileDra
       firstName,
       lastName: rest.join(' '),
       phone: profile.phone,
+      usesParentPhone: Boolean(profile.detail.student?.usesParentPhone),
       gradeName: profile.detail.student?.grade ?? '',
       contractType: staff?.contractType ?? 'FIXED',
       compensationAmount: String(staff?.contractType === 'HOUR_RATE' ? staff.salaryStructure.hourlyRate ?? '' : staff?.salaryStructure.baseMonthlySalary ?? ''),
@@ -198,10 +200,12 @@ export function UserProfileDrawer({ userId, onClose, onChanged }: UserProfileDra
   const saveEdit = async () => {
     setBusy(true);
     try {
-      const changes: { firstName: string; lastName: string; phone: string; gradeId?: string | null; contractType?: 'FIXED' | 'HOUR_RATE'; baseMonthlySalary?: number; hourlyRate?: number } = {
-        firstName: form.firstName.trim(), lastName: form.lastName.trim(), phone: form.phone.trim(),
+      const changes: { firstName: string; lastName: string; phone: string; usesParentPhone?: boolean; gradeId?: string | null; contractType?: 'FIXED' | 'HOUR_RATE'; baseMonthlySalary?: number; hourlyRate?: number } = {
+        firstName: form.firstName.trim(), lastName: form.lastName.trim(), phone: form.usesParentPhone ? '' : form.phone.trim(),
       };
       if (isStudent) {
+        // Sent only when toggled, so editing a name never re-validates an old phone.
+        if (form.usesParentPhone !== Boolean(profile?.detail.student?.usesParentPhone)) changes.usesParentPhone = form.usesParentPhone;
         const g = grades.find((x) => x.name === form.gradeName);
         changes.gradeId = form.gradeName ? (g?.id ?? null) : null;
       }

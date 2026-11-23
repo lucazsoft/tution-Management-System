@@ -1,0 +1,22 @@
+/* Sits above drawers (.people-drawer is 1201) so it is never covered by their blurred overlay. */
+.branch-qr-backdrop { position: fixed; inset: 0; z-index: 13000; display: grid; place-items: center; padding: 16px; background: rgba(10, 24, 44, 0.55); }
+.branch-qr { width: min(420px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; display: grid; gap: 14px; padding: 24px; border-radius: 20px; background: var(--color-surface, #fff); color: var(--color-text); box-shadow: 0 24px 48px rgba(0, 0, 0, 0.25); outline: none; text-align: center; }
+.branch-qr__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; text-align: left; }
+.branch-qr__eyebrow { display: block; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--color-primary); }
+.branch-qr__head h2 { margin-top: 4px; font-size: 20px; }
+.branch-qr__head p { margin-top: 2px; color: var(--text-muted); font-size: 13px; }
+.branch-qr__close { display: grid; place-items: center; width: 40px; height: 40px; flex: none; border: 0; border-radius: 50%; background: transparent; color: var(--text-muted); cursor: pointer; }
+.branch-qr__close:hover, .branch-qr__close:focus-visible { background: color-mix(in srgb, var(--color-primary) 10%, transparent); }
+.branch-qr__amount { font-size: 26px; font-weight: 800; color: var(--color-primary); font-variant-numeric: tabular-nums; }
+.branch-qr__frame { display: grid; place-items: center; min-height: 240px; padding: 16px; border: 2px dashed var(--border); border-radius: 16px; background: #fff; color: var(--text-muted); font-size: 13px; }
+.branch-qr__frame img { display: block; width: 100%; max-width: 240px; height: auto; object-fit: contain; }
+.branch-qr__account { display: grid; gap: 8px; margin: 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; text-align: left; }
+.branch-qr__account div { display: flex; justify-content: space-between; gap: 12px; }
+.branch-qr__account dt { color: var(--text-muted); font-size: 12px; }
+.branch-qr__account dd { margin: 0; font-weight: 600; font-size: 13px; overflow-wrap: anywhere; text-align: right; }
+.branch-qr__hint { color: var(--text-muted); font-size: 12px; }
+.branch-qr__error { color: var(--color-error); font-size: 14px; }
+.branch-qr__empty { display: grid; justify-items: center; gap: 6px; padding: 20px; border: 1px dashed var(--border); border-radius: 16px; }
+.branch-qr__empty .material-symbols-outlined { font-size: 36px; color: var(--text-muted); }
+.branch-qr__empty p { color: var(--text-muted); font-size: 13px; }
+.branch-qr__empty a { margin-top: 4px; font-weight: 700; color: var(--color-primary); }

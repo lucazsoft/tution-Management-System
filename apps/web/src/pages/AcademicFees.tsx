@@ -6,7 +6,8 @@ import { StatusBadge } from '../components/ui/StatusBadge';
 import { useToast } from '../components/ui/Toast';
 import { api, type BillingLedger } from '../services/api';
 import { toBsLabel, toBsMonthLabel, toDualDateLabel } from '../utils/nepaliDate';
-import QRCode from 'qrcode';
+import { useLocation } from 'react-router-dom';
+import { BranchPaymentQrDialog } from '../components/BranchPaymentQrDialog';
 
 interface StudentFee {
   studentId: string;
@@ -96,24 +97,14 @@ export function AcademicFees({ canRetryAdmissionLogins = true }: { canRetryAdmis
   const [admissionStatus, setAdmissionStatus] = useState<'PENDING_PAYMENT' | 'READY_FOR_LOGIN' | 'ACTIVE' | null>(null);
   const [loginDeliveries, setLoginDeliveries] = useState<LoginDelivery[]>([]);
   const [isRetryingDelivery, setIsRetryingDelivery] = useState(false);
-  const [qrModal, setQrModal] = useState<{ id: string; studentName: string; amount: number; month: string; qrString: string; dataUrl: string } | null>(null);
-  const [qrLoadingId, setQrLoadingId] = useState('');
+  const [qrInvoice, setQrInvoice] = useState<Invoice | null>(null);
+  const settingsPath = useLocation().pathname.startsWith('/branch') ? '/branch/payment-settings' : '/tenant/payment-settings';
   const [invoiceDocument, setInvoiceDocument] = useState<InvoiceDocumentData | null>(null);
   const drawerRef = useRef<HTMLElement>(null);
   const drawerBodyRef = useRef<HTMLDivElement>(null);
   const paymentDialogRef = useRef<HTMLDialogElement>(null);
   const drawerTriggerRef = useRef<HTMLElement | null>(null);
 
-  const openQr = async (invoice: Invoice) => {
-    if (!payStudent) return;
-    setQrLoadingId(invoice.id);
-    try {
-      const payload = await api.finances.getNepalPayQr(invoice.id);
-      const dataUrl = await QRCode.toDataURL(payload.qrString, { width: 360, margin: 2, errorCorrectionLevel: 'M' });
-      setQrModal({ id: invoice.id, studentName: payload.studentName, amount: payload.amount, month: toDualDateLabel(invoice.dueDate), qrString: payload.qrString, dataUrl });
-    } catch (cause) { showToast(cause instanceof Error ? cause.message : 'Unable to generate the payment QR.', 'error'); }
-    finally { setQrLoadingId(''); }
-  };
 
   const loadData = async () => {
     setIsLoading(true);
@@ -260,7 +251,7 @@ export function AcademicFees({ canRetryAdmissionLogins = true }: { canRetryAdmis
   }, [paymentNotice]);
 
   useEffect(() => {
-    if (!payStudent || paymentInvoice || qrModal) return;
+    if (!payStudent || paymentInvoice || qrInvoice) return;
     const drawer = drawerRef.current;
     drawerBodyRef.current?.scrollTo({ top: 0 });
     drawer?.focus();
@@ -276,7 +267,7 @@ export function AcademicFees({ canRetryAdmissionLogins = true }: { canRetryAdmis
     };
     document.addEventListener('keydown', keyboard);
     return () => document.removeEventListener('keydown', keyboard);
-  }, [payStudent, paymentInvoice, qrModal]);
+  }, [payStudent, paymentInvoice, qrInvoice]);
 
   useEffect(() => {
     if (payStudent) return;
@@ -540,9 +531,9 @@ export function AcademicFees({ canRetryAdmissionLogins = true }: { canRetryAdmis
                             {inv.status === 'PAID' ? 'View receipt' : 'View bill'}
                           </Button>
                           {inv.status !== 'PAID' ? <>
-                            <Button variant="outline" onClick={() => void openQr(inv)} disabled={qrLoadingId === inv.id}>
+                            <Button variant="outline" onClick={() => setQrInvoice(inv)}>
                               <span className="material-symbols-outlined" aria-hidden="true">qr_code_scanner</span>
-                              {qrLoadingId === inv.id ? 'Generating…' : 'Payment QR'}
+                              Payment QR
                             </Button>
                             <Button onClick={() => openPaymentConfirmation(inv)} disabled={Boolean(payingId)}>
                               Record payment
@@ -617,63 +608,16 @@ export function AcademicFees({ canRetryAdmissionLogins = true }: { canRetryAdmis
         </dialog>
       ) : null}
 
-      {/* NepalPay QR Modal */}
-      {qrModal ? (
-        <>
-          <div className="people-drawer-overlay" onClick={() => setQrModal(null)} />
-          <div style={{
-            position: 'fixed',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            background: '#FFFFFF',
-            borderRadius: '24px',
-            padding: '32px',
-            zIndex: 1100,
-            width: '90%',
-            maxWidth: '420px',
-            textAlign: 'center',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span className="material-symbols-outlined" style={{ color: 'var(--color-accent)', fontSize: '24px' }}>qr_code_2</span>
-                <span style={{ fontWeight: 700, fontSize: '18px' }}>NepalPay QR</span>
-              </div>
-              <button onClick={() => setQrModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-
-            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Invoice for <strong>{qrModal.studentName}</strong> ({qrModal.month} BS)
-            </div>
-
-            <div style={{
-              background: '#F8F9FA',
-              padding: '24px',
-              borderRadius: '16px',
-              border: '2px dashed var(--color-border)',
-              marginBottom: '20px',
-              display: 'inline-block'
-            }}>
-              <img src={qrModal.dataUrl} width="180" height="180" alt={`NepalPay payment QR for ${qrModal.studentName}`} style={{ display: 'block', margin: '0 auto' }} />
-            </div>
-
-            <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--color-primary)', marginBottom: '4px' }}>
-              {money(qrModal.amount)}
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '20px' }}>
-              Scan using FONEPAY, eSewa, Khalti, or any NepalPay Mobile Banking app.
-            </div>
-
-            <Button onClick={() => { const link = document.createElement('a'); link.href = qrModal.dataUrl; link.download = `nepalpay-${qrModal.id}.png`; link.click(); }} style={{ width: '100%' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: '18px', marginRight: '6px' }}>download</span>
-              Download QR
-            </Button>
-            <Button variant="outline" onClick={() => void navigator.clipboard.writeText(qrModal.qrString).then(() => showToast('Payment payload copied.', 'success')).catch(() => showToast('Could not copy the payment payload.', 'error'))} style={{ width: '100%', marginTop: 8 }}>Copy payment payload</Button>
-          </div>
-        </>
+      {qrInvoice && payStudent ? (
+        <BranchPaymentQrDialog
+          invoiceId={qrInvoice.id}
+          branchName={qrInvoice.branchName}
+          studentName={qrInvoice.studentName}
+          description={`${qrInvoice.invoiceType.charAt(0)}${qrInvoice.invoiceType.slice(1).toLowerCase()} · due ${toDualDateLabel(qrInvoice.dueDate)}`}
+          amount={qrInvoice.netPayable}
+          settingsPath={settingsPath}
+          onClose={() => setQrInvoice(null)}
+        />
       ) : null}
       {invoiceDocument ? <InvoiceDocumentDialog data={invoiceDocument} onClose={() => setInvoiceDocument(null)} /> : null}
     </div>

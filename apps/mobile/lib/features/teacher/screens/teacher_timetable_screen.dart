@@ -1,22 +1,20 @@
-/// API-backed teacher timetable screen.
-///
-/// Daily view comes from workspace `todayClasses`; the weekly tabs are
-/// derived from `classes[].schedule` (no dedicated timetable endpoint
-/// exists — see [TeacherPortalRepository] docs).
+/// API-backed teacher timetable, using dated sessions for completion state.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tms_mobile/core/sync/sync.dart';
-
 import 'package:tms_mobile/core/theme/app_colors.dart';
+import 'package:tms_mobile/core/theme/app_tokens.dart';
+import 'package:tms_mobile/features/teacher/data/teacher_portal_repository.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_portal_dto.dart';
-import 'package:tms_mobile/features/teacher/utils/teacher_schedule_days.dart';
+import 'package:tms_mobile/features/teacher/screens/teacher_class_detail_screen.dart';
 import 'package:tms_mobile/features/teacher/viewmodels/teacher_portal_viewmodel.dart';
-import 'package:tms_mobile/features/teacher/widgets/teacher_record_states.dart';
 import 'package:tms_mobile/features/teacher/widgets/teacher_navigation.dart';
-import 'package:tms_mobile/shared/widgets/daily_timetable_widgets.dart';
+import 'package:tms_mobile/features/teacher/widgets/teacher_record_states.dart';
+import 'package:tms_mobile/shared/widgets/timetable_session_card.dart';
+import 'package:tms_mobile/shared/widgets/timetable_day_navigator.dart';
 
 class TeacherTimetableScreen extends ConsumerStatefulWidget {
   const TeacherTimetableScreen({super.key});
@@ -26,68 +24,44 @@ class TeacherTimetableScreen extends ConsumerStatefulWidget {
       _TeacherTimetableScreenState();
 }
 
-class _TeacherTimetableScreenState extends ConsumerState<TeacherTimetableScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
-  late final List<String> _days;
+class _TeacherTimetableScreenState
+    extends ConsumerState<TeacherTimetableScreen> {
+  List<TeacherAcademicEvent> _events = const [];
+  int _dayOffset = 0;
+
+  DateTime get _today {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  DateTime get _selectedDate => _today.add(Duration(days: _dayOffset));
 
   @override
   void initState() {
     super.initState();
-    _days = rollingTeacherWeekdays(DateTime.now());
-    _tabController = TabController(
-      length: _days.length,
-      vsync: this,
-      // Always open the live Today view. Weekday tabs remain available for
-      // planning, but stale tab state must never make Classes default to a
-      // Thursday or Friday schedule.
-      initialIndex: 0,
-    );
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
+    _loadEvents();
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(teacherPortalViewModelProvider);
     final vm = ref.read(teacherPortalViewModelProvider.notifier);
-    final connectivity = ref.watch(connectivityMonitorProvider);
-    final offline = connectivity == ConnectivityState.offline;
-
+    final offline =
+        ref.watch(connectivityMonitorProvider) == ConnectivityState.offline;
     return Scaffold(
       drawer: TeacherNavigation.drawer(context),
       appBar: AppBar(
-        title: Text(
-          'My Timetable',
-          style:
-              GoogleFonts.fraunces(fontWeight: FontWeight.w700, fontSize: 22),
-        ),
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          indicatorColor: kColorAccent,
-          labelColor: kColorPrimary,
-          unselectedLabelColor: kColorText.withValues(alpha: 0.55),
-          tabs: [
-            const Tab(text: 'Today'),
-            for (final day in _days.skip(1)) Tab(text: day),
-          ],
-        ),
+        title: Text('My Timetable',
+            style: GoogleFonts.fraunces(
+                fontWeight: FontWeight.w700, fontSize: 22)),
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            if (offline && state.hasData) const TeacherOfflineBar(),
-            Expanded(child: _body(state, vm)),
-          ],
-        ),
-      ),
+          child: Column(children: [
+        if (offline && state.hasData) const TeacherOfflineBar(),
+        Expanded(child: _body(state, vm)),
+      ])),
       bottomNavigationBar:
-          const TeacherDashboardNavigationBar(selectedIndex: 0),
+          const TeacherDashboardNavigationBar(selectedIndex: 3),
     );
   }
 
@@ -103,215 +77,220 @@ class _TeacherTimetableScreenState extends ConsumerState<TeacherTimetableScreen>
     }
     if (state.hasError && !state.hasData) {
       return TeacherErrorView(
-        message: state.error ?? 'Could not load the timetable.',
-        onRetry: vm.load,
-      );
+          message: state.error ?? 'Could not load the timetable.',
+          onRetry: vm.load);
     }
     final workspace = state.workspace;
     if (workspace == null) {
       return TeacherErrorView(
-        message: state.error ?? 'Timetable unavailable.',
-        onRetry: vm.load,
-      );
+          message: state.error ?? 'Timetable unavailable.', onRetry: vm.load);
     }
-    return TabBarView(
-      controller: _tabController,
-      children: [
-        _TodayList(today: workspace.todayClasses),
-        for (final day in _days.skip(1))
-          _DayList(day: day, classes: workspace.classes),
-      ],
-    );
-  }
-}
-
-class _TodayList extends StatelessWidget {
-  const _TodayList({required this.today});
-
-  final List<TeacherTodayClass> today;
-
-  @override
-  Widget build(BuildContext context) {
-    final rows = _todayRows(today);
-    if (rows.isEmpty) {
-      return const TeacherEmptyView(
-        icon: Icons.event_available_rounded,
-        title: 'No classes today',
-        message: 'Nothing scheduled for today.',
-      );
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.all(20),
-      itemCount: rows.length + 1,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return const _TimetableOverview();
-        }
-        final row = rows[index - 1];
-        final item = row.item;
-        return _TimetableCard(
-          title: row.slot?.subject?.trim().isNotEmpty == true
-              ? row.slot!.subject!
-              : item.courseName,
-          subtitle:
-              '${item.className}${item.branchName == null ? '' : ' • ${item.branchName}'}',
-          meta: row.slot?.timeLabel ?? item.scheduleLabel ?? item.status ?? '',
-          trailing:
-              item.dailyUpdateSubmitted ? 'Update sent' : 'Update pending',
-        );
-      },
-    );
-  }
-}
-
-class _TimetableOverview extends StatelessWidget {
-  const _TimetableOverview();
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-              colors: [Color(0xFF002D72), Color(0xFF1560BD)]),
-          borderRadius: BorderRadius.circular(18),
+    final date = _selectedDate;
+    final day = _teacherDayKey(date.weekday);
+    final isToday = _dayOffset == 0;
+    return _TimetablePage(
+      header: TimetableDayNavigator(
+        date: date,
+        isToday: isToday,
+        onPrevious:
+            _dayOffset <= -7 ? null : () => setState(() => _dayOffset--),
+        onNext: _dayOffset >= 7 ? null : () => setState(() => _dayOffset++),
+        onDateSelected: (selected) => setState(
+          () => _dayOffset = selected.difference(_today).inDays,
         ),
-        child: const Row(children: [
-          Icon(Icons.today_rounded, color: Colors.white, size: 34),
-          SizedBox(width: 14),
-          Expanded(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                Text('TODAY\'S PLAN',
-                    style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1)),
-                SizedBox(height: 4),
-                Text('Your teaching schedule',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 21,
-                        fontWeight: FontWeight.w800)),
-                SizedBox(height: 3),
-                Text(
-                    'Sessions are ordered by start time so the next class is always easy to find.',
-                    style: TextStyle(color: Colors.white70)),
-              ])),
-        ]),
-      );
+      ),
+      rows: isToday
+          ? _todayRows(workspace.todayClasses, workspace.classes)
+          : _dayRows(day, workspace.classes),
+      events: _eventsOn(date),
+      emptyMessage: isToday
+          ? 'Nothing scheduled for today.'
+          : 'Nothing scheduled for this day.',
+      onRefresh: _refresh,
+    );
+  }
+
+  Future<void> _loadEvents() async {
+    try {
+      final events = await TeacherPortalRepository().fetchCalendar();
+      if (mounted) setState(() => _events = events);
+    } catch (_) {
+      // The timetable remains usable if the calendar is temporarily offline.
+    }
+  }
+
+  Future<void> _refresh() async {
+    await Future.wait([
+      ref.read(teacherPortalViewModelProvider.notifier).refresh(),
+      _loadEvents(),
+    ]);
+  }
+
+  List<TeacherAcademicEvent> _eventsOn(DateTime date) {
+    final target = DateTime(date.year, date.month, date.day);
+    return _events.where((event) {
+      final start = event.startDate.toLocal();
+      final end = (event.endDate ?? event.startDate).toLocal();
+      final first = DateTime(start.year, start.month, start.day);
+      final last = DateTime(end.year, end.month, end.day);
+      return !target.isBefore(first) && !target.isAfter(last);
+    }).toList();
+  }
 }
 
-class _DayList extends StatelessWidget {
-  const _DayList({required this.day, required this.classes});
+class _RowData {
+  const _RowData({
+    required this.time,
+    required this.subject,
+    required this.className,
+    this.room,
+    this.klass,
+  });
+  final String time;
+  final String subject;
+  final String className;
+  final String? room;
 
-  final String day;
-  final List<TeacherClassInfo> classes;
+  /// The class this session belongs to; null when it is not in the workspace.
+  final TeacherClassInfo? klass;
+}
+
+class _TimetablePage extends StatelessWidget {
+  const _TimetablePage({
+    required this.header,
+    required this.rows,
+    required this.emptyMessage,
+    this.events = const [],
+    required this.onRefresh,
+  });
+  final Widget header;
+  final List<_RowData> rows;
+  final String emptyMessage;
+  final List<TeacherAcademicEvent> events;
+  final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
-    final sessions = _dayRows(day, classes);
-    if (sessions.isEmpty) {
-      return TeacherEmptyView(
-        icon: Icons.event_available_rounded,
-        title: 'No classes on $day',
-        message: 'Nothing scheduled for this day.',
-      );
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.all(20),
-      itemCount: sessions.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final row = sessions[index];
-        final session = row.item;
-        return _TimetableCard(
-          title: row.slot.subject?.trim().isNotEmpty == true
-              ? row.slot.subject!
-              : session.subject,
-          subtitle:
-              '${session.name}${session.branch == null ? '' : ' • ${session.branch!.name}'}',
-          meta: row.slot.timeLabel,
-          trailing: '${session.studentCount} students',
-        );
-      },
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView(padding: const EdgeInsets.all(TmsSpace.md), children: [
+        header,
+        if (events.isNotEmpty) ...[
+          Text('Events', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          for (final event in events)
+            Card(
+              color: kColorAccent.withValues(alpha: .09),
+              child: ListTile(
+                leading: const Icon(Icons.event_rounded, color: kColorPrimary),
+                title: Text(event.title),
+                subtitle: Text([
+                  event.type,
+                  if (event.description.trim().isNotEmpty) event.description,
+                ].join(' • ')),
+              ),
+            ),
+          const SizedBox(height: 12),
+        ],
+        if (rows.isEmpty)
+          TimetableEmptyCard(message: emptyMessage)
+        else ...[
+          Text('${rows.length} session${rows.length == 1 ? '' : 's'}',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: TmsSpace.sm),
+          for (final row in rows) ...[
+            TimetableSessionCard(
+              startTime: _startTime(row.time),
+              endTime: _endTime(row.time),
+              subject: row.subject,
+              primaryDetail: row.className,
+              secondaryDetail: row.room?.trim().isNotEmpty == true
+                  ? row.room
+                  : 'Room not assigned',
+              onTap: _classOpener(context, row.klass),
+            ),
+            const SizedBox(height: TmsSpace.sm),
+          ],
+        ],
+      ]),
     );
   }
 }
 
-class _TodayRow {
-  const _TodayRow(this.item, this.slot);
-
-  final TeacherTodayClass item;
-  final TeacherScheduleSlot? slot;
+String _startTime(String value) {
+  final parts = value.split(RegExp(r'\s*[-–]\s*'));
+  return parts.isEmpty ? value : parts.first;
 }
 
-class _DayRow {
-  const _DayRow(this.item, this.slot);
-
-  final TeacherClassInfo item;
-  final TeacherScheduleSlot slot;
+String _endTime(String value) {
+  final parts = value.split(RegExp(r'\s*[-–]\s*'));
+  return parts.length > 1 ? parts[1] : '';
 }
 
-List<_TodayRow> _todayRows(List<TeacherTodayClass> items) {
-  final day = teacherDayKey(DateTime.now());
-  final rows = <_TodayRow>[];
+TeacherClassInfo? _classById(List<TeacherClassInfo> classes, String id) {
+  for (final klass in classes) {
+    if (klass.id == id) return klass;
+  }
+  return null;
+}
+
+/// Opens the class hub, the same screen the Classes tab opens.
+VoidCallback? _classOpener(BuildContext context, TeacherClassInfo? klass) {
+  if (klass == null) return null;
+  return () => Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => TeacherClassDetailScreen(klass: klass),
+        ),
+      );
+}
+
+List<_RowData> _todayRows(
+    List<TeacherTodayClass> items, List<TeacherClassInfo> classes) {
+  final day = _teacherDayKey(DateTime.now().weekday);
+  final rows = <_RowData>[];
   for (final item in items) {
-    final matching = item.slots.where((slot) => slot.matchesDay(day)).toList();
-    if (matching.isEmpty) {
-      rows.add(_TodayRow(item, null));
+    final klass = _classById(classes, item.classId);
+    final slots = item.slots.where((slot) => slot.matchesDay(day)).toList();
+    if (slots.isEmpty) {
+      rows.add(_RowData(
+          time: item.scheduleLabel ?? '',
+          subject: item.courseName,
+          className: item.className,
+          klass: klass));
     } else {
-      rows.addAll(matching.map((slot) => _TodayRow(item, slot)));
+      rows.addAll(slots.map((slot) => _RowData(
+            time: slot.timeLabel,
+            subject: slot.subject?.trim().isNotEmpty == true
+                ? slot.subject!
+                : item.courseName,
+            className: item.className,
+            room: slot.room,
+            klass: klass,
+          )));
     }
   }
-  rows.sort((a, b) => _compareSlotTimes(a.slot, b.slot));
+  rows.sort((a, b) => a.time.compareTo(b.time));
   return rows;
 }
 
-List<_DayRow> _dayRows(String day, List<TeacherClassInfo> classes) {
-  final rows = <_DayRow>[
+List<_RowData> _dayRows(String day, List<TeacherClassInfo> classes) {
+  final rows = <_RowData>[
     for (final item in classes)
       for (final slot in item.slots)
-        if (slot.matchesDay(day)) _DayRow(item, slot),
+        if (slot.matchesDay(day))
+          _RowData(
+            time: slot.timeLabel,
+            subject: slot.subject?.trim().isNotEmpty == true
+                ? slot.subject!
+                : item.subject,
+            className: item.name,
+            room: slot.room,
+            klass: item,
+          ),
   ];
-  rows.sort((a, b) {
-    final byTime = _compareSlotTimes(a.slot, b.slot);
-    return byTime != 0 ? byTime : a.item.subject.compareTo(b.item.subject);
-  });
+  rows.sort((a, b) => a.time.compareTo(b.time));
   return rows;
 }
 
-int _compareSlotTimes(TeacherScheduleSlot? a, TeacherScheduleSlot? b) {
-  final byStart = (a?.start ?? '').compareTo(b?.start ?? '');
-  if (byStart != 0) return byStart;
-  return (a?.end ?? '').compareTo(b?.end ?? '');
-}
-
-class _TimetableCard extends StatelessWidget {
-  const _TimetableCard({
-    required this.title,
-    required this.subtitle,
-    required this.meta,
-    required this.trailing,
-  });
-
-  final String title;
-  final String subtitle;
-  final String meta;
-  final String trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final timeRange = RegExp(
-      r'(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})',
-    ).firstMatch(meta);
-    return TimetableSessionCard(
-      startTime: timeRange?.group(1) ?? meta,
-      endTime: timeRange?.group(2) ?? '',
-      title: title,
-      primaryDetail: subtitle,
-      badge: trailing,
-    );
-  }
-}
+String _teacherDayKey(int weekday) =>
+    const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][weekday - 1];

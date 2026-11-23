@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:tms_mobile/features/student/data/student_fees_models.dart';
 import 'package:tms_mobile/features/student/screens/student_fees_screen.dart';
 import 'package:tms_mobile/features/student/viewmodels/student_fees_viewmodel.dart';
@@ -36,51 +35,6 @@ Future<void> pumpSheet(WidgetTester tester, Widget child) async {
 }
 
 void main() {
-  group('NepalPayQrSheet', () {
-    testWidgets('renders a scannable QrImageView with the payload',
-        (tester) async {
-      const qr = NepalPayQr(
-        invoiceId: 'inv-aug',
-        amount: 4500,
-        qrString: '00020101021226580012np.nepalpay',
-        merchantName: 'TMS Tuition',
-      );
-      await pumpSheet(
-        tester,
-        NepalPayQrSheet(qr: qr, invoice: testInvoice()),
-      );
-
-      expect(find.byType(QrImageView), findsOneWidget);
-      expect(
-        tester.widget<QrImageView>(find.byType(QrImageView)).semanticsLabel,
-        contains('4500'),
-      );
-      // Amount / merchant / ref text stays visible.
-      expect(find.text('Scan to pay NPR 4500'), findsOneWidget);
-      expect(find.textContaining('TMS Tuition'), findsOneWidget);
-      expect(find.textContaining('inv-aug'), findsOneWidget);
-      // Copy button remains as fallback.
-      expect(find.text('Copy payload'), findsOneWidget);
-    });
-
-    testWidgets('empty payload shows fallback text, not a broken code',
-        (tester) async {
-      const qr = NepalPayQr(
-        invoiceId: 'inv-aug',
-        amount: 4500,
-        qrString: '',
-        merchantName: 'TMS Tuition',
-      );
-      await pumpSheet(
-        tester,
-        NepalPayQrSheet(qr: qr, invoice: testInvoice()),
-      );
-
-      expect(find.text('QR payload unavailable'), findsOneWidget);
-      expect(find.byType(QrImageView), findsNothing);
-    });
-  });
-
   group('ConnectIpsHandoffCard', () {
     testWidgets('Open in browser launches gatewayUrl via injected launcher',
         (tester) async {

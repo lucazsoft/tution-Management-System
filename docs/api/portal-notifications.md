@@ -1,3 +1,8 @@
+> Local patch note: this older guide describes the webhook/portal path only.
+> For the Firebase/web/mobile readiness patch and its release limits, see
+> [notification readiness](../notification-readiness-local.md). Do not assume
+> these webhook settings enable every notification workflow.
+
 # Portal Notifications
 
 Parent and Student portal notifications are persisted in `PortalNotification`. Read state is account-scoped and synchronized through `POST /api/portal-notifications/read`.

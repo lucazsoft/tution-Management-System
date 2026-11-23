@@ -24,7 +24,11 @@ export const auth = betterAuth({
       }
     : [runtimeConfig.webOrigin],
   advanced: {
-    ipAddress: { ipAddressHeaders: [] },
+    // Better Auth skips rate limiting entirely when it cannot find a client
+    // IP, so an empty list silently disabled every sign-in and OTP limit.
+    // Traefik sets X-Real-Ip from the TCP connection; X-Forwarded-For is not
+    // used because Better Auth reads its first, client-forgeable entry.
+    ipAddress: { ipAddressHeaders: ['x-real-ip'] },
     disableCSRFCheck: isDev,
   },
 

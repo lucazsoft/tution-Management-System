@@ -7,8 +7,9 @@ import { encryptDeliveryPayload, decryptDeliveryPayload } from '../utils/deliver
 process.env.ADMISSION_DELIVERY_SECRET = 'phase-three-test-key-at-least-thirty-two-characters';
 const db = prisma as any;
 let state: any = { appointment: null, alternatives: [], logs: [], tasks: [], jobs: [], users: {}, admissionStatus: 'READY_FOR_LOGIN' };
-let failTask = false, failAlternative = false, failCompletion = false, janitor = true, failPush = false;
+let failTask = false, failAlternative = false, failCompletion = false, janitor = true, failPush = false, failInbox = false;
 const sent: string[] = [];
+const inboxRecords: any[] = [];
 let accountCount = 1;
 let tail = Promise.resolve();
 // Serial transaction simulation; real PostgreSQL validation remains pending.
@@ -50,14 +51,15 @@ db.appointment.create = async ({ data }: any) => { if (failAlternative) throw ne
 db.branch.findFirst = async () => ({ id: 'branch' });
 db.userRole.findFirst = async () => janitor ? { userId: 'janitor' } : null;
 db.tenant.findUniqueOrThrow = async () => ({ maintenanceEscalationDays: 3 });
+db.notification.create = async ({ data }: any) => { if (failInbox) throw new Error('injected inbox persistence failure'); inboxRecords.push(data); return data; };
 db.resourceLog.create = async ({ data }: any) => { state.logs.push(data); return data; };
-db.maintenanceTask.create = async ({ data }: any) => { if (failTask) throw new Error('injected task failure'); state.tasks.push(data); return data; };
+db.maintenanceTask.create = async ({ data }: any) => { if (failTask) throw new Error('injected task failure'); const task = { id: 'maintenance-task', ...data }; state.tasks.push(task); return task; };
 const authPath = require.resolve('../utils/auth');
 require.cache[authPath] = { id: authPath, filename: authPath, loaded: true, exports: { auth: { api: { getSession: async () => ({ user: {
   id: 'admin', tenantId: 'tenant', roles: [{ roleName: 'Tenant Admin', branchId: null, permissions: [] }],
 } }) } } } } as NodeModule;
 const notifications = require('../services/push-notification');
-notifications.PushNotificationService.sendPush = async () => { if (failPush) throw new Error('injected push failure'); return { success: true }; };
+notifications.PushNotificationService.sendPush = async () => { if (failPush) throw new Error('injected push failure'); return { success: true, sent: 1, failed: 0 }; };
 const resources = require('./resources').default;
 const smsPath = require.resolve('../utils/sms');
 require.cache[smsPath] = { id: smsPath, filename: smsPath, loaded: true, exports: { default: {
@@ -143,8 +145,18 @@ async function main() {
   failTask = false; failPush = true;
   const logged = await log(true);
   assert.equal(logged.status, 201); assert.equal(logged.payload.notificationDelivered, false);
+  assert.equal(logged.payload.notificationPersisted, true);
   assert.equal(state.logs.length, 2); assert.equal(state.tasks.length, 1);
-  console.log('PASS maintenance atomicity, informational logs, and post-commit notification failure');
+  assert.equal(inboxRecords.length, 1);
+  assert.deepEqual({ userId: inboxRecords[0].userId, tenantId: inboxRecords[0].tenantId, destination: inboxRecords[0].destination },
+    { userId: 'janitor', tenantId: 'tenant', destination: '/staff/tasks' });
+  failPush = false; failInbox = true;
+  const inboxFailed = await log(true);
+  assert.equal(inboxFailed.status, 201, 'inbox annotation failure cannot roll back committed work');
+  assert.equal(inboxFailed.payload.notificationPersisted, false);
+  assert.equal(inboxFailed.payload.notificationDelivered, true, 'provider acceptance is tracked separately');
+  failInbox = false;
+  console.log('PASS maintenance atomicity, push failure with stored inbox, and honest fail-open persistence status');
 
   const encrypted = encryptDeliveryPayload('job', { phone: 'phone', message: 'secret-password' });
   assert.equal(encrypted.includes('secret-password'), false);

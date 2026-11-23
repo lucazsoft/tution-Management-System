@@ -1,20 +1,7 @@
-/// Repository backing the student digital ID, calendar and notifications
-/// inbox screens (MOB-104).
-///
-/// All data comes from the single authenticated
-/// `GET /api/users/me/student-portal` call via [StudentPortalRepository]
-/// (identity from the Better Auth session cookie; the client never sends
-/// user/tenant/branch ids; GET-only so the shared retry interceptor may
-/// safely retry). Reuses the sibling-owned portal repository — no duplicate
-/// endpoints or DTOs.
-///
-/// Verified in `services/api/src` (read-only):
-/// - Wired: `GET /api/users/me/student-portal` (`routes/users.ts`) carries
-///   `studentProfile` (ID), `events` (calendar) and derived `notifications`.
-/// - Missing: no dedicated digital-ID endpoint, no standalone calendar
-///   endpoint, and no notification mark-read endpoint — read state is local
-///   (see the notifications ViewModel TODO). Missing surface as typed
-///   [ApiException]s, never demo data.
+/// Student ID/calendar data uses the existing authorized portal API. The inbox
+/// also loads account event history when an authenticated Dio client is supplied.
+/// Each source keeps its own read endpoint; injected portal-only fixtures still
+/// work without adding a network client.
 library;
 
 import 'package:dio/dio.dart';
@@ -31,6 +18,18 @@ import 'student_portal_repository.dart';
 ///   enrollment is `BLOCKED` or any invoice is `OVERDUE`).
 /// - [active] otherwise; unpaid dues are surfaced as a notice, not a block.
 enum StudentIdStatus { active, suspended }
+
+class StudentCalendarData {
+  const StudentCalendarData({
+    required this.events,
+    required this.attendance,
+    required this.weeklySessions,
+  });
+
+  final List<PortalEvent> events;
+  final List<PortalAttendance> attendance;
+  final List<PortalSession> weeklySessions;
+}
 
 /// Digital ID card derived from the live portal profile.
 class StudentIdCard {
@@ -84,7 +83,7 @@ class StudentIdCalendarNotificationsRepository {
   StudentIdCalendarNotificationsRepository({
     StudentPortalRepository? portalRepository,
     Dio? dio,
-  })  : _portal = portalRepository ?? StudentPortalRepository(),
+  })  : _portal = portalRepository ?? StudentPortalRepository(dio: dio),
         _dio = dio;
 
   final StudentPortalRepository _portal;
@@ -120,6 +119,15 @@ class StudentIdCalendarNotificationsRepository {
   Future<List<PortalEvent>> fetchEvents({CancelToken? cancelToken}) async {
     final portal = await _portal.fetchPortal(cancelToken: cancelToken);
     return List<PortalEvent>.unmodifiable(portal.events);
+  }
+
+  Future<StudentCalendarData> fetchCalendar({CancelToken? cancelToken}) async {
+    final portal = await _portal.fetchPortal(cancelToken: cancelToken);
+    return StudentCalendarData(
+      events: List.unmodifiable(portal.events),
+      attendance: List.unmodifiable(portal.attendance),
+      weeklySessions: List.unmodifiable(portal.weeklySessions),
+    );
   }
 
   /// Derived inbox (fee, homework, result, attendance, leave and certificate
@@ -174,6 +182,16 @@ class StudentIdCalendarNotificationsRepository {
     } on DioException catch (error) {
       throw _typed(error);
     }
+  }
+
+  /// Persist read state for the original portal-derived alert IDs.
+  /// IDs are not migrated into the account-event table.
+  Future<void> markPortalNotificationsRead(List<String> ids, {CancelToken? cancelToken}) async {
+    if (ids.isEmpty) return;
+    try {
+      await _persistentDio.post<dynamic>('/api/portal-notifications/read',
+        data: {'ids': ids}, cancelToken: cancelToken);
+    } on DioException catch (error) { throw _typed(error); }
   }
 
   /// Marks every server notification read

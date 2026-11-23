@@ -10,8 +10,9 @@ import { useToast } from '../components/ui/Toast';
 import { api } from '../services/api';
 import { type CalendarSystem } from '../utils/nepaliDate';
 import { CalendarSystemToggle } from '../components/CalendarSystemToggle';
+import { ReminderCenter } from '../features/tenant/ReminderCenter';
 
-type Tab = 'policies' | 'approvals' | 'finance' | 'calendar' | 'hr';
+type Tab = 'policies' | 'approvals' | 'finance' | 'calendar' | 'hr' | 'reminders';
 type Weights = Record<'attendance' | 'updateCompliance' | 'feedback' | 'leaveCompliance' | 'taskCompletion', number>;
 type Forecast = { billingCycle?: string; metrics?: { baseForecastNpr?: number; estimatedAttritionNpr?: number; attritionPercentage?: string; netForecastNpr?: number; actualCollectedNpr?: number; varianceNpr?: number; activeEnrollments?: number } };
 type FinancialAlert = { type?: string; severity?: string; message?: string; category?: string; currentAmountNpr?: number; baselineAmountNpr?: number };
@@ -161,7 +162,7 @@ export function TenantControlCenter() {
 
   const tabs: Array<[Tab, string, string]> = [
     ['policies', 'Policies', 'tune'], ['approvals', 'Approvals', 'approval'], ['finance', 'Finance', 'monitoring'],
-    ['calendar', 'Calendar', 'calendar_month'], ['hr', 'HR alerts', 'badge'],
+    ['calendar', 'Calendar', 'calendar_month'], ['hr', 'HR alerts', 'badge'], ['reminders', 'Reminders', 'notifications_active'],
   ];
   if (loading || !config) return <Card hoverable={false}><p>Loading institution controls…</p></Card>;
   const set = (key: string, value: unknown) => setConfig((current: any) => ({ ...current, [key]: value }));
@@ -289,6 +290,8 @@ export function TenantControlCenter() {
         </form></Card>
         <Card hoverable={false}><div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}><h3>Institution calendar</h3><CalendarSystemToggle value={calendarSystem} onChange={setCalendarSystem} /></div>{events.map((item) => <div key={item.id} style={{ borderTop: '1px solid #E8EDF3', padding: '12px 0' }}><strong>{item.title}</strong><p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{calendarSystem === 'BS' ? nepaliDateHeading(nepalDateKey(item.startDate)) : englishDateLabel(nepalDateKey(item.startDate))} · {new Date(item.startDate).toLocaleTimeString([], { timeZone: NEPAL_TIME_ZONE, hour: '2-digit', minute: '2-digit' }) + ' NPT'} · {item.eventType} / {AUDIENCE_LABELS[item.audience ?? 'STAFF']}</p>{!item.branchId ? <StatusBadge variant="info">Read-only institution event</StatusBadge> : null}</div>)}</Card>
       </div> : null}
+
+      {tab === 'reminders' ? <ReminderCenter /> : null}
 
       {tab === 'hr' ? <Card hoverable={false}><h3>Contracts & documents expiring within 30 days</h3>
         {!alerts.length ? <p style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>No document expiries in the next 30 days.</p> :

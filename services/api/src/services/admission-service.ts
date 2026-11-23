@@ -11,6 +11,7 @@ import prisma from '../utils/db';
 import { ensureTenantRole } from '../utils/roles';
 import { parseStrictObject } from '../utils/request-validation';
 import { currentAdmissionTenure, getAdmissionTenure } from '../utils/nepali';
+import { generateLoginEmail, type AdmissionPerson, type AdmissionStudentInput } from './admission-identity';
 
 export function normalizeEmail(value: unknown): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -142,8 +143,11 @@ export type AdmissionSettlement = 'DUE' | 'ALREADY_PAID';
 export interface CreateAdmissionParams {
   tenantId: string;
   placement: AdmissionPlacement;
-  student: AdmissionIdentity;
-  parent: AdmissionIdentity;
+  /** Email may be '' (a login ID is generated); see admission-identity.ts. */
+  student: AdmissionIdentity | AdmissionStudentInput;
+  parent: AdmissionIdentity | AdmissionPerson;
+  /** Link to this existing parent account instead of creating one (siblings). */
+  existingParent?: { parentId: string; userId: string };
   details: AdmissionDetails;
   admittedAt: Date;
   admittedBy: { id: string; name: string };
@@ -164,7 +168,8 @@ export async function findConflictingAccount(emails: string[]): Promise<string |
 }
 
 export async function createAdmissionRecords(params: CreateAdmissionParams) {
-  const { tenantId, placement, student: studentFields, parent: parentFields, details, admittedAt, settlement } = params;
+  const { tenantId, placement, student: studentFields, parent: parentFields, details, admittedAt, settlement, existingParent } = params;
+  const usesGuardianPhone = 'usesGuardianPhone' in studentFields && studentFields.usesGuardianPhone;
   const { branch, grade, regularClasses } = placement;
   const now = params.now ?? new Date();
   const alreadyPaid = settlement === 'ALREADY_PAID';
@@ -208,15 +213,19 @@ export async function createAdmissionRecords(params: CreateAdmissionParams) {
   // window and is silently dropped from billing and class access.
   const accessWindow = alreadyPaid ? await currentAdmissionTenure(admittedAt, now) : null;
 
-  const result = await prisma.$transaction(async (tx) => {
+  const runAdmission = () => prisma.$transaction(async (tx) => {
+    const studentEmail = studentFields.email || await generateLoginEmail(tx, studentFields.firstName, studentFields.lastName);
     const studentUser = await tx.user.create({
       data: {
         tenantId,
-        email: studentFields.email,
+        email: studentEmail,
+        loginEmailGenerated: !studentFields.email,
         name: `${studentFields.firstName} ${studentFields.lastName}`,
         firstName: studentFields.firstName,
         lastName: studentFields.lastName,
-        phone: studentFields.phone,
+        // A guardian-linked student stores no phone; delivery and recovery
+        // resolve the primary parent's number at the time of use.
+        phone: usesGuardianPhone ? '' : studentFields.phone,
         passwordHash: studentPasswordHash,
         status: 'INACTIVE',
       },
@@ -234,6 +243,7 @@ export async function createAdmissionRecords(params: CreateAdmissionParams) {
         emergencyContact: details.emergencyContactPhone,
         admissionRecord: savedAdmissionRecord,
         admissionStatus: alreadyPaid || branch.admissionFee === 0 ? 'READY_FOR_LOGIN' : 'PENDING_PAYMENT',
+        usesGuardianPhone,
       },
     });
     await tx.enrollment.createMany({
@@ -249,24 +259,37 @@ export async function createAdmissionRecords(params: CreateAdmissionParams) {
       })),
     });
 
-    const parentUser = await tx.user.create({
-      data: {
-        tenantId,
-        email: parentFields.email,
-        name: `${parentFields.firstName} ${parentFields.lastName}`,
-        firstName: parentFields.firstName,
-        lastName: parentFields.lastName,
-        phone: parentFields.phone,
-        passwordHash: parentPasswordHash,
-        status: 'INACTIVE',
-      },
-    });
-    await tx.account.create({
-      data: { accountId: parentUser.id, providerId: 'credential', userId: parentUser.id, password: parentPasswordHash },
-    });
-    await tx.userRole.create({ data: { userId: parentUser.id, roleId: parentRoleId, branchId: branch.id } });
-    const parent = await tx.parent.create({ data: { userId: parentUser.id } });
-    await tx.studentParent.create({ data: { studentId: student.id, parentId: parent.id } });
+    let parentUser;
+    let parent;
+    if (existingParent) {
+      // A sibling: reuse the family's parent login. Its password and status
+      // are left untouched, and it gains a role in this branch if it lacks one.
+      parentUser = await tx.user.findFirstOrThrow({ where: { id: existingParent.userId, tenantId } });
+      parent = await tx.parent.findUniqueOrThrow({ where: { id: existingParent.parentId } });
+      const branchRole = await tx.userRole.findFirst({ where: { userId: parentUser.id, roleId: parentRoleId, branchId: branch.id } });
+      if (!branchRole) await tx.userRole.create({ data: { userId: parentUser.id, roleId: parentRoleId, branchId: branch.id } });
+    } else {
+      const parentEmail = parentFields.email || await generateLoginEmail(tx, parentFields.firstName, parentFields.lastName);
+      parentUser = await tx.user.create({
+        data: {
+          tenantId,
+          email: parentEmail,
+          loginEmailGenerated: !parentFields.email,
+          name: `${parentFields.firstName} ${parentFields.lastName}`,
+          firstName: parentFields.firstName,
+          lastName: parentFields.lastName,
+          phone: parentFields.phone,
+          passwordHash: parentPasswordHash,
+          status: 'INACTIVE',
+        },
+      });
+      await tx.account.create({
+        data: { accountId: parentUser.id, providerId: 'credential', userId: parentUser.id, password: parentPasswordHash },
+      });
+      await tx.userRole.create({ data: { userId: parentUser.id, roleId: parentRoleId, branchId: branch.id } });
+      parent = await tx.parent.create({ data: { userId: parentUser.id } });
+    }
+    await tx.studentParent.create({ data: { studentId: student.id, parentId: parent.id, isPrimary: true } });
 
     const tenant = await tx.tenant.findUniqueOrThrow({ where: { id: tenantId } });
     const settled = alreadyPaid || branch.admissionFee === 0;
@@ -291,12 +314,26 @@ export async function createAdmissionRecords(params: CreateAdmissionParams) {
     return { student, studentUser, parent, parentUser, invoice, tenant };
   });
 
+  // Two admissions can generate the same login ID at the same moment; the
+  // loser's insert fails on the unique email and simply tries the next one.
+  const generatesEmail = !studentFields.email || (!existingParent && !parentFields.email);
+  let result: Awaited<ReturnType<typeof runAdmission>>;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      result = await runAdmission();
+      break;
+    } catch (error: any) {
+      if (!generatesEmail || error?.code !== 'P2002' || attempt >= 3) throw error;
+    }
+  }
+
   return {
     ...result,
     admissionNumber,
     admissionRecord: savedAdmissionRecord,
     studentPassword,
     parentPassword,
+    linkedExistingParent: Boolean(existingParent),
     accessWindow,
     /** True when logins can be released immediately (no fee outstanding). */
     readyForLogin: alreadyPaid || branch.admissionFee === 0,

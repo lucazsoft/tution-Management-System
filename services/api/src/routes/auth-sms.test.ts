@@ -19,6 +19,8 @@ delivery.sendVerificationCode = async (_email: string, code: string, _purpose: s
 const router = require('./auth').default;
 db.user.findUnique = async ({ where }: any) => where.email ? (user?.email === where.email ? { ...user } : null) : null;
 db.account.findFirst = async () => user ? { password } : null;
+// Not a student, so no guardian-linked phone applies.
+db.student.findUnique = async () => null;
 db.verificationCode.updateMany = async ({ where, data }: any) => {
   let count = 0;
   for (const record of records) {

@@ -103,9 +103,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         await ref
             .read(authProvider.notifier)
             .activateDeviceAccount(saved.email, saved.password);
-        if (!mounted) return;
-        final auth = ref.read(authProvider);
-        context.go(auth.isTwoFactorPending ? '/2fa' : auth.roleRedirectPath);
+        await _persistRememberedCredentials(email);
         return;
       }
 
@@ -124,6 +122,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               mpin: mpin,
             );
           }
+          await _persistRememberedCredentials(email);
           ref.read(authProvider.notifier).beginDeviceAccountTwoFactor(email);
         } else {
           final user = prepared.user!;
@@ -136,6 +135,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               mpin: mpin,
             );
           }
+          await _persistRememberedCredentials(email);
           ref.read(authProvider.notifier).completeDeviceAccountSignIn(user);
         }
       } else {
@@ -153,6 +153,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               mpin: mpin,
             );
           }
+          await _persistRememberedCredentials(email);
           ref.read(authProvider.notifier).beginDeviceAccountTwoFactor(email);
         } else {
           final user = prepared.user!;
@@ -165,23 +166,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               mpin: mpin,
             );
           }
+          await _persistRememberedCredentials(email);
           ref.read(authProvider.notifier).completeDeviceAccountSignIn(user);
         }
-      }
-      if (!mounted) return;
-      final auth = ref.read(authProvider);
-      if (auth.isTwoFactorPending) {
-        await _persistRememberedCredentials(email);
-        if (!mounted) return;
-        context.go('/2fa');
-      } else if (auth.isAuthenticated) {
-        await _persistRememberedCredentials(email);
-        if (!mounted) return;
-        context.go(auth.roleRedirectPath);
-      } else {
-        throw const AuthFailure(
-          'Sign in did not complete. Please check your details and try again.',
-        );
       }
     } on AuthFailure catch (e) {
       if (!mounted) return;
@@ -198,78 +185,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<String?> _requestMpin() async {
-    final mpin = TextEditingController();
-    final confirm = TextEditingController();
-    String? error;
-    var obscurePin = true;
-    final result = await showDialog<String>(
+    return showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => PopScope(
-          canPop: false,
-          child: AlertDialog(
-            title: const Text('Set account MPIN'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                    'Create a private 4-digit MPIN for switching to this account.'),
-                const SizedBox(height: 16),
-                TextField(
-                    controller: mpin,
-                    autofocus: true,
-                    obscureText: obscurePin,
-                    keyboardType: TextInputType.number,
-                    maxLength: 4,
-                    decoration: InputDecoration(
-                        labelText: 'MPIN',
-                        suffixIcon: IconButton(
-                            onPressed: () =>
-                                setDialogState(() => obscurePin = !obscurePin),
-                            icon: Icon(obscurePin
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined)))),
-                TextField(
-                    controller: confirm,
-                    obscureText: obscurePin,
-                    keyboardType: TextInputType.number,
-                    maxLength: 4,
-                    decoration: InputDecoration(
-                        labelText: 'Confirm MPIN',
-                        suffixIcon: IconButton(
-                            onPressed: () =>
-                                setDialogState(() => obscurePin = !obscurePin),
-                            icon: Icon(obscurePin
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined)))),
-                if (error != null)
-                  Text(error!,
-                      style: TextStyle(
-                          color: Theme.of(context).colorScheme.error)),
-              ],
-            ),
-            actions: [
-              FilledButton(
-                onPressed: () {
-                  if (!RegExp(r'^\d{4}$').hasMatch(mpin.text) ||
-                      mpin.text != confirm.text) {
-                    setDialogState(
-                        () => error = 'Enter matching 4-digit MPINs.');
-                    return;
-                  }
-                  Navigator.pop(dialogContext, mpin.text);
-                },
-                child: const Text('Set MPIN'),
-              ),
-            ],
-          ),
-        ),
-      ),
+      builder: (_) => const _MpinEnrollmentDialog(),
     );
-    mpin.dispose();
-    confirm.dispose();
-    return result;
   }
 
   Future<void> _persistRememberedCredentials(String email) async {
@@ -407,8 +327,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               enabled: !isLoading,
               onChanged: _clearErrorOnEdit,
               decoration: InputDecoration(
-                labelText: 'Email Address',
+                labelText: 'Email or login ID',
                 hintText: 'e.g. teacher@tms.edu.np',
+                // Students and parents may have a generated login ID
+                // (docs/planphone.md); it arrives by SMS with the password.
+                helperText: 'Students and parents: use the login ID sent by SMS.',
                 prefixIcon: const Icon(Icons.email_outlined),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -588,4 +511,92 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ),
     );
   }
+}
+
+class _MpinEnrollmentDialog extends StatefulWidget {
+  const _MpinEnrollmentDialog();
+
+  @override
+  State<_MpinEnrollmentDialog> createState() => _MpinEnrollmentDialogState();
+}
+
+class _MpinEnrollmentDialogState extends State<_MpinEnrollmentDialog> {
+  final _mpin = TextEditingController();
+  final _confirm = TextEditingController();
+  String? _error;
+  bool _obscurePin = true;
+
+  @override
+  void dispose() {
+    _mpin.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!RegExp(r'^\d{4}$').hasMatch(_mpin.text) ||
+        _mpin.text != _confirm.text) {
+      setState(() => _error = 'Enter matching 4-digit MPINs.');
+      return;
+    }
+    Navigator.pop(context, _mpin.text);
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          scrollable: true,
+          title: const Text('Set account MPIN'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Create a private 4-digit MPIN for switching to this account.',
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _mpin,
+                autofocus: true,
+                obscureText: _obscurePin,
+                keyboardType: TextInputType.number,
+                maxLength: 4,
+                decoration: InputDecoration(
+                  labelText: 'MPIN',
+                  suffixIcon: IconButton(
+                    onPressed: () => setState(() => _obscurePin = !_obscurePin),
+                    icon: Icon(_obscurePin
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined),
+                  ),
+                ),
+              ),
+              TextField(
+                controller: _confirm,
+                obscureText: _obscurePin,
+                keyboardType: TextInputType.number,
+                maxLength: 4,
+                onSubmitted: (_) => _submit(),
+                decoration: InputDecoration(
+                  labelText: 'Confirm MPIN',
+                  suffixIcon: IconButton(
+                    onPressed: () => setState(() => _obscurePin = !_obscurePin),
+                    icon: Icon(_obscurePin
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined),
+                  ),
+                ),
+              ),
+              if (_error != null)
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+            ],
+          ),
+          actions: [
+            FilledButton(onPressed: _submit, child: const Text('Set MPIN')),
+          ],
+        ),
+      );
 }

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/features/parent/models/parent_portal.dart';
-import 'package:tms_mobile/features/parent/widgets/child_switcher_bar.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_navigation.dart';
 import 'package:tms_mobile/features/parent/widgets/parent_portal_state_view.dart';
 import 'package:tms_mobile/shared/widgets/academic_calendar.dart';
-import 'package:tms_mobile/shared/widgets/daily_timetable_widgets.dart';
-import 'package:tms_mobile/core/theme/app_tokens.dart';
+import 'package:tms_mobile/core/theme/app_theme.dart';
+import 'package:tms_mobile/shared/widgets/timetable_session_card.dart';
+import 'package:tms_mobile/shared/widgets/timetable_day_navigator.dart';
 
 class ParentTimetableScreen extends ConsumerStatefulWidget {
   const ParentTimetableScreen({super.key});
@@ -37,24 +37,6 @@ class _ParentTimetableScreenState extends ConsumerState<ParentTimetableScreen> {
         'Sunday'
       ][date.weekday - 1];
 
-  String _dateLabel(DateTime date) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec'
-    ];
-    return '${date.day} ${months[date.month - 1]} ${date.year}';
-  }
-
   bool _matchesDay(ParentSession session) {
     final value = session.day.trim().toLowerCase();
     final day = _weekday(_selected).toLowerCase();
@@ -65,7 +47,7 @@ class _ParentTimetableScreenState extends ConsumerState<ParentTimetableScreen> {
   Widget build(BuildContext context) => Scaffold(
         drawer: ParentNavigation.drawer(context),
         appBar: AppBar(title: const Text('Child timetable')),
-        bottomNavigationBar: const ParentNavigationBar(selectedIndex: 0),
+        bottomNavigationBar: const ParentNavigationBar(selectedIndex: 1),
         body: ParentPortalStateView(
           builder: (context, portal, child) {
             final sessions = portal.timetableSessions
@@ -82,28 +64,24 @@ class _ParentTimetableScreenState extends ConsumerState<ParentTimetableScreen> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const ChildSwitcherBar(),
-                const SizedBox(height: 16),
                 Text('${child.name}’s merged schedule',
                     style: Theme.of(context).textTheme.titleLarge),
-                const Text(
-                    'Every active class is scoped only to the selected child.'),
                 const SizedBox(height: 16),
                 TimetableDayNavigator(
-                  title: _selected == _today
-                      ? 'Today · ${_weekday(_selected)}'
-                      : _weekday(_selected),
-                  dateLabel: _dateLabel(_selected),
+                  date: _selected,
+                  isToday: _selected == _today,
                   onPrevious: _canPrevious
                       ? () => setState(() => _selected =
                           _selected.subtract(const Duration(days: 1)))
                       : null,
                   onNext: _canNext
-                      ? () => setState(() => _selected =
-                          _selected.add(const Duration(days: 1)))
+                      ? () => setState(() =>
+                          _selected = _selected.add(const Duration(days: 1)))
                       : null,
+                  onDateSelected: (selected) => setState(
+                    () => _selected = _dateOnly(selected),
+                  ),
                 ),
-                const SizedBox(height: 12),
                 if (holiday != null)
                   Card(
                     color: Theme.of(context).colorScheme.secondaryContainer,
@@ -116,26 +94,29 @@ class _ParentTimetableScreenState extends ConsumerState<ParentTimetableScreen> {
                     ),
                   )
                 else if (sessions.isEmpty)
-                  const Card(
-                    child: ListTile(
-                      leading: Icon(Icons.event_busy_outlined),
-                      title: Text('No classes scheduled'),
-                      subtitle:
-                          Text('There is no timetable entry for this day.'),
-                    ),
-                  )
-                else
+                  const TimetableEmptyCard(
+                      message: 'No classes scheduled for this day.')
+                else ...[
+                  Text(
+                    '${sessions.length} session${sessions.length == 1 ? '' : 's'}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: TmsSpace.sm),
                   for (final session in sessions) ...[
                     TimetableSessionCard(
                       startTime: session.time,
                       endTime: session.endTime,
-                      title: session.subject,
+                      subject: session.subject,
                       primaryDetail: session.teacher,
                       secondaryDetail: session.room,
-                      trailing: const Icon(Icons.school_outlined),
+                      footer: Text(session.type,
+                          style: const TextStyle(
+                              color: kColorPrimary,
+                              fontWeight: FontWeight.w600)),
                     ),
                     const SizedBox(height: TmsSpace.sm),
                   ],
+                ],
               ],
             );
           },

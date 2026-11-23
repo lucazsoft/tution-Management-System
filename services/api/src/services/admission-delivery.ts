@@ -5,8 +5,31 @@ import smsSender from '../utils/sms';
 import { oneYearEnrollmentWindow } from '../utils/billing-rules';
 import { reconcileBranchBillingAccess } from './billing-access';
 import { encryptDeliveryPayload, decryptDeliveryPayload } from '../utils/delivery-payload';
+import { deliverablePhone } from './admission-identity';
 
 const LEASE_MS = 120_000;
+
+/** Marks a PARENT job satisfied by the family's existing login (no SMS sent). */
+export const EXISTING_LOGIN_CHANNEL = 'EXISTING_LOGIN';
+
+/** The primary guardian link, falling back to the oldest for legacy rows. */
+export function primaryGuardian<T extends { isPrimary: boolean }>(links: T[]): T | undefined {
+  return links.find(link => link.isPrimary) ?? links[0];
+}
+
+/**
+ * Where a login SMS goes (docs/planphone.md, phase 4): the parent's own phone,
+ * and for the student either their own phone or, when guardian-linked, the
+ * primary parent's. Returns null when there is no deliverable number.
+ */
+export function deliveryPhoneFor(
+  recipient: 'STUDENT' | 'PARENT',
+  student: { usesGuardianPhone: boolean; user: { phone: string } },
+  parent: { phone: string },
+): string | null {
+  const source = recipient === 'PARENT' || student.usesGuardianPhone ? parent.phone : student.user.phone;
+  return deliverablePhone(source);
+}
 
 /** Persist credential hashes and encrypted messages in one transaction. */
 export async function prepareAdmissionDeliveries(tenantId: string, studentId: string) {
@@ -21,14 +44,30 @@ export async function prepareAdmissionDeliveries(tenantId: string, studentId: st
     if (!student) throw new Error('Admission not found.');
     const invoice = student.invoices[0];
     if (invoice?.status !== 'PAID' || !invoice.paymentDate) throw new Error('Admission payment must be recorded before logins can be issued.');
-    const parent = student.studentParents[0]?.parent.user;
+    const parent = primaryGuardian(student.studentParents)?.parent.user;
     if (!parent) throw new Error('A linked parent account is required before issuing logins.');
     const jobs = await tx.admissionLoginDelivery.findMany({ where: { tenantId, studentId } });
     const recipients = [{ recipient: 'STUDENT' as const, user: student.user }, { recipient: 'PARENT' as const, user: parent }];
+    const studentName = `${student.user.firstName} ${student.user.lastName}`.trim();
     let pending = false;
     for (const { recipient, user } of recipients) {
       const existing = jobs.find(job => job.recipient === recipient);
       if (existing?.status === 'SENT') continue;
+      if (recipient === 'PARENT' && !existing && parent.status === 'ACTIVE') {
+        // A sibling's parent already has a working login. Re-issuing would
+        // change their password, so record it as satisfied without an SMS.
+        await tx.admissionLoginDelivery.create({ data: {
+          id: crypto.randomUUID(), tenantId, studentId, recipientUserId: user.id, recipient,
+          channel: EXISTING_LOGIN_CHANNEL, status: 'SENT', sentAt: new Date(),
+        } });
+        continue;
+      }
+      const phone = deliveryPhoneFor(recipient, student, parent);
+      if (!phone) {
+        throw new Error(recipient === 'STUDENT'
+          ? "The student has no valid phone. Add one or set the student to use the parent's number, then retry."
+          : "The parent has no valid 10-digit phone number. Update it, then retry.");
+      }
       pending = true;
       // Preserve messages and credentials across every retry/crash window.
       if (existing?.encryptedPayload) continue;
@@ -36,8 +75,11 @@ export async function prepareAdmissionDeliveries(tenantId: string, studentId: st
       const password = `Tms@${crypto.randomBytes(18).toString('base64url')}7`;
       const hash = await bcrypt.hash(password, 10);
       const encryptedPayload = encryptDeliveryPayload(id, {
-        phone: user.phone,
-        message: `TMS admission approved. ${recipient === 'STUDENT' ? 'Student' : 'Parent'} login ID: ${user.email}. Temporary password: ${password}`,
+        phone,
+        // Both messages may reach the same parent phone, so each names its login.
+        message: recipient === 'STUDENT'
+          ? `TMS: Admission approved for ${studentName}. Student login ID: ${user.email}. Temporary password: ${password}`
+          : `TMS: Parent login for ${`${user.firstName} ${user.lastName}`.trim()}. Login ID: ${user.email}. Temporary password: ${password}`,
       });
       await tx.user.update({ where: { id: user.id }, data: { status: 'INACTIVE', passwordHash: hash } });
       const account = await tx.account.updateMany({ where: { userId: user.id, providerId: 'credential' }, data: { password: hash } });
@@ -54,7 +96,7 @@ export async function prepareAdmissionDeliveries(tenantId: string, studentId: st
       await tx.enrollment.updateMany({ where: { studentId, status: 'ACTIVE' }, data: { status: 'BLOCKED' } });
     }
     await tx.enrollment.updateMany({ where: { studentId, status: { in: ['BLOCKED', 'ACTIVE'] }, validUntil: null }, data: oneYearEnrollmentWindow(invoice.paymentDate) });
-    return { studentPhone: student.user.phone, parentPhone: parent.phone };
+    return { studentPhone: deliveryPhoneFor('STUDENT', student, parent), parentPhone: parent.phone };
   }, { timeout: 15_000 });
 }
 
@@ -106,7 +148,11 @@ export async function finalizeAdmissionDeliveries(tenantId: string, studentId: s
     return {
       delivered: complete,
       failures: jobs.filter(job => job.status !== 'SENT').map(job => `${job.recipient}: ${job.failureReason || 'Delivery queued or in progress.'}`),
-      recipients: jobs.map(job => ({ recipient: job.recipient, status: job.status, sentAt: job.sentAt, error: job.failureReason })),
+      recipients: jobs.map(job => ({
+        recipient: job.recipient, status: job.status, sentAt: job.sentAt, error: job.failureReason,
+        // True when the parent already had a login from a sibling; no SMS was sent.
+        existingLogin: job.channel === EXISTING_LOGIN_CHANNEL,
+      })),
     };
   });
 }

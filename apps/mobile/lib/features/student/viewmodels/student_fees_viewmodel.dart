@@ -1,5 +1,5 @@
 /// Student fees ViewModel (MVVM): API-backed invoice list/detail,
-/// blocked-status handling, NepalPay QR, connectIPS handoff with
+/// blocked-status handling, branch QR checkout, connectIPS handoff with
 /// server-verified return refresh.
 ///
 /// PAYMENT RULE: a gateway redirect/return alone NEVER marks a payment
@@ -31,8 +31,6 @@ class StudentFeesState extends ViewModelState {
     this.isEmpty = false,
     this.isDenied = false,
     this.isOffline = false,
-    this.qr,
-    this.isQrLoading = false,
     this.handoff,
     this.isHandoffLoading = false,
     this.paymentOutcome = PaymentOutcome.pending,
@@ -50,8 +48,6 @@ class StudentFeesState extends ViewModelState {
   final bool isEmpty;
   final bool isDenied;
   final bool isOffline;
-  final NepalPayQr? qr;
-  final bool isQrLoading;
   final ConnectIpsHandoff? handoff;
   final bool isHandoffLoading;
   final PaymentOutcome paymentOutcome;
@@ -74,9 +70,6 @@ class StudentFeesState extends ViewModelState {
     bool? isEmpty,
     bool? isDenied,
     bool? isOffline,
-    NepalPayQr? qr,
-    bool clearQr = false,
-    bool? isQrLoading,
     ConnectIpsHandoff? handoff,
     bool clearHandoff = false,
     bool? isHandoffLoading,
@@ -97,8 +90,6 @@ class StudentFeesState extends ViewModelState {
       isEmpty: isEmpty ?? this.isEmpty,
       isDenied: isDenied ?? this.isDenied,
       isOffline: isOffline ?? this.isOffline,
-      qr: clearQr ? null : (qr ?? this.qr),
-      isQrLoading: isQrLoading ?? this.isQrLoading,
       handoff: clearHandoff ? null : (handoff ?? this.handoff),
       isHandoffLoading: isHandoffLoading ?? this.isHandoffLoading,
       paymentOutcome: paymentOutcome ?? this.paymentOutcome,
@@ -168,34 +159,10 @@ class StudentFeesViewModel extends BaseViewModel<StudentFeesState> {
   void selectInvoice(String id) {
     state = state.copyWith(
       selectedId: id,
-      clearQr: true,
       clearHandoff: true,
       paymentOutcome: PaymentOutcome.pending,
       clearNotice: true,
     );
-  }
-
-  /// Loads the NepalPay QR payload for the selected invoice.
-  Future<void> loadQr() async {
-    final id = state.selectedId;
-    if (id == null || state.isQrLoading) return;
-    state = state.copyWith(isQrLoading: true, clearError: true, clearQr: true);
-    try {
-      final qr = await _repository.fetchNepalPayQr(id);
-      state = state.copyWith(isQrLoading: false, qr: qr);
-    } on ApiException catch (e) {
-      if (e.kind == ApiErrorKind.cancelled) {
-        state = state.copyWith(isQrLoading: false);
-        return;
-      }
-      state = state.copyWith(
-        isQrLoading: false,
-        error: e.message,
-        isOffline: e.kind == ApiErrorKind.noConnection,
-      );
-    } catch (e) {
-      state = state.copyWith(isQrLoading: false, error: '$e');
-    }
   }
 
   /// Starts a connectIPS payment and exposes the gateway handoff.

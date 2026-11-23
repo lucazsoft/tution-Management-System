@@ -8,16 +8,20 @@ export interface ApiFieldError {
 export class ApiError extends Error {
   readonly status: number;
   readonly fieldErrors: ApiFieldError[];
+  /** The full JSON error body, for endpoints that return extra detail. */
+  readonly body: Record<string, unknown>;
 
   constructor(
     status: number,
     message: string,
     fieldErrors: ApiFieldError[] = [],
+    body: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.fieldErrors = fieldErrors;
+    this.body = body;
   }
 
   get isAccessDenied() { return this.status === 403; }
@@ -47,7 +51,7 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
     const body = await response.json().catch(() => ({})) as {
       error?: string; message?: string; fieldErrors?: ApiFieldError[];
     };
-    const error = new ApiError(response.status, body.error || body.message || `Request failed (${response.status}).`, body.fieldErrors);
+    const error = new ApiError(response.status, body.error || body.message || `Request failed (${response.status}).`, body.fieldErrors, body as Record<string, unknown>);
     if (response.status === 401 && window.location.pathname !== '/login') {
       localStorage.removeItem('tms_user');
       sessionStorage.removeItem('tms_user');

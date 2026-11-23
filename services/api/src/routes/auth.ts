@@ -3,7 +3,7 @@ import prisma from '../utils/db';
 import bcrypt from 'bcryptjs';
 import { TenantRequest } from '../middleware/tenant';
 import { authenticationSmsConfigured, sendVerificationCode } from '../utils/delivery';
-import { trustedSecurityMobile } from '../utils/security-mobile';
+import { resolveSecurityMobile } from '../utils/linked-security-mobile';
 import {
   MAX_CODE_ATTEMPTS,
   OTP_TTL_MS,
@@ -24,14 +24,20 @@ function rateKey(req: TenantRequest, scope: string, email: string): string {
 
 async function resetBinding(email: string) {
   const user = await prisma.user.findUnique({ where: { email } });
-  const phone = user?.status === 'ACTIVE' ? trustedSecurityMobile(user) : null;
+  const mobile = user ? await resolveSecurityMobile(user) : null;
   const credential = user && await prisma.account.findFirst({ where: { userId: user.id, providerId: 'credential' } });
-  if (!user || !phone || !credential?.password) return null;
+  if (!user || !mobile || !credential?.password) return null;
+  const { phone } = mobile;
   return {
     user,
     phone,
+    // Any change to the account, its password, or the phone that receives its
+    // codes (including a guardian changing their number) voids pending resets.
     identifier: JSON.stringify({ email, userId: user.id, tenantId: user.tenantId, phone,
-      verifiedAt: user.securityMobileVerifiedAt?.toISOString(), credential: hashCode(credential.password) }),
+      verifiedAt: user.securityMobileVerifiedAt?.toISOString(), credential: hashCode(credential.password),
+      ...(mobile.via === 'GUARDIAN'
+        ? { guardianUserId: mobile.guardianUserId, guardianVerifiedAt: mobile.guardianVerifiedAt?.toISOString() }
+        : {}) }),
   };
 }
 
@@ -142,6 +148,12 @@ router.post('/forgot-password', async (req: TenantRequest, res: Response) => {
 
   try {
     const target = await resetBinding(email);
+
+    // Siblings share one parent phone, so also cap codes per receiving number.
+    if (target) {
+      const perPhone = await consumePersistentRateLimit(`forgot-phone:${hashCode(target.phone)}`, 15 * 60 * 1000, 10);
+      if (!perPhone.allowed) return res.json({ success: true });
+    }
 
     // Only issue a code for real, active accounts — but always answer success
     // so the endpoint cannot be used to enumerate registered emails.

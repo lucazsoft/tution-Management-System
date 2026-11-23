@@ -3,6 +3,7 @@ export interface TenantDashboardData {
   activeTeachersCount: number;
   totalOverdueAmountNpr: number;
   pendingLeaveRequestsCount: number;
+  leavesPendingAtBranchesCount?: number;
   branchSummary: Array<{
     branchId: string;
     branchName: string;

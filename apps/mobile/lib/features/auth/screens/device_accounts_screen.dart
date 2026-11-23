@@ -22,7 +22,6 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
   final _vault = DeviceAccountVault();
   late Future<List<DeviceAccount>> _accounts;
   bool _managing = false;
-  final Set<String> _selectedAccountIds = {};
 
   @override
   void initState() {
@@ -32,44 +31,42 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
 
   void _reload() => _accounts = _vault.accounts();
 
-  Future<void> _deleteSelected() async {
-    if (_selectedAccountIds.isEmpty) return;
-    final count = _selectedAccountIds.length;
+  Future<void> _removeAccount(
+    DeviceAccount account, {
+    required bool isCurrent,
+  }) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete $count saved account${count == 1 ? '' : 's'}?'),
-        content: const Text(
-          'This removes the selected credentials and MPIN from this device. It does not delete the institution account.',
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove saved account?'),
+        content: Text(
+          'Remove ${account.name.isEmpty ? account.email : account.name} from this device? '
+          'This removes its saved sign-in and MPIN only. The account and its data will not be deleted.'
+          '${isCurrent ? ' You will remain signed in until you log out.' : ''}',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Remove from device'),
           ),
         ],
       ),
     );
     if (confirmed != true) return;
-    for (final userId in _selectedAccountIds) {
-      await _vault.remove(userId);
-    }
+
+    await _vault.remove(account.userId);
     if (!mounted) return;
-    setState(() {
-      _selectedAccountIds.clear();
-      _managing = false;
-      _reload();
-    });
+    setState(_reload);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '$count saved account${count == 1 ? '' : 's'} removed.',
-        ),
-      ),
+      SnackBar(content: Text('${account.name} was removed from this device.')),
     );
   }
 
@@ -252,8 +249,6 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
     mpin.dispose();
     confirm.dispose();
     if (saved == true && mounted) setState(_reload);
-    final auth = ref.read(authProvider);
-    if (mounted && auth.isTwoFactorPending) context.go('/2fa');
   }
 
   Future<void> _switch(DeviceAccount account) async {
@@ -372,15 +367,12 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
                           });
                           return;
                         }
-                        final user = await ref
+                        await ref
                             .read(authProvider.notifier)
                             .activateDeviceAccount(account.email,
                                 useMpin ? account.password : value);
                         if (!dialogContext.mounted) return;
                         Navigator.pop(dialogContext);
-                        if (user != null && mounted) {
-                          context.go(ref.read(authProvider).roleRedirectPath);
-                        }
                       } on AuthFailure catch (failure) {
                         setDialogState(() {
                           busy = false;
@@ -402,9 +394,6 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
     // Wait until the dialog transition is fully gone before releasing it.
     await Future<void>.delayed(const Duration(milliseconds: 500));
     credential.dispose();
-    if (mounted && ref.read(authProvider).isTwoFactorPending) {
-      context.go('/2fa');
-    }
   }
 
   @override
@@ -414,17 +403,7 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
       appBar: AppBar(
           title: Text(widget.loginMode
               ? 'Log into a saved account'
-              : 'Accounts on this device'),
-          actions: [
-            if (!widget.loginMode)
-              TextButton(
-                onPressed: () => setState(() {
-                  _managing = !_managing;
-                  _selectedAccountIds.clear();
-                }),
-                child: Text(_managing ? 'Done' : 'Manage'),
-              ),
-          ]),
+              : 'Accounts on this device')),
       body: FutureBuilder<List<DeviceAccount>>(
         future: _accounts,
         builder: (context, snapshot) {
@@ -447,56 +426,67 @@ class _DeviceAccountsScreenState extends ConsumerState<DeviceAccountsScreen> {
                         subtitle: const Text(
                             'Required before this account can be selected safely.'),
                         onTap: _addOrProtectCurrent)),
+              if (accounts.isNotEmpty) ...[
+                OutlinedButton.icon(
+                  key: const ValueKey('manage-device-accounts'),
+                  onPressed: () => setState(() => _managing = !_managing),
+                  icon: Icon(_managing
+                      ? Icons.check_rounded
+                      : Icons.manage_accounts_outlined),
+                  label: Text(_managing ? 'Done managing' : 'Manage accounts'),
+                ),
+                const SizedBox(height: 12),
+              ],
               for (final account in accounts)
                 Card(
                     child: ListTile(
-                  leading: _managing
-                      ? Checkbox(
-                          value: _selectedAccountIds.contains(account.userId),
-                          onChanged: (selected) => setState(() {
-                            if (selected == true) {
-                              _selectedAccountIds.add(account.userId);
-                            } else {
-                              _selectedAccountIds.remove(account.userId);
-                            }
-                          }),
-                        )
-                      : CircleAvatar(
-                          child: Text(account.name.isEmpty
-                              ? '?'
-                              : account.name[0].toUpperCase())),
+                  leading: CircleAvatar(
+                      child: Text(account.name.isEmpty
+                          ? '?'
+                          : account.name[0].toUpperCase())),
                   title: Text(account.name),
                   subtitle: Text(
                       '${account.email}\n${account.role.replaceAll('_', ' ')}'),
                   isThreeLine: true,
                   trailing: _managing
-                      ? null
+                      ? IconButton(
+                          key: ValueKey('remove-account-${account.userId}'),
+                          tooltip: 'Remove ${account.name} from this device',
+                          color: Theme.of(context).colorScheme.error,
+                          onPressed: () => _removeAccount(
+                            account,
+                            isCurrent: account.userId == currentId,
+                          ),
+                          icon: const Icon(Icons.delete_outline_rounded),
+                        )
                       : !widget.loginMode && account.userId == currentId
-                          ? const Chip(label: Text('Current'))
+                          ? Chip(
+                              backgroundColor: Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withValues(alpha: .12),
+                              side: BorderSide(
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              label: Text(
+                                'Current',
+                                style: TextStyle(
+                                  color:
+                                      Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            )
                           : const Icon(Icons.chevron_right_rounded),
-                  onTap: _managing
-                      ? () => setState(() {
-                            if (!_selectedAccountIds.add(account.userId)) {
-                              _selectedAccountIds.remove(account.userId);
-                            }
-                          })
-                      : !widget.loginMode && account.userId == currentId
-                          ? null
-                          : () => _switch(account),
+                  onTap: _managing ||
+                          (!widget.loginMode && account.userId == currentId)
+                      ? null
+                      : () => _switch(account),
                 )),
               const SizedBox(height: 12),
-              if (_managing)
-                FilledButton.icon(
-                  onPressed:
-                      _selectedAccountIds.isEmpty ? null : _deleteSelected,
-                  icon: const Icon(Icons.delete_outline_rounded),
-                  label: Text(_selectedAccountIds.isEmpty
-                      ? 'Select accounts to delete'
-                      : 'Delete selected (${_selectedAccountIds.length})'),
-                ),
               if (!widget.loginMode)
                 FilledButton.icon(
-                    onPressed: !_managing && currentSaved
+                    onPressed: currentSaved
                         ? () => context.push(
                             '${GoRouterState.of(context).matchedLocation}/add')
                         : null,

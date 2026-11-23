@@ -40,7 +40,7 @@ const leaves = [
   { startDate: '2026-09-10T00:00:00Z', endDate: '2026-09-12T00:00:00Z', status: 'PENDING' },
   { startDate: '2026-09-05T00:00:00Z', endDate: '2026-09-06T00:00:00Z', status: 'REJECTED' },
 ];
-assert.equal(countApprovedLeaveDaysInMonth(leaves, 2026, 9), 3); // Sep 29, 30 + Sep 15
+assert.equal(countApprovedLeaveDaysInMonth(leaves, 2026, 9), 2); // Sep 29, 30; Sep 15 still awaits L2
 assert.equal(countApprovedLeaveDaysInMonth(leaves, 2026, 10), 2); // Oct 1, 2
 assert.equal(countApprovedLeaveDaysInMonth([], 2026, 9), 0);
 

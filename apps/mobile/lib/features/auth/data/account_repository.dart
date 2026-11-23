@@ -2,7 +2,12 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
+
+final personalAccountProvider = FutureProvider.autoDispose<PersonalAccount>(
+  (ref) => AccountRepository().load(),
+);
 
 class AccountRole {
   const AccountRole({required this.name, this.branchName, this.branchId});
@@ -31,6 +36,8 @@ class PersonalAccount {
     required this.roles,
     required this.canManageSecurityMobile,
     this.photoUrl,
+    this.loginEmailGenerated = false,
+    this.usesParentPhone = false,
   });
 
   factory PersonalAccount.fromJson(Map<String, dynamic> json) =>
@@ -53,6 +60,8 @@ class PersonalAccount {
         canManageSecurityMobile: json['capabilities'] is Map &&
             (json['capabilities'] as Map)['manageSecurityMobile'] == true,
         photoUrl: json['photoUrl']?.toString(),
+        loginEmailGenerated: json['loginEmailGenerated'] == true,
+        usesParentPhone: json['usesParentPhone'] == true,
       );
 
   final String firstName;
@@ -66,6 +75,12 @@ class PersonalAccount {
   final List<AccountRole> roles;
   final bool canManageSecurityMobile;
   final String? photoUrl;
+
+  /// The email is a system-generated login ID, not a mailbox (docs/planphone.md).
+  final bool loginEmailGenerated;
+
+  /// A student whose login and reset codes go to the primary parent's phone.
+  final bool usesParentPhone;
   String get name => '$firstName $lastName'.trim();
   String get initials => [firstName, lastName]
       .where((part) => part.isNotEmpty)
@@ -103,12 +118,19 @@ class AccountRepository {
     return PersonalAccount.fromJson(response.data ?? const {});
   }
 
-  Future<PersonalAccount> updateName(String firstName, String lastName) async {
-    await _dio.patch<Map<String, dynamic>>(
+  Future<({String firstName, String lastName})> updateName(
+    String firstName,
+    String lastName,
+  ) async {
+    final response = await _dio.patch<Map<String, dynamic>>(
       '/api/users/me/account',
       data: {'firstName': firstName.trim(), 'lastName': lastName.trim()},
     );
-    return load();
+    final data = response.data ?? const <String, dynamic>{};
+    return (
+      firstName: (data['firstName'] ?? firstName).toString().trim(),
+      lastName: (data['lastName'] ?? lastName).toString().trim(),
+    );
   }
 
   Future<String> updatePhoto(Uint8List bytes, String mimeType) async {

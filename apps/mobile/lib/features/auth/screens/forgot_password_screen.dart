@@ -157,7 +157,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ),
           const SizedBox(height: 10),
           Text(
-            'Enter your login email. We’ll send a reset code by SMS to your verified security mobile.',
+            'Enter your email or login ID. We’ll send a reset code by SMS to your verified security mobile. For a student who uses a parent’s number, the code goes to that parent’s phone.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: kColorText.withValues(alpha: 0.72),
@@ -168,7 +168,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
             decoration: const InputDecoration(
-              labelText: 'Email',
+              labelText: 'Email or login ID',
               hintText: 'teacher@tms.edu.np',
             ),
             validator: AppValidators.validateEmail,

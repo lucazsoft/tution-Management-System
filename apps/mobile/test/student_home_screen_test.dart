@@ -176,8 +176,52 @@ void main() {
       expect(find.text('Grade 8 · Baneshwor'), findsOneWidget);
       expect(find.text('Mathematics'), findsOneWidget);
       expect(find.text('Regular'), findsOneWidget);
-      expect(find.textContaining('4500'), findsWidgets);
       expect(find.text('Complete algebra worksheet 4'), findsOneWidget);
+    });
+
+    group('overdue fees banner', () {
+      Future<void> pumpWith(
+        WidgetTester tester, {
+        required bool blocked,
+        required String invoiceState,
+      }) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        final json = _portalJson();
+        (json['studentProfile'] as Map<String, dynamic>)['blocked'] = blocked;
+        ((json['invoices'] as List).single as Map<String, dynamic>)['state'] =
+            invoiceState;
+        await _pumpHome(
+          tester,
+          _FakePortalRepository()
+            ..portalToReturn = StudentPortal.fromJson(json),
+        );
+      }
+
+      testWidgets('warns about overdue dues under the greeting',
+          (tester) async {
+        await pumpWith(tester, blocked: false, invoiceState: 'Overdue');
+        expect(find.text('Fee dues overdue'), findsOneWidget);
+        expect(
+          find.text(
+              'NPR 4500 is overdue. View what is owed and the payment QR.'),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('says blocked when the enrollment is blocked',
+          (tester) async {
+        await pumpWith(tester, blocked: true, invoiceState: 'Overdue');
+        expect(find.text('Blocked — fee dues'), findsOneWidget);
+        expect(find.byIcon(Icons.lock_rounded), findsOneWidget);
+      });
+
+      testWidgets('is hidden when nothing is overdue', (tester) async {
+        await pumpWith(tester, blocked: false, invoiceState: 'Due soon');
+        expect(find.text('Fee dues overdue'), findsNothing);
+        expect(find.text('Blocked — fee dues'), findsNothing);
+      });
     });
 
     testWidgets('keeps Nepal date above the blue greeting without overflow',
@@ -191,8 +235,11 @@ void main() {
       await _pumpHome(tester, fake);
 
       final date = find.byKey(const ValueKey('student-home-nepali-date'));
+      final clock = find.byKey(const ValueKey('student-home-nepal-clock'));
       final greeting = find.text('Namaste, Aarav');
       expect(date, findsOneWidget);
+      expect(clock, findsOneWidget);
+      expect(tester.getSize(clock).width, greaterThan(0));
       expect(
           tester.getTopLeft(date).dy, lessThan(tester.getTopLeft(greeting).dy));
       expect(tester.takeException(), isNull);

@@ -276,11 +276,15 @@ interface AdmissionClassOption { id: string; name: string; courseId: string; cou
 interface AdmissionResult {
   admission: {
     studentId: string; admissionNumber: string; admittedAt: string; status: 'PENDING_PAYMENT' | 'READY_FOR_LOGIN' | 'ACTIVE'; admissionFee: number | string;
+    studentLoginId: string; parentLoginId: string; studentUsesParentPhone: boolean; linkedExistingParent: boolean;
     record: { institutionName: string; branchName: string; branchAddress: string; gradeName: string; className: string; admittedBy: { id: string; name: string }; primaryGuardian: { name: string; email: string; phone: string; relationship: string }; student: Record<string, string> };
   };
   loginDelivery: { delivered: boolean } | null;
   message: string;
 }
+
+/** Returned with a 409 when the parent's phone matches several parent accounts. */
+interface ParentChoice { userId: string; name: string; email: string; childCount: number }
 
 function AdmissionPrintRecord({ result }: { result: AdmissionResult }) {
   const { admission } = result;
@@ -289,7 +293,7 @@ function AdmissionPrintRecord({ result }: { result: AdmissionResult }) {
   const details = [
     ['Admission number', admission.admissionNumber], ['Admitted', new Date(admission.admittedAt).toLocaleString('en-NP')],
     ['Student', `${student.firstName} ${student.lastName}`], ['Date of birth', student.dateOfBirth], ['Gender', student.gender],
-    ['Blood group', student.bloodGroup || '—'], ['Nationality', student.nationality], ['Student phone', student.phone], ['Student email', student.email],
+    ['Blood group', student.bloodGroup || '—'], ['Nationality', student.nationality], ['Student phone', admission.studentUsesParentPhone ? "Uses parent's number" : student.phone], ['Student login ID', admission.studentLoginId],
     ['Grade', record.gradeName], ['Class', record.className], ['Permanent address', student.permanentAddress],
     ['Temporary address', student.temporaryAddress || '—'], ['School', student.school || '—'], ['Medical/accessibility notes', student.medicalNotes || 'None recorded'],
   ];
@@ -298,7 +302,7 @@ function AdmissionPrintRecord({ result }: { result: AdmissionResult }) {
     <h2>Student and admission information</h2><dl>{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
     <div className="admission-print-columns"><section><h2>Father</h2><p><strong>{student.fatherName}</strong><br />{student.fatherPhone}<br />{student.fatherEmail || 'No email'}<br />{student.fatherOccupation || 'Occupation not recorded'}</p></section><section><h2>Mother</h2><p><strong>{student.motherName}</strong><br />{student.motherPhone}<br />{student.motherEmail || 'No email'}<br />{student.motherOccupation || 'Occupation not recorded'}</p></section></div>
     {student.optionalParentName ? <div className="admission-print-columns"><section><h2>Optional parent / guardian</h2><p><strong>{student.optionalParentName}</strong> ({student.optionalParentRelationship || 'Relationship not recorded'})<br />{student.optionalParentPhone || 'No phone'}<br />{student.optionalParentEmail || 'No email'}<br />{student.optionalParentOccupation || 'Occupation not recorded'}</p></section></div> : null}
-    <div className="admission-print-columns"><section><h2>Primary parent account</h2><p><strong>{record.primaryGuardian.name}</strong> ({record.primaryGuardian.relationship})<br />{record.primaryGuardian.phone}<br />{record.primaryGuardian.email}</p></section><section><h2>Emergency contact</h2><p><strong>{student.emergencyContactName}</strong> ({student.emergencyContactRelationship})<br />{student.emergencyContactPhone}</p></section></div>
+    <div className="admission-print-columns"><section><h2>Primary parent account</h2><p><strong>{record.primaryGuardian.name}</strong> ({record.primaryGuardian.relationship})<br />{record.primaryGuardian.phone}<br />Login ID: {admission.parentLoginId}{admission.linkedExistingParent ? ' (existing account)' : ''}</p></section><section><h2>Emergency contact</h2><p><strong>{student.emergencyContactName}</strong> ({student.emergencyContactRelationship})<br />{student.emergencyContactPhone}</p></section></div>
     <footer><div><span>Admitted by</span><strong>{record.admittedBy.name}</strong></div><div><span>Admission date and time</span><strong>{new Date(admission.admittedAt).toLocaleString('en-NP')}</strong></div><div className="admission-signature"><span>Parent/guardian signature</span></div><div className="admission-signature"><span>Authorized signature</span></div></footer>
   </section>;
 }
@@ -308,6 +312,10 @@ export function TenantAdmissionsPage() {
   const [subjectClasses, setSubjectClasses] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false); const [result, setResult] = useState<AdmissionResult | null>(null); const [printAfterSave, setPrintAfterSave] = useState(false);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  // "Use parent's number as primary": the student has no phone of their own.
+  const [studentUsesParentPhone, setStudentUsesParentPhone] = useState(false);
+  const [parentChoices, setParentChoices] = useState<ParentChoice[]>([]);
+  const [existingParentUserId, setExistingParentUserId] = useState('');
   const localDateTime = () => { const value = new Date(); value.setMinutes(value.getMinutes() - value.getTimezoneOffset()); return value.toISOString().slice(0, 16); };
   const [form, setForm] = useState({ branchId: '', gradeId: '', classId: '', admittedAt: localDateTime(), studentFirst: '', studentLast: '', studentEmail: '', studentPhone: '', dateOfBirth: '', gender: '', bloodGroup: '', nationality: 'Nepali', permanentAddress: '', temporaryAddress: '', school: '', medicalNotes: '', fatherName: '', fatherPhone: '', fatherEmail: '', fatherOccupation: '', motherName: '', motherPhone: '', motherEmail: '', motherOccupation: '', optionalParentName: '', optionalParentPhone: '', optionalParentEmail: '', optionalParentOccupation: '', optionalParentRelationship: '', primaryParent: '', emergencyContactName: '', emergencyContactPhone: '', emergencyContactRelationship: '' });
   useEffect(() => { void Promise.all([request<{ branches: Branch[] }>('/branches'), request<{ grades: GradeOption[] }>('/grades'), request<{ classes: any[] }>('/courses/classes')]).then(([b, g, c]) => { setBranches(b.branches); setGrades(g.grades); setClasses(c.classes); const branchId = b.branches[0]?.id ?? ''; const gradeId = g.grades[0]?.id ?? ''; const classId = c.classes.find((item) => item.branchId === branchId && item.gradeId === gradeId && item.courseType === 'REGULAR')?.id ?? ''; setForm((old) => ({ ...old, branchId, gradeId, classId })); }).catch((next) => showToast(errorMessage(next), 'error')); }, []);
@@ -316,18 +324,19 @@ export function TenantAdmissionsPage() {
   const selectedGrade = grades.find((grade) => grade.id === form.gradeId);
   const subjectBilling = selectedGrade?.billingMode === 'SUBJECT';
   const selectedSubjectClassIds = Object.values(subjectClasses).filter(Boolean);
-  const requiredAdmissionFields = ['branchId','gradeId','admittedAt','studentFirst','studentLast','studentEmail','studentPhone','dateOfBirth','gender','nationality','permanentAddress','fatherName','fatherPhone','motherName','motherPhone','primaryParent','emergencyContactName','emergencyContactPhone','emergencyContactRelationship'] as const;
+  const requiredAdmissionFields = ['branchId','gradeId','admittedAt','studentFirst','studentLast','dateOfBirth','gender','nationality','permanentAddress','fatherName','fatherPhone','motherName','motherPhone','primaryParent','emergencyContactName','emergencyContactPhone','emergencyContactRelationship'] as const;
   const primaryParentRequirements: Array<{ key: keyof typeof form; label: string }> = form.primaryParent === 'Father'
-    ? [{ key: 'fatherName', label: "father's name" }, { key: 'fatherPhone', label: "father's phone" }, { key: 'fatherEmail', label: "father's email" }]
+    ? [{ key: 'fatherName', label: "father's name" }, { key: 'fatherPhone', label: "father's phone" }]
     : form.primaryParent === 'Mother'
-      ? [{ key: 'motherName', label: "mother's name" }, { key: 'motherPhone', label: "mother's phone" }, { key: 'motherEmail', label: "mother's email" }]
+      ? [{ key: 'motherName', label: "mother's name" }, { key: 'motherPhone', label: "mother's phone" }]
       : form.primaryParent === 'Optional parent'
-        ? [{ key: 'optionalParentName', label: "guardian's name" }, { key: 'optionalParentPhone', label: "guardian's phone" }, { key: 'optionalParentEmail', label: "guardian's email" }, { key: 'optionalParentRelationship', label: "guardian's relationship" }]
+        ? [{ key: 'optionalParentName', label: "guardian's name" }, { key: 'optionalParentPhone', label: "guardian's phone" }, { key: 'optionalParentRelationship', label: "guardian's relationship" }]
         : [];
   const missingPrimaryParentFields = primaryParentRequirements.filter(({ key }) => !form[key].trim());
   const primaryParentReady = Boolean(form.primaryParent) && missingPrimaryParentFields.length === 0;
   const academicPlacementReady = subjectBilling ? selectedSubjectClassIds.length > 0 : true;
-  const canPrint = requiredAdmissionFields.every((key) => form[key].trim()) && academicPlacementReady && primaryParentReady && !busy;
+  const studentPhoneReady = studentUsesParentPhone || Boolean(form.studentPhone.trim());
+  const canPrint = requiredAdmissionFields.every((key) => form[key].trim()) && studentPhoneReady && academicPlacementReady && primaryParentReady && !busy;
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
@@ -336,14 +345,22 @@ export function TenantAdmissionsPage() {
     try {
       const admissionDetails = Object.fromEntries(Object.entries(form).filter(([key]) => ['admittedAt','dateOfBirth','gender','bloodGroup','nationality','permanentAddress','temporaryAddress','school','medicalNotes','fatherName','fatherPhone','fatherEmail','fatherOccupation','motherName','motherPhone','motherEmail','motherOccupation','optionalParentName','optionalParentPhone','optionalParentEmail','optionalParentOccupation','optionalParentRelationship','primaryParent','emergencyContactName','emergencyContactPhone','emergencyContactRelationship'].includes(key)));
       const selectedParent = form.primaryParent === 'Father' ? { name: form.fatherName, email: form.fatherEmail, phone: form.fatherPhone } : form.primaryParent === 'Mother' ? { name: form.motherName, email: form.motherEmail, phone: form.motherPhone } : { name: form.optionalParentName, email: form.optionalParentEmail, phone: form.optionalParentPhone };
-      if (form.studentEmail.trim().toLowerCase() === selectedParent.email.trim().toLowerCase()) throw new Error('Student and primary parent emails must be different.');
+      if (!studentPhoneReady) throw new Error("Enter the student's phone number or tick 'Use parent's number as primary'.");
+      if (form.studentEmail.trim() && form.studentEmail.trim().toLowerCase() === selectedParent.email.trim().toLowerCase()) throw new Error('Student and primary parent emails must be different.');
       const nameParts = selectedParent.name.trim().split(/\s+/); const firstName = nameParts.shift() ?? ''; const lastName = nameParts.join(' ') || firstName;
       const classIds = subjectBilling ? selectedSubjectClassIds : [];
-      const admission = await request<AdmissionResult>('/users/admissions', { method: 'POST', body: JSON.stringify({ branchId: form.branchId, gradeId: form.gradeId, classIds, student: { firstName: form.studentFirst, lastName: form.studentLast, email: form.studentEmail, phone: form.studentPhone }, parent: { firstName, lastName, email: selectedParent.email, phone: selectedParent.phone }, admissionDetails }) });
+      const admission = await request<AdmissionResult>('/users/admissions', { method: 'POST', body: JSON.stringify({ branchId: form.branchId, gradeId: form.gradeId, classIds, student: { firstName: form.studentFirst, lastName: form.studentLast, email: form.studentEmail, phone: studentUsesParentPhone ? '' : form.studentPhone, useGuardianPhone: studentUsesParentPhone }, parent: { firstName, lastName, email: selectedParent.email, phone: selectedParent.phone }, admissionDetails, ...(existingParentUserId ? { existingParentUserId } : {}) }) });
+      setParentChoices([]); setExistingParentUserId('');
       setResult(admission); showToast(admission.message, admission.loginDelivery && !admission.loginDelivery.delivered ? 'error' : 'success');
-    } catch (next) { setPrintAfterSave(false); showToast(errorMessage(next), 'error'); } finally { setBusy(false); }
+    } catch (next) {
+      setPrintAfterSave(false);
+      // The phone matches several parent accounts: let the admin pick one.
+      const choices = next instanceof ApiError && Array.isArray(next.body.parentChoices) ? next.body.parentChoices as ParentChoice[] : [];
+      if (choices.length) { setParentChoices(choices); setExistingParentUserId(''); }
+      showToast(errorMessage(next), 'error');
+    } finally { setBusy(false); }
   };
-  const acknowledge = () => { setResult(null); setForm((old) => ({ ...old, admittedAt: localDateTime(), studentFirst: '', studentLast: '', studentEmail: '', studentPhone: '', dateOfBirth: '', gender: '', bloodGroup: '', permanentAddress: '', temporaryAddress: '', school: '', medicalNotes: '', fatherName: '', fatherPhone: '', fatherEmail: '', fatherOccupation: '', motherName: '', motherPhone: '', motherEmail: '', motherOccupation: '', optionalParentName: '', optionalParentPhone: '', optionalParentEmail: '', optionalParentOccupation: '', optionalParentRelationship: '', primaryParent: '', emergencyContactName: '', emergencyContactPhone: '', emergencyContactRelationship: '' })); };
+  const acknowledge = () => { setResult(null); setStudentUsesParentPhone(false); setParentChoices([]); setExistingParentUserId(''); setForm((old) => ({ ...old, admittedAt: localDateTime(), studentFirst: '', studentLast: '', studentEmail: '', studentPhone: '', dateOfBirth: '', gender: '', bloodGroup: '', permanentAddress: '', temporaryAddress: '', school: '', medicalNotes: '', fatherName: '', fatherPhone: '', fatherEmail: '', fatherOccupation: '', motherName: '', motherPhone: '', motherEmail: '', motherOccupation: '', optionalParentName: '', optionalParentPhone: '', optionalParentEmail: '', optionalParentOccupation: '', optionalParentRelationship: '', primaryParent: '', emergencyContactName: '', emergencyContactPhone: '', emergencyContactRelationship: '' })); };
   const selectedBranch = branches.find((branch) => branch.id === form.branchId);
   const subjectGroups = Array.from(new Map(availableClasses.map((item) => [item.courseId, { courseId: item.courseId, courseName: item.courseName, classes: availableClasses.filter((option) => option.courseId === item.courseId), fee: Number(item.feeStructure?.monthlyBase ?? 0) }])).values());
   const recurringEstimate = subjectBilling ? subjectGroups.filter((group) => subjectClasses[group.courseId]).reduce((sum, group) => { const option = group.classes[0]; return sum + group.fee * (option?.isTaxExempt ? 1 : 1 + Number(option?.taxPercentage ?? 0) / 100); }, 0) : Number(selectedGrade?.monthlyFee ?? 0);
@@ -365,18 +382,18 @@ export function TenantAdmissionsPage() {
         <strong>Admission fee for this branch: NPR {Number(selectedBranch?.admissionFee ?? 0).toLocaleString()}</strong>
         <p style={{ marginTop: 4, color: 'var(--text-muted)', fontSize: 13 }}>One-time amount due now. Estimated recurring tuition after activation: <strong>NPR {Math.round(recurringEstimate).toLocaleString('en-NP')}/month</strong>.</p>
       </div>
-      <fieldset className="admission-fieldset"><legend>Student details</legend><div style={grid}>{[['studentFirst','First name'],['studentLast','Last name'],['studentEmail','Email'],['studentPhone','Phone']].map(([key, text]) => <label key={key}>{text} *<input required style={input} type={key.includes('Email') ? 'email' : key.includes('Phone') ? 'tel' : 'text'} autoComplete={key.includes('Email') ? 'email' : key.includes('Phone') ? 'tel' : key.includes('First') ? 'given-name' : 'family-name'} value={form[key as keyof typeof form]} onChange={(e) => setForm((old) => ({ ...old, [key]: e.target.value }))}/></label>)}<label>Date of birth *<input required type="date" max={new Date().toISOString().slice(0, 10)} style={input} value={form.dateOfBirth} onChange={(e) => setForm((old) => ({ ...old, dateOfBirth: e.target.value }))}/></label><label>Gender *<select required style={input} value={form.gender} onChange={(e) => setForm((old) => ({ ...old, gender: e.target.value }))}><option value="">Select gender</option><option>Male</option><option>Female</option><option>Other</option><option>Prefer not to say</option></select></label><label>Blood group<input style={input} value={form.bloodGroup} onChange={(e) => setForm((old) => ({ ...old, bloodGroup: e.target.value }))} placeholder="O+" /></label><label>Nationality *<input required style={input} value={form.nationality} onChange={(e) => setForm((old) => ({ ...old, nationality: e.target.value }))}/></label><label>School<input style={input} value={form.school} onChange={(e) => setForm((old) => ({ ...old, school: e.target.value }))}/></label></div><label>Permanent address *<textarea required style={{ ...input, minHeight: 72 }} value={form.permanentAddress} onChange={(e) => setForm((old) => ({ ...old, permanentAddress: e.target.value }))}/></label><label>Temporary address<textarea style={{ ...input, minHeight: 72 }} value={form.temporaryAddress} onChange={(e) => setForm((old) => ({ ...old, temporaryAddress: e.target.value }))}/></label><label>Medical conditions, allergies, or accessibility notes<textarea style={{ ...input, minHeight: 72 }} value={form.medicalNotes} onChange={(e) => setForm((old) => ({ ...old, medicalNotes: e.target.value }))}/></label></fieldset>
-      <fieldset className="admission-fieldset"><legend>Father's details</legend><div style={grid}>{[['fatherName','Full name *'],['fatherPhone','Phone *'],['fatherEmail',`Email${form.primaryParent === 'Father' ? ' *' : ''}`],['fatherOccupation','Occupation']].map(([key, text]) => <label key={key} htmlFor={`admission-${key}`}>{text}<input id={`admission-${key}`} required={key === 'fatherName' || key === 'fatherPhone' || (key === 'fatherEmail' && form.primaryParent === 'Father')} style={input} type={key.includes('Email') ? 'email' : key.includes('Phone') ? 'tel' : 'text'} autoComplete={key.includes('Email') ? 'email' : key.includes('Phone') ? 'tel' : 'off'} value={form[key as keyof typeof form]} onChange={(e) => setForm((old) => ({ ...old, [key]: e.target.value }))}/></label>)}</div></fieldset>
-      <fieldset className="admission-fieldset"><legend>Mother's details</legend><div style={grid}>{[['motherName','Full name *'],['motherPhone','Phone *'],['motherEmail',`Email${form.primaryParent === 'Mother' ? ' *' : ''}`],['motherOccupation','Occupation']].map(([key, text]) => <label key={key} htmlFor={`admission-${key}`}>{text}<input id={`admission-${key}`} required={key === 'motherName' || key === 'motherPhone' || (key === 'motherEmail' && form.primaryParent === 'Mother')} style={input} type={key.includes('Email') ? 'email' : key.includes('Phone') ? 'tel' : 'text'} autoComplete={key.includes('Email') ? 'email' : key.includes('Phone') ? 'tel' : 'off'} value={form[key as keyof typeof form]} onChange={(e) => setForm((old) => ({ ...old, [key]: e.target.value }))}/></label>)}</div></fieldset>
-      <fieldset className="admission-fieldset"><legend>Optional parent or guardian</legend><p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Leave this section empty if only the father and mother should be recorded.</p><div style={grid}>{[['optionalParentName',`Full name${form.primaryParent === 'Optional parent' ? ' *' : ''}`],['optionalParentPhone',`Phone${form.primaryParent === 'Optional parent' ? ' *' : ''}`],['optionalParentEmail',`Email${form.primaryParent === 'Optional parent' ? ' *' : ''}`],['optionalParentOccupation','Occupation'],['optionalParentRelationship',`Relationship${form.primaryParent === 'Optional parent' ? ' *' : ''}`]].map(([key, text]) => <label key={key} htmlFor={`admission-${key}`}>{text}<input id={`admission-${key}`} required={form.primaryParent === 'Optional parent' && key !== 'optionalParentOccupation'} style={input} type={key.includes('Email') ? 'email' : key.includes('Phone') ? 'tel' : 'text'} autoComplete={key.includes('Email') ? 'email' : key.includes('Phone') ? 'tel' : 'off'} value={form[key as keyof typeof form]} onChange={(e) => setForm((old) => ({ ...old, [key]: e.target.value }))}/></label>)}</div></fieldset>
-      <fieldset className="admission-fieldset"><legend>Primary parent account</legend><p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Choose who will receive the parent login. You can select them before completing their details; a valid email is required to create the account.</p><label htmlFor="admission-primary-parent">Parent receiving credentials *<select id="admission-primary-parent" required style={input} value={form.primaryParent} aria-describedby={form.primaryParent && !primaryParentReady ? 'admission-primary-parent-help' : undefined} onChange={(e) => setForm((old) => ({ ...old, primaryParent: e.target.value }))}><option value="">Choose father, mother, or guardian</option><option value="Father">Father</option><option value="Mother">Mother</option><option value="Optional parent">Optional parent or guardian</option></select></label>{form.primaryParent && !primaryParentReady ? <div id="admission-primary-parent-help" className="admission-parent-warning" role="status" aria-live="polite"><div><strong>Complete the selected parent account</strong><p>Add {missingPrimaryParentFields.map(({ label }) => label).join(', ')} before completing admission.</p></div><button type="button" onClick={() => document.getElementById(`admission-${missingPrimaryParentFields[0]?.key}`)?.focus()}>Add missing details</button></div> : form.primaryParent ? <p className="admission-parent-ready" role="status">Ready — {form.primaryParent} will receive the parent login credentials.</p> : null}</fieldset>
+      <fieldset className="admission-fieldset"><legend>Student details</legend><div style={grid}>{[['studentFirst','First name'],['studentLast','Last name']].map(([key, text]) => <label key={key}>{text} *<input required style={input} type="text" autoComplete={key.includes('First') ? 'given-name' : 'family-name'} value={form[key as keyof typeof form]} onChange={(e) => setForm((old) => ({ ...old, [key]: e.target.value }))}/></label>)}<label htmlFor="admission-studentEmail">Email<input id="admission-studentEmail" style={input} type="email" autoComplete="off" value={form.studentEmail} aria-describedby="admission-studentEmail-help" onChange={(e) => setForm((old) => ({ ...old, studentEmail: e.target.value }))}/><small id="admission-studentEmail-help" style={{ display: 'block', marginTop: 4, color: 'var(--text-muted)' }}>Leave blank to generate a login ID.</small></label><div><label htmlFor="admission-studentPhone">Phone{studentUsesParentPhone ? '' : ' *'}<input id="admission-studentPhone" required={!studentUsesParentPhone} disabled={studentUsesParentPhone} style={input} type="tel" autoComplete="off" value={studentUsesParentPhone ? '' : form.studentPhone} onChange={(e) => setForm((old) => ({ ...old, studentPhone: e.target.value }))}/></label><label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, fontSize: 13 }}><input type="checkbox" checked={studentUsesParentPhone} onChange={(e) => { const checked = e.target.checked; setStudentUsesParentPhone(checked); if (checked) setForm((old) => ({ ...old, studentPhone: '' })); }}/>Use parent's number as primary</label><small style={{ display: 'block', marginTop: 2, color: 'var(--text-muted)' }}>{studentUsesParentPhone ? "The student's login and reset codes go to the primary parent's phone." : 'Tick this if the student has no phone of their own.'}</small></div><label>Date of birth *<input required type="date" max={new Date().toISOString().slice(0, 10)} style={input} value={form.dateOfBirth} onChange={(e) => setForm((old) => ({ ...old, dateOfBirth: e.target.value }))}/></label><label>Gender *<select required style={input} value={form.gender} onChange={(e) => setForm((old) => ({ ...old, gender: e.target.value }))}><option value="">Select gender</option><option>Male</option><option>Female</option><option>Other</option><option>Prefer not to say</option></select></label><label>Blood group<input style={input} value={form.bloodGroup} onChange={(e) => setForm((old) => ({ ...old, bloodGroup: e.target.value }))} placeholder="O+" /></label><label>Nationality *<input required style={input} value={form.nationality} onChange={(e) => setForm((old) => ({ ...old, nationality: e.target.value }))}/></label><label>School<input style={input} value={form.school} onChange={(e) => setForm((old) => ({ ...old, school: e.target.value }))}/></label></div><label>Permanent address *<textarea required style={{ ...input, minHeight: 72 }} value={form.permanentAddress} onChange={(e) => setForm((old) => ({ ...old, permanentAddress: e.target.value }))}/></label><label>Temporary address<textarea style={{ ...input, minHeight: 72 }} value={form.temporaryAddress} onChange={(e) => setForm((old) => ({ ...old, temporaryAddress: e.target.value }))}/></label><label>Medical conditions, allergies, or accessibility notes<textarea style={{ ...input, minHeight: 72 }} value={form.medicalNotes} onChange={(e) => setForm((old) => ({ ...old, medicalNotes: e.target.value }))}/></label></fieldset>
+      <fieldset className="admission-fieldset"><legend>Father's details</legend><div style={grid}>{[['fatherName','Full name *'],['fatherPhone','Phone *'],['fatherEmail','Email'],['fatherOccupation','Occupation']].map(([key, text]) => <label key={key} htmlFor={`admission-${key}`}>{text}<input id={`admission-${key}`} required={key === 'fatherName' || key === 'fatherPhone' || false} style={input} type={key.includes('Email') ? 'email' : key.includes('Phone') ? 'tel' : 'text'} autoComplete={key.includes('Email') ? 'email' : key.includes('Phone') ? 'tel' : 'off'} value={form[key as keyof typeof form]} onChange={(e) => setForm((old) => ({ ...old, [key]: e.target.value }))}/></label>)}</div></fieldset>
+      <fieldset className="admission-fieldset"><legend>Mother's details</legend><div style={grid}>{[['motherName','Full name *'],['motherPhone','Phone *'],['motherEmail','Email'],['motherOccupation','Occupation']].map(([key, text]) => <label key={key} htmlFor={`admission-${key}`}>{text}<input id={`admission-${key}`} required={key === 'motherName' || key === 'motherPhone' || false} style={input} type={key.includes('Email') ? 'email' : key.includes('Phone') ? 'tel' : 'text'} autoComplete={key.includes('Email') ? 'email' : key.includes('Phone') ? 'tel' : 'off'} value={form[key as keyof typeof form]} onChange={(e) => setForm((old) => ({ ...old, [key]: e.target.value }))}/></label>)}</div></fieldset>
+      <fieldset className="admission-fieldset"><legend>Optional parent or guardian</legend><p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Leave this section empty if only the father and mother should be recorded.</p><div style={grid}>{[['optionalParentName',`Full name${form.primaryParent === 'Optional parent' ? ' *' : ''}`],['optionalParentPhone',`Phone${form.primaryParent === 'Optional parent' ? ' *' : ''}`],['optionalParentEmail','Email'],['optionalParentOccupation','Occupation'],['optionalParentRelationship',`Relationship${form.primaryParent === 'Optional parent' ? ' *' : ''}`]].map(([key, text]) => <label key={key} htmlFor={`admission-${key}`}>{text}<input id={`admission-${key}`} required={form.primaryParent === 'Optional parent' && key !== 'optionalParentOccupation' && key !== 'optionalParentEmail'} style={input} type={key.includes('Email') ? 'email' : key.includes('Phone') ? 'tel' : 'text'} autoComplete={key.includes('Email') ? 'email' : key.includes('Phone') ? 'tel' : 'off'} value={form[key as keyof typeof form]} onChange={(e) => setForm((old) => ({ ...old, [key]: e.target.value }))}/></label>)}</div></fieldset>
+      <fieldset className="admission-fieldset"><legend>Primary parent account</legend><p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Choose who will receive the parent login. Their phone is required; leave their email blank to generate a login ID. If this parent already has an account for a brother or sister, the new student is linked to it.</p><label htmlFor="admission-primary-parent">Parent receiving credentials *<select id="admission-primary-parent" required style={input} value={form.primaryParent} aria-describedby={form.primaryParent && !primaryParentReady ? 'admission-primary-parent-help' : undefined} onChange={(e) => setForm((old) => ({ ...old, primaryParent: e.target.value }))}><option value="">Choose father, mother, or guardian</option><option value="Father">Father</option><option value="Mother">Mother</option><option value="Optional parent">Optional parent or guardian</option></select></label>{form.primaryParent && !primaryParentReady ? <div id="admission-primary-parent-help" className="admission-parent-warning" role="status" aria-live="polite"><div><strong>Complete the selected parent account</strong><p>Add {missingPrimaryParentFields.map(({ label }) => label).join(', ')} before completing admission.</p></div><button type="button" onClick={() => document.getElementById(`admission-${missingPrimaryParentFields[0]?.key}`)?.focus()}>Add missing details</button></div> : form.primaryParent ? <p className="admission-parent-ready" role="status">Ready — {form.primaryParent} will receive the parent login credentials.</p> : null}{parentChoices.length ? <div role="group" aria-labelledby="admission-parent-choice-title" style={{ marginTop: 12, padding: 12, border: '1px solid var(--border)', borderRadius: 10 }}><strong id="admission-parent-choice-title" style={{ fontSize: 13 }}>This phone number is used by more than one parent account</strong><p style={{ margin: '4px 0 8px', color: 'var(--text-muted)', fontSize: 13 }}>Choose the account to link this student to, then complete the admission again.</p>{parentChoices.map((choice) => <label key={choice.userId} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginTop: 4 }}><input type="radio" name="admission-existing-parent" value={choice.userId} checked={existingParentUserId === choice.userId} onChange={() => setExistingParentUserId(choice.userId)}/>{choice.name} · {choice.email} · {choice.childCount} linked student{choice.childCount === 1 ? '' : 's'}</label>)}</div> : null}</fieldset>
       <fieldset className="admission-fieldset"><legend>Emergency contact</legend><div style={grid}>{[['emergencyContactName','Full name *'],['emergencyContactPhone','Phone *'],['emergencyContactRelationship','Relationship *']].map(([key, text]) => <label key={key}>{text}<input required style={input} type={key.includes('Phone') ? 'tel' : 'text'} value={form[key as keyof typeof form]} onChange={(e) => setForm((old) => ({ ...old, [key]: e.target.value }))}/></label>)}</div></fieldset>
       <div className="admission-result-actions">
         <Button disabled={busy || !form.branchId || !form.gradeId || !academicPlacementReady || !form.admittedAt} type="submit">{busy ? 'Saving admission…' : 'Complete admission'}</Button>
         <Button variant="outline" type="submit" name="admission-action" value="save-and-print" disabled={!canPrint} title={canPrint ? 'Save the admission and open the printable record' : 'Complete every required field to enable printing'}><span className="material-symbols-outlined" aria-hidden="true">print</span>Save and print admission</Button>
       </div>
       {!canPrint && !busy ? <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13 }}>Complete all required fields to enable printing.</p> : null}
-    </form></Card> : <Card hoverable={false}><StatusBadge variant={result.admission.status === 'ACTIVE' ? 'success' : 'warning'}>{result.admission.status === 'ACTIVE' ? 'Active' : 'Payment pending'}</StatusBadge><h3 style={{ marginTop: 12 }}>Admission recorded</h3><div role="status" style={{ padding: 16, marginTop: 12, background: 'var(--color-warning-soft)', border: '1px solid color-mix(in srgb, var(--color-warning-strong) 28%, transparent)', color: 'var(--color-warning-strong)', borderRadius: 10 }}><strong>{result.message}</strong><p style={{ marginTop: 12 }}>Amount due: <strong>NPR {Number(result.admission.admissionFee).toLocaleString()}</strong></p><p style={{ marginTop: 10, color: 'var(--text-muted)' }}>After confirmed payment, student and parent login IDs and temporary passwords are sent automatically to their admission phone numbers.</p></div><AdmissionPrintRecord result={result} /><div className="admission-result-actions"><Button onClick={() => window.print()}><span className="material-symbols-outlined" aria-hidden="true">print</span>Print admission record</Button><Button variant="outline" onClick={acknowledge}>Start another admission</Button></div></Card>}
+    </form></Card> : <Card hoverable={false}><StatusBadge variant={result.admission.status === 'ACTIVE' ? 'success' : 'warning'}>{result.admission.status === 'ACTIVE' ? 'Active' : 'Payment pending'}</StatusBadge><h3 style={{ marginTop: 12 }}>Admission recorded</h3><div role="status" style={{ padding: 16, marginTop: 12, background: 'var(--color-warning-soft)', border: '1px solid color-mix(in srgb, var(--color-warning-strong) 28%, transparent)', color: 'var(--color-warning-strong)', borderRadius: 10 }}><strong>{result.message}</strong><p style={{ marginTop: 12 }}>Amount due: <strong>NPR {Number(result.admission.admissionFee).toLocaleString()}</strong></p><p style={{ marginTop: 10, color: 'var(--text-muted)' }}>After confirmed payment, login IDs and temporary passwords are sent by SMS: the student's to {result.admission.studentUsesParentPhone ? "the parent's phone" : "the student's phone"}, and the parent's to the parent's phone{result.admission.linkedExistingParent ? ' (skipped: this parent already has a login)' : ''}.</p><dl style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '4px 12px', color: 'var(--color-text)' }}><dt>Student login ID</dt><dd style={{ margin: 0 }}><strong>{result.admission.studentLoginId}</strong></dd><dt>Parent login ID</dt><dd style={{ margin: 0 }}><strong>{result.admission.parentLoginId}</strong>{result.admission.linkedExistingParent ? ' · linked to existing parent account' : ''}</dd></dl></div><AdmissionPrintRecord result={result} /><div className="admission-result-actions"><Button onClick={() => window.print()}><span className="material-symbols-outlined" aria-hidden="true">print</span>Print admission record</Button><Button variant="outline" onClick={acknowledge}>Start another admission</Button></div></Card>}
   </div>;
 }
 
@@ -555,102 +572,3 @@ export function TenantCertificatesPage() {
   );
 }
 
-export function TenantLeaveRequestsPage() {
-  const { showToast } = useToast();
-  const [requests, setRequests] = useState<Awaited<ReturnType<typeof api.branchAdmin.getLeaves>>['leaves']>([]);
-  const [busy, setBusy] = useState('');
-  const [decisionRemarks, setDecisionRemarks] = useState<Record<string, string>>({});
-  const [decisionErrors, setDecisionErrors] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
-  const [selectedDecision, setSelectedDecision] = useState<(typeof requests)[number] | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true); setLoadError('');
-    try { setRequests((await api.branchAdmin.getLeaves('L2')).leaves); }
-    catch (next) { setLoadError(errorMessage(next)); }
-    finally { setLoading(false); }
-  }, []);
-  useEffect(() => {
-    void load();
-    const interval = window.setInterval(() => { void load(); }, 15_000);
-    return () => window.clearInterval(interval);
-  }, [load]);
-
-  const mutate = async (id: string, action: 'APPROVE' | 'REJECT') => {
-    const remarks = decisionRemarks[id]?.trim();
-    if (action === 'REJECT' && !remarks) {
-      setDecisionErrors((current) => ({ ...current, [id]: 'Add a reason so the teacher understands why this request was rejected.' }));
-      document.getElementById(`leave-remarks-${id}`)?.focus();
-      return;
-    }
-    setBusy(id); setDecisionErrors((current) => ({ ...current, [id]: '' }));
-    try {
-      await api.branchAdmin.decideLeave(id, action, action === 'REJECT' ? remarks : undefined);
-      await load();
-      setDecisionRemarks((current) => ({ ...current, [id]: '' }));
-      showToast(action === 'APPROVE' ? 'Leave approved. The teacher can now see the final decision.' : 'Leave rejected. The teacher can now see the reason.', 'success');
-    } catch (next) {
-      showToast(errorMessage(next), 'error');
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const pending = requests.filter(r => r.status === 'APPROVED_LEVEL1');
-  const history = requests.filter(r => r.status !== 'APPROVED_LEVEL1');
-
-  return (
-    <div style={{ display: 'grid', gap: 18 }}>
-      <Header title="Leave Requests (Level 2)" description="Final approval for long-duration or special leaves forwarded by Branch Admins." />
-      
-      <Card hoverable={false}>
-        <h3 style={{ fontSize: '18px', marginBottom: '16px' }}>Pending Final Approval</h3>
-        {loading ? <RemoteState kind="loading" message="Loading Level 2 leave requests…" /> : loadError ? <RemoteState kind="error" message={loadError} onRetry={() => void load()} /> : !pending.length ? <RemoteState kind="empty" message="No pending Level 2 leave requests." /> :
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {pending.map(req => (
-              <div key={req.id} style={{ ...row, padding: '16px', border: '1px solid var(--border)', borderRadius: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <strong style={{ fontSize: '15px' }}>{req.staffName}</strong> <span style={{ color: 'var(--text-muted)' }}>({req.branchName})</span>
-                    <div style={{ marginTop: '8px', display: 'flex', gap: '12px', fontSize: '13px' }}>
-                      <span style={{ fontWeight: 600 }}>{req.leaveType.replaceAll('_', ' ')}</span>
-                      <span>{Math.max(1, Math.ceil((new Date(req.endDate).getTime() - new Date(req.startDate).getTime()) / 86_400_000) + 1)} days</span>
-                      <span>Starts: {new Date(req.startDate).toLocaleDateString('en-NP')}</span>
-                    </div>
-                    <p style={{ marginTop: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>"{req.reason}"</p>
-                    <p style={{ marginTop: '8px', fontSize: '12px', color: 'var(--color-primary)' }}>Level 1 approval recorded by the assigned Branch Admin.</p>
-                  </div>
-                  <StatusBadge variant="warning">L2 Review</StatusBadge>
-                </div>
-                <label style={{ display: 'grid', gap: 6, marginTop: 16, fontSize: 13, fontWeight: 700 }} htmlFor={`leave-remarks-${req.id}`}>Reason for rejection <span style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 400 }}>Required only when rejecting.</span><textarea id={`leave-remarks-${req.id}`} style={{ ...input, minHeight: 72 }} maxLength={2000} value={decisionRemarks[req.id] ?? ''} aria-invalid={Boolean(decisionErrors[req.id]) || undefined} aria-describedby={decisionErrors[req.id] ? `leave-remarks-error-${req.id}` : undefined} onChange={(event) => { setDecisionRemarks((old) => ({ ...old, [req.id]: event.target.value })); if (decisionErrors[req.id]) setDecisionErrors((current) => ({ ...current, [req.id]: '' })); }} placeholder="Explain the decision to the teacher" />{decisionErrors[req.id] ? <span id={`leave-remarks-error-${req.id}`} role="alert" style={{ color: 'var(--color-error)', fontSize: 12 }}>{decisionErrors[req.id]}</span> : null}</label>
-                <div style={{ display: 'flex', gap: '8px', marginTop: '16px', flexWrap: 'wrap' }}>
-                  <Button disabled={busy === req.id} onClick={() => void mutate(req.id, 'APPROVE')}>{busy === req.id ? 'Saving decision…' : 'Approve leave'}</Button>
-                  <Button disabled={busy === req.id} variant="danger" onClick={() => void mutate(req.id, 'REJECT')}>{busy === req.id ? 'Saving decision…' : 'Reject leave'}</Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        }
-      </Card>
-
-      {history.length > 0 && (
-        <Card hoverable={false}>
-          <h3 style={{ fontSize: '18px', marginBottom: '16px' }}>Recent Decisions</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {history.map(req => (
-              <button type="button" key={req.id} onClick={() => setSelectedDecision(req)} aria-label={`View leave request details for ${req.staffName}`} style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', padding: '12px', border: 0, borderBottom: '1px solid var(--border)', background: 'transparent', color: 'var(--color-text)', cursor: 'pointer', textAlign: 'left', minHeight: 48 }}>
-                <div>
-                  <strong>{req.staffName}</strong> · {req.leaveType.replaceAll('_', ' ')} ({req.branchName})
-                  <span style={{ display: 'block', marginTop: 4, color: 'var(--text-muted)', fontSize: 12 }}>View request details</span>
-                </div>
-                <StatusBadge variant={req.status === 'APPROVED_LEVEL2' ? 'success' : 'error'}>{req.status === 'APPROVED_LEVEL2' ? 'Approved' : 'Rejected'}</StatusBadge>
-              </button>
-            ))}
-          </div>
-        </Card>
-      )}
-      {selectedDecision ? <div role="dialog" aria-modal="true" aria-labelledby="leave-decision-title" onClick={() => setSelectedDecision(null)} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,.5)', display: 'grid', placeItems: 'center', padding: 16 }}><div onClick={(event) => event.stopPropagation()} style={{ width: 'min(560px, 100%)' }}><Card hoverable={false}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}><div><StatusBadge variant={selectedDecision.status === 'APPROVED_LEVEL2' ? 'success' : 'error'}>{selectedDecision.status === 'APPROVED_LEVEL2' ? 'Approved' : 'Rejected'}</StatusBadge><h3 id="leave-decision-title" style={{ marginTop: 10 }}>{selectedDecision.staffName}</h3><p style={{ color: 'var(--text-muted)', marginTop: 4 }}>{selectedDecision.branchName}</p></div><Button variant="outline" onClick={() => setSelectedDecision(null)}>Close</Button></div><dl style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginTop: 20 }}><div><dt style={{ color: 'var(--text-muted)', fontSize: 12 }}>Leave type</dt><dd style={{ margin: '4px 0 0', fontWeight: 600 }}>{selectedDecision.leaveType.replaceAll('_', ' ')}</dd></div><div><dt style={{ color: 'var(--text-muted)', fontSize: 12 }}>Dates</dt><dd style={{ margin: '4px 0 0', fontWeight: 600 }}>{new Date(selectedDecision.startDate).toLocaleDateString('en-NP')} – {new Date(selectedDecision.endDate).toLocaleDateString('en-NP')}</dd></div></dl><div style={{ marginTop: 20, padding: 14, border: '1px solid var(--border)', borderRadius: 8 }}><strong style={{ fontSize: 12 }}>Request reason</strong><p style={{ marginTop: 6 }}>{selectedDecision.reason}</p></div></Card></div></div> : null}
-    </div>
-  );
-}

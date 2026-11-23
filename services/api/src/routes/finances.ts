@@ -5,7 +5,8 @@ import { LateFeeMode, Prisma, RefundPolicy } from '@prisma/client';
 import prisma from '../utils/db';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware, hasPermission } from '../middleware/auth';
-import { MockSmsSender } from '../utils/notifications';
+import { getSmsSender } from '../utils/sms';
+import { findGuardians, formatRupees, smsGuardians } from '../services/guardian-sms';
 import { getAdmissionTenure, getBillingPeriod } from '../utils/nepali';
 import { managedBranchIds, canApprovePettyCashL1, canReleasePettyCash, canAccessBranch, hasBranchPermission, isTenantAdmin } from '../utils/access-control';
 import crypto from 'node:crypto';
@@ -1559,11 +1560,25 @@ router.post(
           return res.status(503).json({ error: 'Payment recorded; admission login delivery is pending. Retry this callback.', invoiceId: invoice.id });
         }
 
-        const smsSender = new MockSmsSender();
-        await smsSender.sendSms(
-          '98510XXXXX',
-          `Dear Parent, fee payment of NPR ${paymentAmount.data} received successfully. Ref ID: ${transactionId.data}.`
-        );
+        // Receipt SMS to the student's parents. Best-effort: the payment is
+        // already committed, so a delivery problem must not fail the callback.
+        try {
+          const [guardians, payer] = await Promise.all([
+            findGuardians(prisma, invoice.studentId),
+            prisma.student.findUnique({
+              where: { id: invoice.studentId },
+              select: { user: { select: { firstName: true, lastName: true } } },
+            }),
+          ]);
+          const studentName = payer ? `${payer.user.firstName} ${payer.user.lastName}`.trim() : 'your child';
+          await smsGuardians(
+            getSmsSender(),
+            guardians,
+            `Dear Parent, fee payment of NPR ${formatRupees(Number(paymentAmount.data))} for ${studentName} was received. Ref: ${transactionId.data}. Thank you.`,
+          );
+        } catch {
+          // Logged by the SMS gateway adapter; never block payment confirmation.
+        }
 
         return res.status(200).json({
           message: admissionDelivery

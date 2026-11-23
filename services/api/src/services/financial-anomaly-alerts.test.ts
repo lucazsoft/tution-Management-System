@@ -78,6 +78,12 @@ async function main() {
     body: 'UTILITIES expenses are 80% above the recent monthly baseline. Current: NPR 18000; baseline: NPR 10000.',
   });
 
+  const skipped = await runBranchExpenseAnomalyAlerts({ tenantId: 'tenant-a', now, db: db as any,
+    sendPush: async () => ({ success: true, sent: 0, skipped: true }),
+  });
+  assert.equal(skipped.delivered, 0, 'skipped sends are not delivered');
+  assert.equal(skipped.failed, 3);
+
   console.log('PASS tenant-scoped branch expense anomaly detection and fail-open notification delivery');
 }
 

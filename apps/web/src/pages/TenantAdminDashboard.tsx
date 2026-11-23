@@ -53,7 +53,7 @@ function buildAlerts(dashboard: TenantDashboardData | null): AlertFeedItem[] {
       id: 'alert-leaves',
       tag: 'Leave',
       tagVariant: 'warning',
-      description: `${dashboard.pendingLeaveRequestsCount} leave request${dashboard.pendingLeaveRequestsCount === 1 ? '' : 's'} awaiting approval.`,
+      description: `${dashboard.pendingLeaveRequestsCount} leave request${dashboard.pendingLeaveRequestsCount === 1 ? '' : 's'} awaiting your final approval.`,
       timestamp: 'Review',
       href: '/tenant/leave-management',
     });
@@ -187,7 +187,7 @@ export function TenantAdminDashboard() {
         <KPICard
           title="Pending Leaves"
           value={dashboard ? dashboard.pendingLeaveRequestsCount : '—'}
-          delta={dashboard && dashboard.pendingLeaveRequestsCount > 0 ? 'Awaiting approval' : 'All clear'}
+          delta={dashboard && dashboard.pendingLeaveRequestsCount > 0 ? 'Awaiting your approval' : dashboard?.leavesPendingAtBranchesCount ? `${dashboard.leavesPendingAtBranchesCount} with branches` : 'All clear'}
           icon="event_busy"
           accentColor={dashboard && dashboard.pendingLeaveRequestsCount > 0 ? 'var(--color-warning)' : 'var(--color-success)'}
           loading={isLoading}

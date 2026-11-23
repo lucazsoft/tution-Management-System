@@ -121,6 +121,24 @@ export function TenantBranches() {
       showToast('Enter valid latitude and longitude for the attendance geofence.', 'error');
       return;
     }
+    // Mirrors the server bounds in services/api/src/utils/geo.ts so the admin
+    // gets immediate feedback instead of a round-trip rejection.
+    if (latitude < -90 || latitude > 90) {
+      showToast('Latitude must be between -90 and 90.', 'error');
+      return;
+    }
+    if (longitude < -180 || longitude > 180) {
+      showToast('Longitude must be between -180 and 180.', 'error');
+      return;
+    }
+    const radius = Number(form.radiusMeters) || 100;
+    if (radius < 10 || radius > 5000) {
+      showToast(
+        'Geofence radius must be between 10 and 5000 metres. A smaller radius is unreachable for a normal GPS fix; a larger one effectively disables the fence.',
+        'error',
+      );
+      return;
+    }
 
     setIsSaving(true);
 
@@ -130,7 +148,7 @@ export function TenantBranches() {
         address: form.address.trim(),
         latitude,
         longitude,
-        radiusMeters: Number(form.radiusMeters) || 100,
+        radiusMeters: radius,
         gracePeriodMinutes: Number(form.gracePeriodMinutes) || 15,
         admissionFee: Math.max(0, Math.round(Number(form.admissionFee) || 0)),
       };

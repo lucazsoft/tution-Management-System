@@ -83,20 +83,6 @@ Dio stubFeesDio({
             ));
             return;
           }
-          if (options.path == '/api/finances/nepalpay-qr/inv-aug') {
-            handler.resolve(Response<dynamic>(
-              requestOptions: options,
-              statusCode: 200,
-              data: {
-                'invoiceId': 'inv-aug',
-                'amount': 4500,
-                'currency': 'NPR',
-                'merchantName': 'TMS Tuition Management System',
-                'qrString': '00020101021226580012np.nepalpay',
-              },
-            ));
-            return;
-          }
           if (options.path == '/api/finances/connectips/initiate/inv-aug') {
             handler.resolve(Response<dynamic>(
               requestOptions: options,
@@ -235,14 +221,6 @@ void main() {
           ApiErrorKind.notFound,
         )),
       );
-    });
-
-    test('fetchNepalPayQr returns payload', () async {
-      final repo = StudentFeesRepository(dio: stubFeesDio());
-      final qr = await repo.fetchNepalPayQr('inv-aug');
-
-      expect(qr.qrString, contains('nepalpay'));
-      expect(qr.amount, 4500);
     });
 
     test('403 maps to forbidden (denied)', () async {

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { disableBrowserPush } from '../services/browser-push';
 import { removeAuthToken } from '../services/api';
 import { AuthFlowError, ROLE_DEFAULT_PATHS } from '../features/auth/service';
 import type { AuthUser } from '../features/auth/types';
@@ -163,6 +164,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
+      // Revoke this browser token while the authenticated session still exists.
+      // Failure must not prevent account sign-out.
+      try { await disableBrowserPush(false); } catch { /* Server sign-out still proceeds. */ }
       await authClient.signOut();
     } finally {
       removeAuthToken();

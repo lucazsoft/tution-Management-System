@@ -202,6 +202,7 @@ class ParentPortalRepository {
         'remarks': remarks.trim(),
         'isGroup': false,
         'participantIds': <String>[],
+        'clientPlatform': 'ANDROID',
       });
     } on DioException catch (error) {
       throw ApiException.from(error);
@@ -217,6 +218,40 @@ class ParentPortalRepository {
           'action': action,
           if (alternativeTime != null)
             'alternativeSlot': alternativeTime.toUtc().toIso8601String(),
+          if (remarks?.trim().isNotEmpty == true) 'remarks': remarks!.trim(),
+          'clientPlatform': 'ANDROID',
+        },
+      );
+    } on DioException catch (error) {
+      throw ApiException.from(error);
+    }
+  }
+
+  Future<void> updateAppointment({
+    required String appointmentId,
+    required DateTime scheduledTime,
+    required String remarks,
+  }) async {
+    try {
+      await _dio.patch(
+        '$appointmentsPath/${Uri.encodeComponent(appointmentId)}',
+        data: {
+          'scheduledTime': scheduledTime.toUtc().toIso8601String(),
+          'remarks': remarks.trim(),
+          'clientPlatform': 'ANDROID',
+        },
+      );
+    } on DioException catch (error) {
+      throw ApiException.from(error);
+    }
+  }
+
+  Future<void> cancelAppointment(String appointmentId,
+      {String? remarks}) async {
+    try {
+      await _dio.post(
+        '$appointmentsPath/cancel/${Uri.encodeComponent(appointmentId)}',
+        data: {
           if (remarks?.trim().isNotEmpty == true) 'remarks': remarks!.trim(),
         },
       );

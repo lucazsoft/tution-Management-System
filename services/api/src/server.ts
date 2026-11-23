@@ -43,6 +43,10 @@ import { validateRuntimeConfig } from './utils/runtime-config';
 import { monitorCredentialSignIn } from './middleware/auth-security-monitor';
 
 const app = express();
+// Coolify fronts the API with exactly one Traefik hop. Trusting that single hop
+// makes req.ip the real client address instead of the proxy's, which every
+// per-IP rate limit and the login-failure monitor depend on.
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 1));
 const PORT = Number(process.env.PORT) || 3001;
 const runtimeConfig = validateRuntimeConfig();
 const parseLegacyAuthJson = express.json({ limit: '16kb' });
@@ -133,6 +137,10 @@ app.all('/api/auth/*', monitorCredentialSignIn, toNodeHandler(auth));
 
 app.use('/api/finances/manual-payment', express.json({ limit: '2mb' }));
 app.use('/api/finances/branches', express.json({ limit: '2mb' }));
+// Result entry can contain one checked answer sheet per student. Authenticate
+// before accepting the larger payload; the global 256 KB JSON ceiling remains
+// in force for every other API surface.
+app.use('/api/teacher/results', authMiddleware, express.json({ limit: '64mb' }));
 app.use(express.json({ limit: '256kb' }));
 
 // Global tenant middleware; authenticated scope comes from the verified session.

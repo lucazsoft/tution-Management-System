@@ -7,7 +7,7 @@ export 'package:tms_mobile/core/theme/app_colors.dart';
 export 'package:tms_mobile/core/theme/app_tokens.dart';
 
 ThemeData buildTmsTheme() {
-  final textTheme = GoogleFonts.robotoTextTheme();
+  final textTheme = buildTmsTextTheme();
 
   return ThemeData(
     useMaterial3: true,
@@ -18,40 +18,7 @@ ThemeData buildTmsTheme() {
       surface: kColorBg,
       error: kColorError,
     ),
-    textTheme: textTheme.copyWith(
-      displayLarge: GoogleFonts.fraunces(
-        fontSize: 30,
-        fontWeight: FontWeight.w700,
-        color: kColorText,
-      ),
-      displayMedium: GoogleFonts.fraunces(
-        fontSize: 24,
-        fontWeight: FontWeight.w700,
-        color: kColorText,
-      ),
-      headlineMedium: GoogleFonts.fraunces(
-        fontSize: 22,
-        fontWeight: FontWeight.w700,
-        color: kColorText,
-      ),
-      titleLarge: GoogleFonts.fraunces(
-        fontSize: 20,
-        fontWeight: FontWeight.w700,
-        color: kColorText,
-      ),
-      titleMedium: GoogleFonts.roboto(
-        fontSize: 18,
-        fontWeight: FontWeight.w700,
-        color: kColorText,
-      ),
-      bodyLarge:
-          GoogleFonts.roboto(fontSize: 16, height: 1.5, color: kColorText),
-      bodyMedium:
-          GoogleFonts.roboto(fontSize: 14, height: 1.5, color: kColorText),
-      bodySmall: GoogleFonts.roboto(
-          fontSize: 12, color: kColorText.withValues(alpha: 0.74)),
-      labelLarge: GoogleFonts.roboto(fontWeight: FontWeight.w700),
-    ),
+    textTheme: textTheme,
     appBarTheme: AppBarTheme(
       elevation: 0,
       scrolledUnderElevation: 0,
@@ -145,6 +112,31 @@ ThemeData buildTmsTheme() {
             GoogleFonts.roboto(fontSize: 14, fontWeight: FontWeight.w700),
       ),
     ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.disabled)
+              ? const Color(0xFFD6DCE5)
+              : kColorPrimary,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.disabled)
+              ? const Color(0xFF596579)
+              : Colors.white,
+        ),
+        textStyle: WidgetStatePropertyAll(
+          GoogleFonts.roboto(fontSize: 14, fontWeight: FontWeight.w700),
+        ),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: kColorPrimaryDark,
+        side: const BorderSide(color: kColorPrimary),
+        textStyle:
+            GoogleFonts.roboto(fontSize: 14, fontWeight: FontWeight.w700),
+      ),
+    ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: kColorPrimaryLight,
@@ -184,7 +176,83 @@ ThemeData buildTmsTheme() {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(TmsRadius.pill),
       ),
-      labelStyle: GoogleFonts.roboto(fontSize: 12, fontWeight: FontWeight.w600),
+      labelStyle: GoogleFonts.roboto(
+        color: kColorText,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+      secondaryLabelStyle: GoogleFonts.roboto(
+        color: kColorPrimaryDark,
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+      ),
+      checkmarkColor: kColorPrimaryDark,
     ),
+  );
+}
+
+/// The web-aligned type system shared by every mobile portal.
+///
+/// Roboto is the UI font and Fraunces is reserved for display headings, which
+/// mirrors `--font-ui` and `--font-display` in the web application.
+TextTheme buildTmsTextTheme([TextTheme? base]) {
+  final textTheme = GoogleFonts.robotoTextTheme(base);
+  return textTheme.copyWith(
+    displayLarge: GoogleFonts.fraunces(
+      fontSize: 30,
+      fontWeight: FontWeight.w700,
+      color: kColorText,
+    ),
+    displayMedium: GoogleFonts.fraunces(
+      fontSize: 24,
+      fontWeight: FontWeight.w700,
+      color: kColorText,
+    ),
+    displaySmall: GoogleFonts.fraunces(
+      fontSize: 28,
+      height: 1.15,
+      fontWeight: FontWeight.w700,
+      color: kColorText,
+    ),
+    headlineLarge: GoogleFonts.fraunces(
+      fontWeight: FontWeight.w700,
+      color: kColorText,
+    ),
+    headlineMedium: GoogleFonts.fraunces(
+      fontSize: 22,
+      fontWeight: FontWeight.w700,
+      color: kColorText,
+    ),
+    headlineSmall: GoogleFonts.fraunces(
+      fontSize: 24,
+      height: 1.2,
+      fontWeight: FontWeight.w700,
+      color: kColorText,
+    ),
+    titleLarge: GoogleFonts.fraunces(
+      fontSize: 20,
+      fontWeight: FontWeight.w700,
+      color: kColorText,
+    ),
+    titleMedium: GoogleFonts.roboto(
+      fontSize: 18,
+      fontWeight: FontWeight.w700,
+      color: kColorText,
+    ),
+    bodyLarge: GoogleFonts.roboto(
+      fontSize: 16,
+      height: 1.5,
+      color: kColorText,
+    ),
+    bodyMedium: GoogleFonts.roboto(
+      fontSize: 14,
+      height: 1.5,
+      color: kColorText,
+    ),
+    bodySmall: GoogleFonts.roboto(
+      fontSize: 12,
+      color: kColorText.withValues(alpha: 0.74),
+    ),
+    labelLarge: GoogleFonts.roboto(fontWeight: FontWeight.w700),
   );
 }
