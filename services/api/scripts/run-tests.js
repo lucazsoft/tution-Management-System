@@ -15,7 +15,7 @@ const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 
 // Suites that need a real database, so they cannot run on a bare CI runner.
-const REQUIRES_DATABASE = new Set(['test:tenant-admin:integration']);
+const REQUIRES_DATABASE = new Set(['test:tenant-admin:integration', 'test:failed-sign-in-limit:integration']);
 
 // Generous enough for the slowest suite (the browser-free ones run in seconds)
 // while still bounding a hang.
