@@ -6,7 +6,7 @@ import webpack from 'webpack';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export default {
+const webConfig = {
   entry: './src/main.tsx',
   output: {
     path: path.resolve(__dirname, 'dist'),
@@ -73,6 +73,8 @@ export default {
   },
   plugins: [
     new webpack.DefinePlugin({
+      __TMS_PUSH_USE_NATIVE_ROUTES__: false,
+      __TMS_FIREBASE_WEB_CONFIG__: JSON.stringify({apiKey:process.env.TMS_FIREBASE_API_KEY||'',appId:process.env.TMS_FIREBASE_APP_ID||'',projectId:process.env.TMS_FIREBASE_PROJECT_ID||'',messagingSenderId:process.env.TMS_FIREBASE_MESSAGING_SENDER_ID||'',authDomain:process.env.TMS_FIREBASE_AUTH_DOMAIN||'',vapidKey:process.env.TMS_FIREBASE_WEB_VAPID_KEY||''}),
       __TMS_API_BASE_URL__: JSON.stringify(process.env.TMS_API_BASE_URL || 'http://localhost:3001/api'),
     }),
     new HtmlWebpackPlugin({
@@ -85,3 +87,12 @@ export default {
     hot: true,
   },
 };
+
+webConfig.name = 'web';
+const worker = {...webConfig, name:'messaging-worker', entry:'./src/firebase-messaging-sw.ts',
+  output:{...webConfig.output,filename:'firebase-messaging-sw.js',clean:false},target:'webworker',
+  optimization:{splitChunks:false,runtimeChunk:false},plugins:[webConfig.plugins[0]],dependencies:['web'],devServer:undefined};
+const diagnostic = {...webConfig,name:'push-test',entry:'./src/push-test.ts',
+  output:{...webConfig.output,filename:'push-test.js',clean:false},
+  optimization:{splitChunks:false,runtimeChunk:false},plugins:[webConfig.plugins[0],new HtmlWebpackPlugin({filename:'push-test.html',template:'./push-test.html'})],dependencies:['web'],devServer:undefined};
+export default [webConfig,worker,diagnostic];
