@@ -1,0 +1,323 @@
+/* Login hero: Sanskardip Shikshalaya institution showcase.
+   Light by default. Clear sections: brand, message, stat cards, framed photo card. */
+
+.inst-showcase {
+  --inst-bg: #f3f6fb;
+  --inst-card: #ffffff;
+  --inst-card-border: rgba(11, 37, 69, 0.08);
+  --inst-card-shadow: 0 1px 2px rgba(11, 37, 69, 0.04), 0 8px 24px -16px rgba(11, 37, 69, 0.22);
+  --inst-heading: #0b2545;
+  --inst-accent: #d07f00;
+  --inst-body: #4a5b70;
+  --inst-muted: #6b7a8d;
+  --inst-icon-bg: rgba(21, 96, 189, 0.08);
+  --inst-icon: #1560bd;
+
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  background: var(--inst-bg);
+  color: var(--inst-heading);
+  border-right: 1px solid var(--inst-card-border);
+}
+
+[data-theme='dark'] .inst-showcase {
+  --inst-bg: #11151d;
+  --inst-card: #181d27;
+  --inst-card-border: rgba(148, 163, 184, 0.14);
+  --inst-card-shadow: none;
+  --inst-heading: #f3f6fb;
+  --inst-accent: #f6a623;
+  --inst-body: rgba(226, 232, 240, 0.78);
+  --inst-muted: rgba(226, 232, 240, 0.58);
+  --inst-icon-bg: rgba(127, 168, 255, 0.12);
+  --inst-icon: #7fa8ff;
+}
+
+.inst-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 40px 44px;
+}
+
+/* ── Section 1: brand ─────────────────────────────── */
+.inst-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.inst-emblem {
+  flex: none;
+  width: 50px;
+  height: 50px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid var(--inst-card-border);
+  box-shadow: var(--inst-card-shadow);
+}
+
+.inst-emblem img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.inst-brand-text {
+  min-width: 0;
+}
+
+.inst-brand-name {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.inst-brand-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 0.85rem;
+  color: var(--inst-muted);
+}
+
+.inst-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.inst-site-link {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: var(--inst-card);
+  border: 1px solid var(--inst-card-border);
+  color: var(--inst-body);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.inst-site-link .material-symbols-outlined {
+  font-size: 15px;
+}
+
+.inst-site-link:hover {
+  color: var(--inst-heading);
+  border-color: var(--inst-icon);
+}
+
+.inst-site-link:focus-visible {
+  outline: 2px solid var(--inst-icon);
+  outline-offset: 2px;
+}
+
+/* ── Section 2: message ───────────────────────────── */
+.inst-title {
+  margin-top: 40px;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 3.1vw, 2.6rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--inst-heading);
+}
+
+.inst-title-accent {
+  display: block;
+  color: var(--inst-accent);
+}
+
+.inst-lede {
+  max-width: 28rem;
+  margin-top: 12px;
+  font-size: 0.97rem;
+  line-height: 1.6;
+  color: var(--inst-body);
+}
+
+/* ── Section 3: stat cards ────────────────────────── */
+.inst-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 28px 0 0;
+}
+
+.inst-stat {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--inst-card);
+  border: 1px solid var(--inst-card-border);
+  box-shadow: var(--inst-card-shadow);
+}
+
+.inst-stat-icon {
+  order: 0;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 10px;
+  border-radius: 9px;
+  background: var(--inst-icon-bg);
+  color: var(--inst-icon);
+  font-size: 19px;
+}
+
+.inst-stat dd {
+  order: 1;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--inst-heading);
+}
+
+.inst-stat dt {
+  order: 2;
+  margin-top: 2px;
+  font-size: 0.8rem;
+  color: var(--inst-muted);
+}
+
+/* ── Section 4: photo card ────────────────────────── */
+.inst-photo {
+  position: relative;
+  flex: 1;
+  min-height: 220px;
+  margin: 16px 0 0;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid var(--inst-card-border);
+  box-shadow: var(--inst-card-shadow);
+  background: var(--inst-card);
+}
+
+.inst-photo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Frames the row of students; faces sit in the upper-middle of the card. */
+  object-position: 50% 88%;
+}
+
+.inst-photo-caption {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px 6px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #0b2545;
+  font-size: 0.78rem;
+  font-weight: 600;
+  box-shadow: 0 4px 12px -6px rgba(11, 37, 69, 0.4);
+}
+
+.inst-photo-caption .material-symbols-outlined {
+  font-size: 16px;
+  color: #1560bd;
+}
+
+.auth-split--showcase {
+  min-height: 720px;
+}
+
+/* Tablet: showcase stacks above the form */
+@media (max-width: 979px) {
+  .inst-showcase {
+    border-right: none;
+    border-bottom: 1px solid var(--inst-card-border);
+  }
+
+  .inst-content {
+    padding: 32px;
+  }
+
+  .inst-title {
+    margin-top: 28px;
+  }
+
+  .inst-photo {
+    flex: none;
+    height: 260px;
+  }
+}
+
+/* Phone: brand, headline, compact stats, photo */
+@media (max-width: 680px) {
+  .inst-content {
+    padding: 20px;
+  }
+
+  .inst-emblem {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+  }
+
+  .inst-emblem img {
+    width: 35px;
+    height: 35px;
+  }
+
+  .inst-brand-name {
+    font-size: 0.98rem;
+  }
+
+  .inst-site-link,
+  .inst-lede,
+  .inst-stat-icon {
+    display: none;
+  }
+
+  .inst-title {
+    margin-top: 18px;
+    font-size: 1.6rem;
+  }
+
+  .inst-stats {
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .inst-stat {
+    padding: 10px 12px;
+    border-radius: 12px;
+  }
+
+  .inst-stat dd {
+    font-size: 1.15rem;
+  }
+
+  .inst-stat dt {
+    font-size: 0.72rem;
+  }
+
+  .inst-photo {
+    height: 170px;
+    margin-top: 12px;
+    border-radius: 14px;
+  }
+}

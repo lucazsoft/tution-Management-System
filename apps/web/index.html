@@ -6,7 +6,8 @@
       (function () {
         try {
           var saved = localStorage.getItem('tms_theme');
-          var dark = saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          // Light is the primary theme; dark only when the user explicitly chose it.
+          var dark = saved === 'dark';
           document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
           document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
         } catch (_) {

@@ -4,24 +4,7 @@ import { useToast } from '../../components/ui/Toast';
 import { useAuth } from '../../context/AuthContext';
 import { AuthFlowError } from '../../features/auth/service';
 import { isValidEmailAddress } from '../../features/auth/utils';
-
-const FEATURE_BULLETS = [
-  {
-    icon: 'visibility',
-    title: 'Multi-branch visibility',
-    text: 'Track operations, staffing, and performance across every center from one secure workspace.',
-  },
-  {
-    icon: 'co_present',
-    title: 'Real-time attendance',
-    text: 'Monitor check-ins, class presence, and staff activity with live operational context.',
-  },
-  {
-    icon: 'payments',
-    title: 'Smart fee tracking',
-    text: 'Follow invoices, dues, and financial health with branch-aware reporting built in.',
-  },
-] as const;
+import { InstitutionShowcase } from './InstitutionShowcase';
 
 function validateLoginEmail(email: string): string {
   if (!email.trim()) {
@@ -33,30 +16,6 @@ function validateLoginEmail(email: string): string {
   }
 
   return '';
-}
-
-function SealMotif() {
-  return (
-    <div className="auth-seal" aria-hidden="true">
-      <svg viewBox="0 0 240 240" fill="none">
-        <defs>
-          <path id="seal-path" d="M120 28a92 92 0 1 1 0 184a92 92 0 0 1 0-184Z" />
-        </defs>
-        <circle cx="120" cy="120" r="102" stroke="rgba(255,255,255,0.28)" strokeWidth="2" />
-        <circle cx="120" cy="120" r="82" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" />
-        <text fill="rgba(255,255,255,0.88)" fontFamily="Roboto, sans-serif" fontSize="11" letterSpacing="2">
-          <textPath href="#seal-path" startOffset="3%">
-            SANSKARDIP SHIKSHALAYA • TUITION MANAGEMENT SYSTEM •
-          </textPath>
-        </text>
-        <circle cx="120" cy="120" r="46" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.18)" />
-        <path
-          d="M120 84l10 20 22 3-16 15 4 22-20-10-20 10 4-22-16-15 22-3 10-20Z"
-          fill="rgba(243,156,18,0.96)"
-        />
-      </svg>
-    </div>
-  );
 }
 
 export function LoginPage() {
@@ -116,39 +75,8 @@ export function LoginPage() {
 
   return (
     <div className="auth-page">
-      <div className="auth-split">
-        <section className="auth-hero">
-          <div className="auth-hero-content">
-            <div className="auth-wordmark">
-              <div className="auth-wordmark-mark">
-                <span className="material-symbols-outlined">school</span>
-              </div>
-              <div>
-                <div className="auth-wordmark-title">TMS</div>
-                <p className="auth-wordmark-subtitle">Institution operations, aligned.</p>
-              </div>
-            </div>
-
-            <h1 className="auth-hero-title">Welcome to TMS</h1>
-            <p className="auth-hero-description">
-              Manage branches, classrooms, finance, and day-to-day school operations from one trusted platform.
-            </p>
-
-            <ul className="auth-feature-list">
-              {FEATURE_BULLETS.map((feature) => (
-                <li key={feature.title} className="auth-feature-item">
-                  <span className="material-symbols-outlined auth-feature-icon">{feature.icon}</span>
-                  <div>
-                    <div className="auth-feature-title">{feature.title}</div>
-                    <p className="auth-feature-text">{feature.text}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-
-            <SealMotif />
-          </div>
-        </section>
+      <div className="auth-split auth-split--showcase">
+        <InstitutionShowcase />
 
         <section className="auth-form-panel">
           <div className="auth-form-inner">
