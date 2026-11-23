@@ -78,7 +78,7 @@ try {
   await toggle.waitFor();
   await toggle.click();
   const panel = page.locator('.tms-inbox-panel');
-  await panel.getByText('Current student alerts', { exact: true }).waitFor();
+  await panel.getByText('Student alerts', { exact: true }).waitFor();
   await page.locator('.student-notification-button').waitFor();
   assert.equal(await panel.locator('li').count(), 2, 'Equal raw IDs from different stores must remain separate');
   assert.equal(await toggle.locator('strong').textContent(), '2');
@@ -90,8 +90,9 @@ try {
   await page.waitForFunction(() => document.querySelector('.student-notification-button span:last-child')?.textContent === '0');
   // Retain a usable portal list if the independent account-event source fails.
   failEvents = true;
+  // Opening the panel reloads both sources.
+  if (await panel.count()) await page.keyboard.press('Escape');
   await toggle.click();
-  await panel.getByRole('button', { name: 'Refresh', exact: true }).click();
   await panel.getByRole('alert').filter({ hasText: 'Some notification sources' }).waitFor();
   assert.equal(await panel.locator('li').count(), 1);
   failEvents = false; read = false;

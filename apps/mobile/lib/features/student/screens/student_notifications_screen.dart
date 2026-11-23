@@ -26,17 +26,19 @@ class StudentNotificationsScreen extends ConsumerWidget {
           ? 'Notifications (${state.unreadCount})'
           : 'Notifications',
       actions: [
-        if (MediaQuery.sizeOf(context).width < 360)
-          IconButton(
-            tooltip: 'Mark all read',
-            onPressed: state.isEmpty ? null : () => viewModel.markAllRead(),
-            icon: const Icon(Icons.done_all_rounded),
-          )
-        else
-          TextButton(
-            onPressed: state.isEmpty ? null : () => viewModel.markAllRead(),
-            child: const Text('Mark all read'),
-          ),
+        // Only offered while something is unread.
+        if (state.unreadCount > 0)
+          if (MediaQuery.sizeOf(context).width < 360)
+            IconButton(
+              tooltip: 'Mark all read',
+              onPressed: () => viewModel.markAllRead(),
+              icon: const Icon(Icons.done_all_rounded),
+            )
+          else
+            TextButton(
+              onPressed: () => viewModel.markAllRead(),
+              child: const Text('Mark all read'),
+            ),
       ],
       body: Builder(
         builder: (context) {
@@ -133,7 +135,11 @@ class StudentNotificationsScreen extends ConsumerWidget {
                 child: Text(source == NotificationSource.account ? 'Account updates' : 'Current student alerts',
                   style: Theme.of(context).textTheme.titleSmall),
               ),
-              for (final notice in visible.where((notice) => notice.source == source)) ...[
+              for (final notice in [
+                // Unread first, then read, each newest-first.
+                ...visible.where((n) => n.source == source && !n.isRead),
+                ...visible.where((n) => n.source == source && n.isRead),
+              ]) ...[
               Card(
                 color: notice.isRead
                     ? StudentColors.background

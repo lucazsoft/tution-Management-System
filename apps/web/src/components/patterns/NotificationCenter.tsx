@@ -9,6 +9,21 @@ type Notice = { id: string; title: string; body: string; destination?: string; r
 type PortalNotice = { id: string; title: string; message: string; destination: string; unread: boolean; occurredAt?: string; time: string };
 type PortalInbox = { notifications: PortalNotice[]; selected?: { id: string; name: string } };
 type Inbox = { notifications: Notice[]; unreadCount: number; total: number };
+type PushState = 'unavailable' | 'blocked' | 'on' | 'off';
+
+/** How often the inbox re-checks for new updates while the tab is visible. */
+const LIVE_REFRESH_MS = 30_000;
+
+function browserPushState(account: string): PushState {
+  if (!browserPushConfigured() || !window.isSecureContext || !('Notification' in window)) return 'unavailable';
+  if (Notification.permission === 'denied') return 'blocked';
+  return Notification.permission === 'granted' && browserPushOptedIn(account) ? 'on' : 'off';
+}
+
+/** Unread first, each group keeping its newest-first order. */
+function unreadFirst(notices: Notice[]): Notice[] {
+  return [...notices.filter((notice) => !notice.readAt), ...notices.filter((notice) => notice.readAt)];
+}
 
 export function NotificationCenter() {
   const { user, isAuthenticated } = useAuth();
@@ -48,13 +63,13 @@ export function NotificationCenter() {
         ? `/parent/${encodeURIComponent(notice.destination)}?child=${encodeURIComponent(portalData.selected.id)}` : notice.destination,
       readAt: notice.unread ? null : 'read', createdAt: notice.occurredAt ?? '', displayTime: notice.time,
     })) : [];
-    if (!eventData && !portalData) { setError('Could not load updates. Try refresh.'); return; }
+    if (!eventData && !portalData) { setError('Could not load updates.'); return; }
     setData({ notifications: [...(eventData?.notifications ?? []).map((notice) => ({ ...notice, source: 'account' as const })), ...alerts],
       unreadCount: (eventData?.unreadCount ?? 0) + alerts.filter((notice) => !notice.readAt).length,
       total: (eventData?.total ?? 0) + alerts.length });
     setLoadedAccount(account);
     setError(events.status === 'rejected' || portal.status === 'rejected' || !validPortal
-      ? 'Some notification sources could not be loaded. Try refresh.' : '');
+      ? 'Some notification sources could not be loaded.' : '');
   }, [isAuthenticated, user?.id, scopeKey, portalKind, childId]);
   useEffect(() => {
     setData(null); setLoadedAccount(null); setOpen(false); setError(''); setPushStatus('');
@@ -70,11 +85,14 @@ export function NotificationCenter() {
     void load();
     const refresh = () => { void load(); };
     const visible = () => { if (document.visibilityState === 'visible') refresh(); };
+    // Keeps the badge current without browser push; skipped while hidden.
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible' && navigator.onLine) refresh(); }, LIVE_REFRESH_MS);
     window.addEventListener(PUSH_INBOX_EVENT, refresh);
     window.addEventListener(INBOX_READ_EVENT, refresh);
     window.addEventListener('online', refresh);
     document.addEventListener('visibilitychange', visible);
     return () => {
+      window.clearInterval(timer);
       window.removeEventListener(PUSH_INBOX_EVENT, refresh);
       window.removeEventListener(INBOX_READ_EVENT, refresh);
       window.removeEventListener('online', refresh);
@@ -90,7 +108,9 @@ export function NotificationCenter() {
     window.addEventListener('keydown', close);
     return () => window.removeEventListener('keydown', close);
   }, [open]);
-  if (!isAuthenticated) return null;
+  if (!isAuthenticated || !user) return null;
+  const pushState = browserPushState(user.id);
+  const unreadCount = data?.unreadCount ?? 0;
   const act = async (task: () => Promise<void>) => {
     const actionScope = identity.current;
     setBusy(true); setError('');
@@ -124,22 +144,23 @@ export function NotificationCenter() {
   };
   return <aside className="tms-inbox" aria-label="Account updates">
     <button type="button" className="tms-inbox-toggle" aria-expanded={open} aria-controls="account-inbox-panel" onClick={() => { setOpen(!open); if (!open) void load(); }}>
-      <span aria-hidden="true">◉</span> Inbox {data && data.unreadCount > 0 ? <strong>{data.unreadCount}</strong> : null}
+      <span aria-hidden="true">◉</span> Inbox {unreadCount > 0 ? <strong aria-label={`${unreadCount} unread`}>{unreadCount}</strong> : null}
     </button>
-    {open && <section id="account-inbox-panel" className="tms-inbox-panel" aria-label="Your account inbox">
-      <header><h2>Account updates</h2><button type="button" aria-label="Close inbox" onClick={() => setOpen(false)}>×</button></header>
-      <p className="tms-inbox-note">Event history and current portal alerts keep separate records and read states. Parent alerts follow the selected child.</p>
-      <div className="tms-inbox-actions">
-        <button type="button" disabled={busy} onClick={() => void load()}>Refresh</button>
-        <button type="button" disabled={busy || !data?.unreadCount} onClick={() => void act(markAll)}>Mark all read</button>
-      </div>
-      {error && <p role="alert">{error}</p>}
-      {!data && !error ? <p role="status">Loading updates…</p> : null}
-      {data?.notifications.length === 0 ? <p>No account updates yet.</p> : null}
+    {open && <section id="account-inbox-panel" className="tms-inbox-panel" aria-label="Your notifications">
+      <header>
+        <h2>Notifications</h2>
+        <div className="tms-inbox-header-actions">
+          {unreadCount > 0 && <button type="button" className="tms-inbox-markall" disabled={busy} onClick={() => void act(markAll)}>Mark all read</button>}
+          <button type="button" className="tms-inbox-close" aria-label="Close inbox" onClick={() => setOpen(false)}>×</button>
+        </div>
+      </header>
+      {error && <p role="alert">{error} <button type="button" className="tms-inbox-link" disabled={busy} onClick={() => void load()}>Retry</button></p>}
+      {!data && !error ? <p role="status" className="tms-inbox-empty">Loading notifications…</p> : null}
+      {data?.notifications.length === 0 ? <p className="tms-inbox-empty">You’re all caught up. New updates will appear here.</p> : null}
       {(['account', 'portal'] as const).map((source) => {
-        const notices = data?.notifications.filter((notice) => notice.source === source) ?? [];
+        const notices = unreadFirst(data?.notifications.filter((notice) => notice.source === source) ?? []);
         return notices.length ? <div key={source} data-notification-source={source}>
-          <h3>{source === 'account' ? 'Account event history' : portalKind === 'parent' ? 'Selected child alerts' : 'Current student alerts'}</h3>
+          <h3>{source === 'account' ? 'Updates' : portalKind === 'parent' ? 'About your child' : 'Student alerts'}</h3>
           <ul>{notices.map((notice) => <li key={`${notice.source}:${notice.id}`} className={notice.readAt ? '' : 'is-unread'}>
             <button type="button" disabled={busy} onClick={() => void act(() => markRead(notice))}>
               <strong>{notice.title}</strong><span>{notice.body}</span>
@@ -149,11 +170,15 @@ export function NotificationCenter() {
         </div> : null;
       })}
       {data && data.total > data.notifications.length ? <p>Showing the latest {data.notifications.length} of {data.total} updates.</p> : null}
-      <footer>
-        <button type="button" disabled={busy || !browserPushConfigured()} onClick={() => void act(async () => setPushStatus(await enableBrowserPush(user!.id, true)))}>Enable browser notifications</button>
-        <button type="button" disabled={busy} onClick={() => void act(async () => { await disableBrowserPush(true, user!.id); setPushStatus('Browser push disabled for this device.'); })}>Disable browser notifications</button>
-        <p role="status">{pushStatus || (browserPushConfigured() ? 'Browser alerts are optional. Permission is requested only when you enable them.' : 'Browser push needs deployment configuration. The inbox works without it.')}</p>
-      </footer>
+      {/* Only shown while there is something to do: once alerts are allowed it goes away. */}
+      {pushState === 'off' && <footer>
+        <button type="button" disabled={busy} onClick={() => void act(async () => {
+          const status = await enableBrowserPush(user.id, true);
+          setPushStatus(browserPushState(user.id) === 'on' ? '' : status);
+        })}>Turn on desktop alerts</button>
+        <p role="status">{pushStatus || 'Get alerted the moment something new arrives, even when this tab is in the background.'}</p>
+      </footer>}
+      {pushState === 'blocked' && <footer><p role="status">Desktop alerts are blocked for this site. Allow notifications in your browser’s site settings to receive them.</p></footer>}
     </section>}
   </aside>;
 }

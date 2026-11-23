@@ -154,11 +154,13 @@ class _ParentNotificationsScreenState
       appBar: AppBar(
         title: const Text('Notifications'),
         actions: [
-          IconButton(
-            tooltip: 'Mark all read',
-            onPressed: hasUnread ? () => _markAllRead(childNotices) : null,
-            icon: const Icon(Icons.done_all),
-          ),
+          // Only offered while something is unread.
+          if (hasUnread)
+            IconButton(
+              tooltip: 'Mark all read',
+              onPressed: () => _markAllRead(childNotices),
+              icon: const Icon(Icons.done_all),
+            ),
         ],
       ),
       bottomNavigationBar: const ParentNavigationBar(selectedIndex: 0),
@@ -210,8 +212,11 @@ class _ParentNotificationsScreenState
                   ),
                 )
               else
-                for (final item in updates)
-                  _NoticeCard(
+                ...groupedByReadState(
+                  updates,
+                  isUnread: (item) => item.unread,
+                  header: (label) => NotificationGroupHeader(label),
+                  build: (item) => _NoticeCard(
                     icon: notificationCategoryIcon(item.category,
                         unread: item.unread),
                     title: item.title,
@@ -220,6 +225,7 @@ class _ParentNotificationsScreenState
                     unread: item.unread,
                     onTap: () => _openUpdate(item),
                   ),
+                ),
               const SizedBox(height: TmsSpace.lg),
               Text(childName == null ? 'About your child' : 'About $childName',
                   style: theme.textTheme.titleMedium),
@@ -239,8 +245,11 @@ class _ParentNotificationsScreenState
                   ),
                 )
               else
-                for (final notice in childNotices)
-                  _NoticeCard(
+                ...groupedByReadState(
+                  childNotices,
+                  isUnread: (notice) => notice.unread,
+                  header: (label) => NotificationGroupHeader(label),
+                  build: (notice) => _NoticeCard(
                     icon: notice.urgent
                         ? Icons.priority_high
                         : Icons.child_care_outlined,
@@ -251,6 +260,7 @@ class _ParentNotificationsScreenState
                     urgent: notice.urgent,
                     onTap: () => _openChildNotice(notice),
                   ),
+                ),
             ],
           ),
         ),

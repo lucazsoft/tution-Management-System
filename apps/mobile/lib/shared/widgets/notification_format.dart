@@ -21,6 +21,49 @@ String formatNotificationTime(String raw, {DateTime? now}) {
   return '${local.day} ${_months[local.month - 1]} ${local.year}';
 }
 
+/// Arranges an inbox as "New" (unread) followed by "Earlier" (read), keeping
+/// each group's original newest-first order. A header is only emitted when
+/// both groups are present, so an all-read or all-unread list stays plain.
+List<Widget> groupedByReadState<T>(
+  List<T> items, {
+  required bool Function(T item) isUnread,
+  required Widget Function(T item) build,
+  required Widget Function(String label) header,
+}) {
+  final unread = items.where(isUnread).toList();
+  final read = items.where((item) => !isUnread(item)).toList();
+  final labelled = unread.isNotEmpty && read.isNotEmpty;
+  return [
+    if (labelled) header('New'),
+    ...unread.map(build),
+    if (labelled) header('Earlier'),
+    ...read.map(build),
+  ];
+}
+
+/// Small section label used between the "New" and "Earlier" groups.
+class NotificationGroupHeader extends StatelessWidget {
+  const NotificationGroupHeader(this.label, {super.key});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 6, left: 4),
+      child: Text(
+        label.toUpperCase(),
+        style: theme.textTheme.labelSmall?.copyWith(
+          letterSpacing: .8,
+          fontWeight: FontWeight.w700,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+}
+
 /// Icon for a persisted notification category (see the API's
 /// `Notification.category`).
 IconData notificationCategoryIcon(String category, {bool unread = false}) {

@@ -93,13 +93,13 @@ class _TeacherNotificationsScreenState
                 child: Text('School updates',
                     style: Theme.of(context).textTheme.headlineSmall),
               ),
-              TextButton.icon(
-                onPressed: items?.any((item) => item.unread) == true
-                    ? _markAllRead
-                    : null,
-                icon: const Icon(Icons.done_all),
-                label: const Text('Mark all read'),
-              ),
+              // Only offered while something is unread.
+              if (items?.any((item) => item.unread) == true)
+                TextButton.icon(
+                  onPressed: _markAllRead,
+                  icon: const Icon(Icons.done_all),
+                  label: const Text('Mark all read'),
+                ),
             ]),
             const Text(
                 'Calendar events, meeting requests, messages, class updates and institution announcements appear here.'),
@@ -128,15 +128,23 @@ class _TeacherNotificationsScreenState
                 ),
               )
             else
-              for (final item in items)
-                Card(
+              ...groupedByReadState(
+                items,
+                isUnread: (item) => item.unread,
+                header: (label) => NotificationGroupHeader(label),
+                build: (item) => Card(
                   color: item.unread
                       ? Theme.of(context).colorScheme.primaryContainer
                       : null,
                   child: ListTile(
                     leading: Icon(notificationCategoryIcon(item.category,
                         unread: item.unread)),
-                    title: Text(item.title),
+                    title: Text(
+                      item.title,
+                      style: item.unread
+                          ? const TextStyle(fontWeight: FontWeight.w600)
+                          : null,
+                    ),
                     subtitle: Text(
                         '${item.body}\n${formatNotificationTime(item.createdAt)}'),
                     isThreeLine: true,
@@ -149,6 +157,7 @@ class _TeacherNotificationsScreenState
                     },
                   ),
                 ),
+              ),
           ],
         ),
       ),
