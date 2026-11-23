@@ -158,6 +158,7 @@ model TenantRequest {
 
 // 1. Tenant / Institution
 model Tenant {
+  devicePushTokens DevicePushToken[]
   id                        String                   @id @default(uuid())
   name                      String
   panNumber                 String                   @unique // Nepal 9-digit PAN/VAT
@@ -244,6 +245,7 @@ model Role {
 
 // 4. Core User Accounts
 model User {
+  devicePushTokens DevicePushToken[]
   id                       String                   @id @default(uuid())
   tenantId                 String
   tenant                   Tenant                   @relation(fields: [tenantId], references: [id])
@@ -1240,4 +1242,24 @@ model VerificationCode {
   createdAt  DateTime  @default(now())
 
   @@index([identifier, purpose])
+}
+
+enum PushPlatform {
+  ANDROID
+  IOS
+  WEB
+}
+
+model DevicePushToken {
+  id        String       @id @default(uuid())
+  tenantId String
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token    String       @unique
+  platform PushPlatform
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([tenantId, userId])
 }
