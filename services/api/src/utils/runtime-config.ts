@@ -1,3 +1,4 @@
+import { createPushRecipientPolicy } from '../services/push-recipient-policy';
 type Environment = Record<string, string | undefined>;
 
 export interface RuntimeConfig {
@@ -59,6 +60,14 @@ export function validateRuntimeConfig(env: Environment = process.env): RuntimeCo
     }
     if (smsProvider === 'AAKASH' && !env.AAKASH_SMS_AUTH_TOKEN?.trim()) {
       throw new Error('AAKASH_SMS_AUTH_TOKEN is required when SMS_PROVIDER=AAKASH.');
+    }
+    const pushProvider = (env.PUSH_PROVIDER || 'DISABLED').toUpperCase();
+    if (!['FIREBASE', 'DISABLED'].includes(pushProvider)) throw new Error('Unsupported push provider.');
+    if (pushProvider === 'FIREBASE') {
+      createPushRecipientPolicy(env);
+      required(env, 'FIREBASE_PROJECT_ID');
+      required(env, 'FIREBASE_CLIENT_EMAIL');
+      if (!env.FIREBASE_PRIVATE_KEY_FILE?.trim()) required(env, 'FIREBASE_PRIVATE_KEY');
     }
     const webhookSecret = required(env, 'NEPALPAY_WEBHOOK_SECRET');
     if (webhookSecret.length < 32) {
