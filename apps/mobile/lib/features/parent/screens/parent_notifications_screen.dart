@@ -44,6 +44,7 @@ class _ParentNotificationsScreenState
     extends ConsumerState<ParentNotificationsScreen> {
   List<PersistentNotification>? _updates;
   String? _error;
+  String? _readError;
   StreamSubscription<PushMessage>? _pushes;
 
   @override
@@ -96,7 +97,7 @@ class _ParentNotificationsScreenState
         await ApiClient.instance.dio
             .post<dynamic>(StudentNotificationsRepositoryPaths.read(item.id));
       } catch (_) {
-        // Navigation still proceeds; read state syncs on the next refresh.
+        if (mounted) setState(() => _readError = 'Read status did not sync. Retry when connected.');
       }
       unawaited(_load());
     }
@@ -113,7 +114,9 @@ class _ParentNotificationsScreenState
               'ids': [notice.id]
             });
         unawaited(ref.read(parentPortalProvider.notifier).refresh());
-      } catch (_) {}
+      } catch (_) {
+        if (mounted) setState(() => _readError = 'Read status did not sync. Retry when connected.');
+      }
     }
     final route = parentNoticeRoute(notice.destination);
     if (mounted && route != null) context.push(route);
@@ -122,6 +125,7 @@ class _ParentNotificationsScreenState
   Future<void> _markAllRead(List<ParentNotification> childNotices) async {
     final unreadChild =
         childNotices.where((n) => n.unread).map((n) => n.id).toList();
+    var readFailed = false;
     await Future.wait<void>([
       ApiClient.instance.dio
           .post<dynamic>(StudentNotificationsRepositoryPaths.readAll)
@@ -129,8 +133,9 @@ class _ParentNotificationsScreenState
       if (unreadChild.isNotEmpty)
         ApiClient.instance.dio.post<dynamic>('/api/portal-notifications/read',
             data: {'ids': unreadChild}).then((_) {}),
-    ]).catchError((_) => <void>[]);
+    ]).catchError((_) { readFailed = true; return <void>[]; });
     await _refreshAll();
+    if (mounted) setState(() => _readError = readFailed ? 'Some read changes did not sync. Retry mark-all when connected.' : null);
   }
 
   @override
@@ -171,6 +176,12 @@ class _ParentNotificationsScreenState
                 style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: TmsSpace.sm),
+              if (_readError != null) Padding(
+                padding: const EdgeInsets.only(bottom: TmsSpace.sm), child: Text(_readError!),
+              ),
+              if (_error != null && updates != null) Padding(
+                padding: const EdgeInsets.only(bottom: TmsSpace.sm), child: Text(_error!),
+              ),
               if (updates == null && _error == null)
                 const Padding(
                   padding: EdgeInsets.all(TmsSpace.md),

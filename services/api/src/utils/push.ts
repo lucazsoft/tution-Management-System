@@ -1,3 +1,5 @@
+import { PushNotificationService } from '../services/push-notification';
+
 export interface PushDeliveryResult {
   success: boolean;
   notificationId?: string;
@@ -41,8 +43,14 @@ class WebhookPushSender implements PushSender {
   }
 }
 
-export function getPushSender(): PushSender {
+export function getPushSender(tenantId?: string): PushSender {
   const provider = (process.env.PUSH_PROVIDER || (process.env.NODE_ENV === 'production' ? 'DISABLED' : 'DEVELOPMENT')).toUpperCase();
+  if (provider === 'FIREBASE') {
+    // Never infer a tenant from a caller-supplied recipient or device token.
+    if (!tenantId) return new DisabledPushSender();
+    return { sendPush: (userId, title, body) =>
+      PushNotificationService.sendPush(tenantId, userId, title, body) };
+  }
   if (provider === 'WEBHOOK') {
     const endpoint = process.env.PUSH_WEBHOOK_URL?.trim() || '';
     const token = process.env.PUSH_WEBHOOK_TOKEN?.trim() || '';

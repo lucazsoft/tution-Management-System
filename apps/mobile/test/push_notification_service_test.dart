@@ -51,6 +51,17 @@ class _FakeApi implements PushTokenApi {
   Future<void> unregister(String token) async => unregistrations.add(token);
 }
 
+class _BlockingApi extends _FakeApi {
+  final started = Completer<void>();
+  final release = Completer<void>();
+  @override
+  Future<void> register({required String token, required String platform}) async {
+    await super.register(token: token, platform: platform);
+    if (!started.isCompleted) started.complete();
+    await release.future;
+  }
+}
+
 class _FakeLocalNotifications implements LocalNotificationPresenter {
   final shown = <PushMessage>[];
 
@@ -62,6 +73,13 @@ class _FakeLocalNotifications implements LocalNotificationPresenter {
 }
 
 void main() {
+  test('legacy destination accepts only safe app paths', () {
+    expect(PushNotificationService.parseDeepLink({'destination': '/parent/appointments'}), '/parent/appointments');
+    expect(PushNotificationService.parseDeepLink({'destination': 'https://example.invalid'}), isNull);
+    expect(PushNotificationService.parseDeepLink({'destination': '//example.invalid'}), isNull);
+    expect(PushNotificationService.parseDeepLink({'destination': 'finances'}), isNull);
+  });
+
   test('does not request or register a token before authentication', () async {
     final messaging = _FakeMessaging(token: 'device-token');
     addTearDown(messaging.close);
@@ -120,6 +138,57 @@ void main() {
     await service.unregisterForLogout();
 
     expect(api.unregistrations, ['device-token']);
+    await service.dispose();
+  });
+
+  test('logout fences token refresh, foreground display and late notification opens', () async {
+    final messaging = _FakeMessaging(token: 'device-token');
+    addTearDown(messaging.close);
+    final api = _FakeApi();
+    final local = _FakeLocalNotifications();
+    final opens = <String>[];
+    final service = PushNotificationService(messaging: messaging, api: api,
+      localNotifications: local, platform: 'android', onDeepLink: opens.add);
+    await service.initialize(authenticated: true);
+    await service.unregisterForLogout();
+    messaging.refreshes.add('late-token');
+    const message = PushMessage(title: 'Private event', data: {'deepLink': '/student/notifications'});
+    messaging.messages.add(message); messaging.opens.add(message);
+    await Future<void>.delayed(Duration.zero);
+    expect(api.registrations, hasLength(1));
+    expect(local.shown, isEmpty); expect(opens, isEmpty);
+    await service.dispose();
+  });
+
+  test('logout waits for an in-flight registration then revokes that token', () async {
+    final messaging = _FakeMessaging(token: 'late-device-token');
+    addTearDown(messaging.close);
+    final api = _BlockingApi();
+    final service = PushNotificationService(messaging: messaging, api: api,
+      localNotifications: _FakeLocalNotifications(), platform: 'android');
+    final initialization = service.initialize(authenticated: true);
+    await api.started.future;
+    final logout = service.unregisterForLogout();
+    api.release.complete();
+    await Future.wait([initialization, logout]);
+    expect(api.unregistrations, ['late-device-token']);
+    await service.dispose();
+  });
+
+  test('an account switch fences an old in-flight setup and rebinds the same token', () async {
+    final messaging = _FakeMessaging(token: 'same-device-token');
+    addTearDown(messaging.close);
+    final api = _BlockingApi();
+    final service = PushNotificationService(messaging: messaging, api: api,
+      localNotifications: _FakeLocalNotifications(), platform: 'android');
+    final oldSetup = service.initialize(authenticated: true);
+    await api.started.future;
+    service.resetRegistration();
+    final newSetup = service.initialize(authenticated: true);
+    api.release.complete();
+    await Future.wait([oldSetup, newSetup]);
+    expect(api.registrations, hasLength(2));
+    expect(api.registrations.map((registration) => registration.token), ['same-device-token', 'same-device-token']);
     await service.dispose();
   });
 

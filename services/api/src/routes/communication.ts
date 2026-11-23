@@ -177,6 +177,8 @@ router.post('/messages', authMiddleware, async (req: TenantRequest, res: Respons
     const message = await prisma.parentMessage.create({
       data: { tenantId: req.tenantId!, studentId: studentId || null, senderId: req.user!.id, receiverId, messageText: text },
     });
+    // Direct staff chats have no student thread (access is null) and land in the teacher inbox.
+    const messageDestination = access?.userIsParent ? '/teacher/messages' : access ? '/parent/messages' : '/teacher/messages';
     try {
       await prisma.notification.create({
         data: {
@@ -185,14 +187,17 @@ router.post('/messages', authMiddleware, async (req: TenantRequest, res: Respons
           category: 'MESSAGE',
           title: 'New school message',
           body: 'You received a new message about a linked student.',
-          destination: access?.userIsParent ? '/teacher/messages' : access ? '/parent/messages' : '/teacher/messages',
+          destination: messageDestination,
           entityId: message.id,
         },
       });
     } catch (notificationError) {
       console.warn('Message saved but inbox notification persistence failed.', notificationError);
     }
-    await PushNotificationService.sendPush(req.tenantId!, receiverId, 'New school message', studentId ? 'New message regarding a linked student.' : 'You received a new message from a teacher.');
+    await PushNotificationService.sendPush(req.tenantId!, receiverId, 'New school message', 'Open TMS to read your message.', {
+      deepLink: messageDestination,
+      entityId: message.id,
+    });
     return res.status(201).json({ message: 'Message sent.', record: message });
   } catch (error: any) {
     return res.status(500).json({ error: 'Failed to send message.', details: error.message });

@@ -62,7 +62,7 @@ async function notifyAppointmentUsers(
   const smsSender = getSmsSender();
   const results = await Promise.allSettled(users.flatMap((user) => [
     PushNotificationService.sendPush(tenantId, user.id, title, message, {
-      destination,
+      deepLink: destination,
       ...(entityId ? { entityId } : {}),
     }),
     ...(user.phone ? [smsSender.sendSms(user.phone, `${title}: ${message}`)] : []),

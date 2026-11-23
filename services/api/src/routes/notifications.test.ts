@@ -140,6 +140,9 @@ test('salary reminders target real tenant admins instead of a fixed identifier',
   const pushModule = require('../services/push-notification');
   const originalSendPush = pushModule.PushNotificationService.sendPush;
   const recipients: string[] = [];
+  const persisted: any[] = [];
+  const originalCreate = db.notification.create;
+  db.notification.create = async ({ data }: any) => { persisted.push(data); return data; };
   pushModule.PushNotificationService.sendPush = async (
     tenantId: string,
     userId: string,
@@ -176,8 +179,11 @@ test('salary reminders target real tenant admins instead of a fixed identifier',
       select: { id: true },
     });
     assert.deepEqual(recipients, ['admin-a', 'admin-b']);
+    assert.deepEqual(persisted.map(item => item.userId), recipients);
+    assert(persisted.every(item => item.tenantId === 'tenant-a' && item.destination === '/tenant/payroll'));
   } finally {
     db.user.findMany = originalFindMany;
+    db.notification.create = originalCreate;
     pushModule.PushNotificationService.sendPush = originalSendPush;
   }
 });

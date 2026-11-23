@@ -70,6 +70,7 @@ StudentIdCalendarNotificationsRepository stubPersistentRepository(
   List<RecordedCall> calls, {
   Map<String, dynamic>? records,
   bool failMarkRead = false,
+  List<Map<String, dynamic>> portalNotices = const [],
 }) {
   final dio = ApiClient.buildDio(
     baseUrl: 'https://test.invalid',
@@ -80,7 +81,7 @@ StudentIdCalendarNotificationsRepository stubPersistentRepository(
             handler.resolve(Response<dynamic>(
               requestOptions: options,
               statusCode: 200,
-              data: emptyPortal(),
+              data: {...emptyPortal(), 'notifications': portalNotices},
             ));
             return;
           }
@@ -97,7 +98,7 @@ StudentIdCalendarNotificationsRepository stubPersistentRepository(
             ));
             return;
           }
-          if (options.path.startsWith('/api/notifications/')) {
+          if (options.path.startsWith('/api/notifications/') || options.path == '/api/portal-notifications/read') {
             calls.add(RecordedCall(options.method, options.path));
             if (failMarkRead) {
               handler.reject(DioException(
@@ -176,6 +177,21 @@ void main() {
     });
   });
 
+  test('student inbox preserves both sources and persists portal read to its original endpoint', () async {
+    final calls = <RecordedCall>[];
+    final vm = StudentNotificationsViewModel(repository: stubPersistentRepository(calls,
+      portalNotices: [{'id': 'notif-1', 'title': 'Fee due', 'message': 'A portal alert',
+        'time': '2026-11-22', 'destination': '/student/fees', 'unread': true}],
+    ));
+    await pumpSettled();
+    expect(vm.state.notices.map((notice) => notice.source).toSet(),
+      {NotificationSource.account, NotificationSource.portal});
+    await vm.markRead('notif-1', source: NotificationSource.portal);
+    expect(calls.any((call) => call.path == '/api/portal-notifications/read'), isTrue);
+    expect(vm.state.notices.where((notice) => notice.source == NotificationSource.account).first.isRead, isFalse);
+    vm.dispose();
+  });
+
   group('notifications viewmodel server persistence', () {
     test('markRead persists server-side and keeps the badge cleared', () async {
       final calls = <RecordedCall>[];
@@ -204,7 +220,7 @@ void main() {
       await vm.markRead('notif-1');
       await pumpSettled();
       expect(vm.state.unreadCount, 0);
-      expect(vm.state.error, isNull);
+      expect(vm.state.error, isNotNull);
       vm.dispose();
     });
 
