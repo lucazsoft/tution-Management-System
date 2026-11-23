@@ -41,6 +41,7 @@ import { toNodeHandler } from 'better-auth/node';
 import { auth } from './utils/auth';
 import { validateRuntimeConfig } from './utils/runtime-config';
 import { monitorCredentialSignIn } from './middleware/auth-security-monitor';
+import { limitFailedCredentialSignIn } from './middleware/failed-sign-in-limiter';
 
 const app = express();
 // Coolify fronts the API with exactly one Traefik hop. Trusting that single hop
@@ -133,7 +134,7 @@ app.use('/api/auth/two-factor/send-otp', (_req, res, next) => authenticationSmsC
   ? next()
   : res.status(503).json({ error: 'SMS authentication is temporarily unavailable.' }));
 app.use('/api/auth/two-factor/enable', authMiddleware, requireVerifiedMobileForSetup);
-app.all('/api/auth/*', monitorCredentialSignIn, toNodeHandler(auth));
+app.all('/api/auth/*', monitorCredentialSignIn, limitFailedCredentialSignIn, toNodeHandler(auth));
 
 app.use('/api/finances/manual-payment', express.json({ limit: '2mb' }));
 app.use('/api/finances/branches', express.json({ limit: '2mb' }));
