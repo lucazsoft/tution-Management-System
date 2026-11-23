@@ -34,6 +34,8 @@ import { auth } from './utils/auth';
 import { validateRuntimeConfig } from './utils/runtime-config';
 import { monitorCredentialSignIn } from './middleware/auth-security-monitor';
 
+import notificationsRouter from './routes/notifications';
+
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 const runtimeConfig = validateRuntimeConfig();
@@ -134,6 +136,7 @@ app.use('/api/certificates', certificatesRouter);
 app.use('/api/finances', financesRouter);
 app.use('/api/leaves', leavesRouter);
 app.use('/api/communication', communicationRouter);
+app.use('/api/notifications', notificationsRouter);
 app.use('/api/appointments', appointmentsRouter);
 app.use('/api/resources', resourcesRouter);
 app.use('/api/cron', cronRouter);
