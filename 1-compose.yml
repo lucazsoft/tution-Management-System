@@ -1,0 +1,113 @@
+name: tms
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tms}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    expose:
+      - "5432"
+    volumes:
+      - tms_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-tms}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  migrate:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/${POSTGRES_DB:-tms}?schema=public
+    command: ["npx", "prisma", "migrate", "deploy"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/${POSTGRES_DB:-tms}?schema=public
+      PORT: 3001
+      NODE_ENV: ${NODE_ENV:-production}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL must be set}
+      WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN must be set}
+      PLATFORM_ADMIN_ENABLED: ${PLATFORM_ADMIN_ENABLED:-false}
+      PLATFORM_ADMIN_PRODUCTION_ACK: ${PLATFORM_ADMIN_PRODUCTION_ACK:-}
+      PUSH_PROVIDER: ${PUSH_PROVIDER:-DISABLED}
+      PUSH_DELIVERY_MODE: ${PUSH_DELIVERY_MODE:-DISABLED}
+      PUSH_ALLOWED_RECIPIENTS: ${PUSH_ALLOWED_RECIPIENTS:-[]}
+      PUSH_TEST_TITLE: ${PUSH_TEST_TITLE:-}
+      PUSH_TEST_BODY: ${PUSH_TEST_BODY:-}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL:-}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY:-}
+      SMS_PROVIDER: ${SMS_PROVIDER:-MOCK}
+      AAKASH_SMS_AUTH_TOKEN: ${AAKASH_SMS_AUTH_TOKEN:-}
+      NEPALPAY_WEBHOOK_SECRET: ${NEPALPAY_WEBHOOK_SECRET:?NEPALPAY_WEBHOOK_SECRET must be set}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      SEED_ADMIN_2FA: ${SEED_ADMIN_2FA:-false}
+      CONNECTIPS_ENABLED: ${CONNECTIPS_ENABLED:-false}
+      CONNECTIPS_ENVIRONMENT: ${CONNECTIPS_ENVIRONMENT:-STAGING}
+      CONNECTIPS_PUBLIC_BASE_URL: ${CONNECTIPS_PUBLIC_BASE_URL:-}
+      PAYMENT_FRONTEND_BASE_URL: ${PAYMENT_FRONTEND_BASE_URL:-}
+      CONNECTIPS_MERCHANT_ID: ${CONNECTIPS_MERCHANT_ID:-}
+      CONNECTIPS_APP_ID: ${CONNECTIPS_APP_ID:-}
+      CONNECTIPS_APP_NAME: ${CONNECTIPS_APP_NAME:-}
+      CONNECTIPS_PFX_BASE64: ${CONNECTIPS_PFX_BASE64:-}
+      CONNECTIPS_PFX_PASSWORD: ${CONNECTIPS_PFX_PASSWORD:-}
+      CONNECTIPS_VALIDATE_PASSWORD: ${CONNECTIPS_VALIDATE_PASSWORD:-}
+      CONNECTIPS_GATEWAY_URL: ${CONNECTIPS_GATEWAY_URL:-https://uat.connectips.com/connectipswebgw/loginpage}
+      CONNECTIPS_VALIDATE_URL: ${CONNECTIPS_VALIDATE_URL:-https://uat.connectips.com/connectipswebws/api/creditor/validatetxn}
+    expose:
+      - "3001"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3001/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        TMS_FIREBASE_API_KEY: ${TMS_FIREBASE_API_KEY:-}
+        TMS_FIREBASE_APP_ID: ${TMS_FIREBASE_APP_ID:-}
+        TMS_FIREBASE_PROJECT_ID: ${TMS_FIREBASE_PROJECT_ID:-}
+        TMS_FIREBASE_MESSAGING_SENDER_ID: ${TMS_FIREBASE_MESSAGING_SENDER_ID:-}
+        TMS_FIREBASE_AUTH_DOMAIN: ${TMS_FIREBASE_AUTH_DOMAIN:-}
+        TMS_FIREBASE_WEB_VAPID_KEY: ${TMS_FIREBASE_WEB_VAPID_KEY:-}
+        TMS_API_BASE_URL: ${TMS_API_BASE_URL:?TMS_API_BASE_URL must be set}
+    restart: unless-stopped
+    expose:
+      - "80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  tms_postgres_data:
