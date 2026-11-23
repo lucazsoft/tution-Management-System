@@ -109,7 +109,8 @@ export function PeopleDirectory() {
   const [credentials, setCredentials] = useState<CreatedCredentials[]>([]);
   const [copied, setCopied] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState('');
-  const PREVIEW_LIMIT = 5;
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const PREVIEW_LIMIT = 6;
 
   const loadData = async () => {
     setIsLoading(true);
@@ -356,44 +357,56 @@ export function PeopleDirectory() {
           <p>{isLoading ? 'Loading directory…' : directoryPeople.length === 0 ? 'No staff or parents yet. Add your first person.' : 'No matches for your filters.'}</p>
         </div>
       ) : (
-        <div className="pd-dashboard">
+        <div className="pd-sections">
           {grouped.map(({ group, members }) => {
-            const preview = members.slice(0, PREVIEW_LIMIT);
-            const overflow = members.length - PREVIEW_LIMIT;
-            const isClickable = !!group.link;
+            const isExpanded = !!expandedGroups[group.label];
+            const visible = isExpanded ? members : members.slice(0, PREVIEW_LIMIT);
+            const hidden = members.length - visible.length;
             return (
-              <div
-                key={group.label}
-                className={`pd-card ${isClickable ? 'pd-card--clickable' : ''}`}
-                onClick={() => { if (isClickable) navigate(group.link!); }}
-                role={isClickable ? "button" : undefined}
-                tabIndex={isClickable ? 0 : undefined}
-                onKeyDown={(e) => { if (isClickable && e.key === 'Enter') navigate(group.link!); }}
-              >
-                <div className="pd-card-head">
-                  <span className="material-symbols-outlined">{group.icon}</span>
-                  <span className="pd-card-title">{group.label}</span>
-                  <span className="pd-card-count">{members.length}</span>
+              <section key={group.label} className="pd-section">
+                <div className="pd-section-head">
+                  <span className="material-symbols-outlined pd-section-icon">{group.icon}</span>
+                  <h2 className="pd-section-title">{group.label}</h2>
+                  <span className="pd-section-count">{members.length}</span>
+                  {group.link ? (
+                    <button type="button" className="pd-section-action" onClick={() => navigate(group.link!)}>
+                      Manage {group.label.toLowerCase()}
+                      <span className="material-symbols-outlined">arrow_forward</span>
+                    </button>
+                  ) : members.length > PREVIEW_LIMIT ? (
+                    <button
+                      type="button"
+                      className="pd-section-action"
+                      aria-expanded={isExpanded}
+                      onClick={() => setExpandedGroups((current) => ({ ...current, [group.label]: !isExpanded }))}
+                    >
+                      {isExpanded ? 'Show less' : `Show all ${members.length}`}
+                      <span className="material-symbols-outlined">{isExpanded ? 'expand_less' : 'expand_more'}</span>
+                    </button>
+                  ) : null}
                 </div>
-                <div className="pd-card-body">
-                  {preview.map((person) => (
-                    <button type="button" key={person.id} className="pd-person pd-person--preview" aria-label={`Open ${person.name}'s profile`} onClick={(e) => { e.stopPropagation(); setSelectedUserId(person.id); }}>
+                <div className="pd-grid">
+                  {visible.map((person) => (
+                    <button type="button" key={person.id} className="pd-person" aria-label={`Open ${person.name}'s profile — ${person.status.toLowerCase()}`} onClick={() => setSelectedUserId(person.id)}>
                       <StudentAvatar name={person.name} photoUrl={person.photoUrl} size="xs" className="pd-av" />
                       <div className="pd-info">
-                        <span className="pd-name">{person.name}</span>
+                        <span className="pd-name-row">
+                          <span
+                            className={`pd-dot${person.status === 'ACTIVE' ? ' pd-dot--active' : ''}`}
+                            title={person.status}
+                            aria-hidden="true"
+                          />
+                          <span className="pd-name">{person.name}</span>
+                        </span>
                         <span className="pd-meta">{person.email}</span>
                       </div>
-                      <StatusBadge variant={person.status === 'ACTIVE' ? 'success' : 'warning'}>{person.status}</StatusBadge>
                     </button>
                   ))}
                 </div>
-                {isClickable && (
-                  <div className="pd-card-footer">
-                    <span>{overflow > 0 ? `View all ${members.length} ${group.label.toLowerCase()}` : `Open ${group.label.toLowerCase()}`}</span>
-                    <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>arrow_forward</span>
-                  </div>
-                )}
-              </div>
+                {group.link && hidden > 0 ? (
+                  <p className="pd-section-note">{hidden} more not shown</p>
+                ) : null}
+              </section>
             );
           })}
         </div>

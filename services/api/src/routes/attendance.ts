@@ -4,13 +4,86 @@ import { calculateDistanceInMeters } from '../utils/geo';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware, hasPermission } from '../middleware/auth';
 import { parseStrictKeys, readFiniteNumber, readTrimmedString } from '../utils/request-validation';
-import { nepalCalendarDate } from '../services/timetable-service';
+import { nepalCalendarDate, nepalDayBounds } from '../services/timetable-service';
 import { recordNotification } from '../services/notification-records';
 
 const router = Router();
 
 // Constant GPS accuracy threshold in meters
 const MAX_GPS_ACCURACY_METERS = 20.0;
+
+/** Stamp types that leave the teacher counted as on-site. */
+const PRESENT_STAMP_TYPES = ['IN', 'RE_IN'];
+
+/** Raised inside the stamp transaction when the requested transition is invalid. */
+class StampSequenceError extends Error {}
+
+/**
+ * Derives the stamp type for a mark request from the teacher's last stamp of
+ * the same Nepal day, or rejects a transition that cannot follow it.
+ *
+ * The sequence is scoped to the teacher rather than the branch: a teacher
+ * cannot be on-site at two branches at once, so a second IN is a duplicate even
+ * when it names a different branch. Reopening a day after an OUT yields RE_IN,
+ * which the workspace and branch-admin readers already count as present.
+ */
+function resolveStampType(
+  intent: 'IN' | 'OUT',
+  lastStampToday: { stampType: string } | null,
+): { success: true; stampType: string } | { success: false; error: string } {
+  const present = lastStampToday !== null && PRESENT_STAMP_TYPES.includes(lastStampToday.stampType);
+
+  if (intent === 'IN') {
+    if (present) {
+      return { success: false, error: 'You are already marked IN. Mark OUT before marking IN again.' };
+    }
+    return { success: true, stampType: lastStampToday === null ? 'IN' : 'RE_IN' };
+  }
+
+  if (lastStampToday === null) {
+    return { success: false, error: 'You have no IN stamp today, so there is nothing to mark OUT from.' };
+  }
+  if (!present) {
+    return { success: false, error: 'You are already marked OUT. Mark IN before marking OUT again.' };
+  }
+  return { success: true, stampType: 'OUT' };
+}
+
+/**
+ * Reads the day's last stamp and writes the next one atomically.
+ *
+ * The read must sit inside the transaction: there is no rate limiter on these
+ * routes, so two concurrent requests would otherwise both observe "no stamp
+ * today" and both insert - the duplicate this guard exists to prevent.
+ */
+async function createSequencedStamp(input: {
+  intent: 'IN' | 'OUT';
+  teacherId: string;
+  branchId: string;
+  latitude: number;
+  longitude: number;
+  gpsAccuracy: number;
+}) {
+  const { start, end } = nepalDayBounds();
+  return prisma.$transaction(async (tx) => {
+    const lastStampToday = await tx.teacherAttendance.findFirst({
+      where: { userId: input.teacherId, timestamp: { gte: start, lte: end } },
+      orderBy: { timestamp: 'desc' },
+    });
+    const resolved = resolveStampType(input.intent, lastStampToday);
+    if (!resolved.success) throw new StampSequenceError(resolved.error);
+    return tx.teacherAttendance.create({
+      data: {
+        userId: input.teacherId,
+        branchId: input.branchId,
+        stampType: resolved.stampType,
+        latitude: input.latitude,
+        longitude: input.longitude,
+        gpsAccuracy: input.gpsAccuracy,
+      },
+    });
+  });
+}
 
 function findAssignedTeacherBranch(branchId: string, teacherId: string, tenantId: string) {
   return prisma.branch.findFirst({
@@ -146,17 +219,15 @@ router.post(
         });
       }
 
-      // 5. Create Attendance Stamp
-      const stamp = await prisma.teacherAttendance.create({
-          data: {
-            userId: teacherId,
-            branchId,
-            stampType: 'IN',
-            latitude: Number(latitude),
-            longitude: Number(longitude),
-            gpsAccuracy: Number(gpsAccuracy),
-          },
-        });
+      // 5. Create Attendance Stamp, guarded against an out-of-order transition
+      const stamp = await createSequencedStamp({
+        intent: 'IN',
+        teacherId,
+        branchId,
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+        gpsAccuracy: Number(gpsAccuracy),
+      });
 
       // Persistent inbox record for the teacher. Fail-open: a notification
       // store failure must never roll back the saved IN stamp.
@@ -166,13 +237,15 @@ router.post(
         branchId,
         category: 'ATTENDANCE',
         title: 'Attendance marked IN',
-        body: `Marked IN at ${branch.name}.`,
+        body: `Marked ${stamp.stampType === 'RE_IN' ? 'back IN' : 'IN'} at ${branch.name}.`,
         destination: 'attendance',
         entityId: stamp.id,
       });
 
       return res.status(200).json({
-        message: 'Successfully marked IN. Session attendance validated server-side.',
+        message: stamp.stampType === 'RE_IN'
+          ? 'Successfully marked back IN. Session attendance validated server-side.'
+          : 'Successfully marked IN. Session attendance validated server-side.',
         stamp,
         geofenceMeta: {
           distanceFromBranchCenterMeters: Math.round(distance),
@@ -180,6 +253,9 @@ router.post(
         },
       });
     } catch (error: any) {
+      if (error instanceof StampSequenceError) {
+        return res.status(409).json({ error: error.message });
+      }
       return res.status(500).json({ error: 'Attendance registration failed.', details: error.message });
     }
   }
@@ -223,16 +299,14 @@ router.post(
         });
       }
 
-      const stamp = await prisma.teacherAttendance.create({
-          data: {
-            userId: teacherId,
-            branchId,
-            stampType: 'OUT',
-            latitude: Number(latitude),
-            longitude: Number(longitude),
-            gpsAccuracy: Number(gpsAccuracy),
-          },
-        });
+      const stamp = await createSequencedStamp({
+        intent: 'OUT',
+        teacherId,
+        branchId,
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+        gpsAccuracy: Number(gpsAccuracy),
+      });
 
       // Persistent inbox record for the teacher. Fail-open: a notification
       // store failure must never roll back the saved OUT stamp.
@@ -252,6 +326,9 @@ router.post(
         stamp,
       });
     } catch (error: any) {
+      if (error instanceof StampSequenceError) {
+        return res.status(409).json({ error: error.message });
+      }
       return res.status(500).json({ error: 'Attendance registration failed.', details: error.message });
     }
   }

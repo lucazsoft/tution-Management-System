@@ -4,8 +4,20 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware, hasPermission } from '../middleware/auth';
+import { readGeofenceNumber, DEFAULT_RADIUS_METERS } from '../utils/geo';
 
 const router = Router();
+
+/**
+ * Stand-in geofence centre for branches provisioned without coordinates.
+ *
+ * Deliberately a real, inhabited location rather than 0,0: both are wrong, but
+ * a branch at 0,0 is ~5,000 km offshore, so every attendance attempt fails with
+ * a geofence violation that reads like a GPS fault instead of missing setup.
+ * Either way the tenant admin must set the real centre before attendance works.
+ */
+const PLACEHOLDER_BRANCH_LATITUDE = 27.6915;
+const PLACEHOLDER_BRANCH_LONGITUDE = 85.3422;
 
 // Tenant provisioning is a development operator tool only. Production runs
 // one institution and must not expose platform/white-label administration.
@@ -80,9 +92,9 @@ router.post(
             tenantId: tenant.id,
             name: String(branchName).trim(),
             address: String(branchAddress).trim(),
-            latitude: parsedLatitude ?? 0,
-            longitude: parsedLongitude ?? 0,
-            radiusMeters: 100,
+            latitude: parsedLatitude ?? PLACEHOLDER_BRANCH_LATITUDE,
+            longitude: parsedLongitude ?? PLACEHOLDER_BRANCH_LONGITUDE,
+            radiusMeters: DEFAULT_RADIUS_METERS,
           },
         });
         const user = await tx.user.create({
@@ -186,6 +198,25 @@ router.post(
     const { id } = req.params;
     const { defaultBranchName, branchAddress, latitude, longitude } = req.body;
 
+    // Validated up front so a bad coordinate fails the request instead of
+    // being coerced. `Number('')` is 0, so the previous isFinite guard placed
+    // such branches at 0,0 where no teacher can ever satisfy the geofence.
+    let approvalLatitude: number | null = null;
+    let approvalLongitude: number | null = null;
+    if (latitude !== undefined && latitude !== null && latitude !== '') {
+      const parsed = readGeofenceNumber(latitude, 'latitude');
+      if (!parsed.success) return res.status(400).json({ error: parsed.error });
+      approvalLatitude = parsed.data;
+    }
+    if (longitude !== undefined && longitude !== null && longitude !== '') {
+      const parsed = readGeofenceNumber(longitude, 'longitude');
+      if (!parsed.success) return res.status(400).json({ error: parsed.error });
+      approvalLongitude = parsed.data;
+    }
+    if ((approvalLatitude === null) !== (approvalLongitude === null)) {
+      return res.status(400).json({ error: 'Provide both latitude and longitude, or neither.' });
+    }
+
     try {
       const onboardingRequest = await prisma.tenantRequest.findUnique({
         where: { id },
@@ -234,9 +265,14 @@ router.post(
             tenantId: tenant.id,
             name: defaultBranchName || 'Main Center',
             address: branchAddress || 'Address pending — update in Branch settings',
-            latitude: Number.isFinite(Number(latitude)) ? Number(latitude) : 27.6915,
-            longitude: Number.isFinite(Number(longitude)) ? Number(longitude) : 85.3422,
-            radiusMeters: 100,
+            // KNOWN GAP: the approval UI sends no coordinates, so approved
+            // tenants land on this placeholder regardless of where they are,
+            // and their teachers cannot mark attendance until an admin edits
+            // the branch. Tracked for the nullable-geofence change; audit with
+            // `npm run audit:geofences`.
+            latitude: approvalLatitude ?? PLACEHOLDER_BRANCH_LATITUDE,
+            longitude: approvalLongitude ?? PLACEHOLDER_BRANCH_LONGITUDE,
+            radiusMeters: DEFAULT_RADIUS_METERS,
           },
         });
         const user = await tx.user.create({

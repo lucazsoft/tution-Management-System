@@ -31,6 +31,8 @@ async function call(path: '/in' | '/out', body: Record<string, unknown>, options
     pending: prisma.teacherSession.findFirst,
     branch: prisma.branch.findFirst,
     create: prisma.teacherAttendance.create,
+    lastStamp: prisma.teacherAttendance.findFirst,
+    transaction: prisma.$transaction,
     notification: (prisma as any).notification?.create,
   };
   const created: any[] = [];
@@ -40,6 +42,11 @@ async function call(path: '/in' | '/out', body: Record<string, unknown>, options
     branchQueried = true;
     return { id: 'b1', name: 'Main', tenantId: 't1', latitude: BRANCH.lat, longitude: BRANCH.lng, radiusMeters: options.radius ?? 100 };
   }) as any;
+  // Stamps are read and written inside one interactive transaction; the
+  // stubbed prisma stands in for the transaction client. OUT presupposes an
+  // open IN, and IN starts from a clean day.
+  prisma.$transaction = (async (fn: any) => fn(prisma)) as any;
+  prisma.teacherAttendance.findFirst = (async () => (path === '/out' ? { stampType: 'IN' } : null)) as any;
   prisma.teacherAttendance.create = (async (args: any) => { created.push(args.data); return { id: 'stamp-1', ...args.data }; }) as any;
   if ((prisma as any).notification) (prisma as any).notification.create = async () => ({ id: 'n1' });
 
@@ -55,6 +62,8 @@ async function call(path: '/in' | '/out', body: Record<string, unknown>, options
     prisma.teacherSession.findFirst = original.pending;
     prisma.branch.findFirst = original.branch;
     prisma.teacherAttendance.create = original.create;
+    prisma.teacherAttendance.findFirst = original.lastStamp;
+    prisma.$transaction = original.transaction;
     if ((prisma as any).notification) (prisma as any).notification.create = original.notification;
   }
   return { status, body: responseBody, created, branchQueried };
