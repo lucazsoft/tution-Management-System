@@ -1,4 +1,5 @@
-# Private no-send validation only. Coolify-managed. Temporary browser exits in240seconds.
+# Private no-send validation only. Managed by Coolify.
+# No public routes, published ports, production data, or outbound runtime network.
 name: tms-notification-private-test
 services:
   db:
@@ -157,44 +158,6 @@ services:
         max-size: 5m
         max-file: '2'
     restart: unless-stopped
-  browser_check:
-    build:
-      context: .
-      dockerfile_inline: 'FROM mcr.microsoft.com/playwright:v1.65.1-noble@sha256:1507cbfc550a63a6b7396791ca4f00df17beb56342d2447b3f106c306f525579
-
-        WORKDIR /runner
-
-        RUN npm install --ignore-scripts --no-audit --no-fund playwright-core@1.65.1
-
-        USER pwuser
-
-        '
-    init: true
-    command:
-    - node
-    - -e
-    - setTimeout(()=>process.exit(0),240000)
-    depends_on:
-      web:
-        condition: service_started
-      api:
-        condition: service_healthy
-    networks:
-    - notification_private
-    cpus: '0.5'
-    mem_limit: 1g
-    pids_limit: 256
-    shm_size: 128m
-    cap_drop:
-    - ALL
-    security_opt:
-    - no-new-privileges:true
-    logging:
-      driver: json-file
-      options:
-        max-size: 2m
-        max-file: '1'
-    restart: 'no'
 volumes:
   tms_postgres_data: null
 networks:
