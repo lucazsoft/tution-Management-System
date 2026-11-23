@@ -98,4 +98,42 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('removes only the selected saved account from this device', () async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final vault = DeviceAccountVault();
+    const first = AuthUser(
+      id: 'first-user',
+      email: 'first@example.com',
+      firstName: 'First',
+      lastName: 'User',
+      role: 'PARENT',
+    );
+    const second = AuthUser(
+      id: 'second-user',
+      email: 'second@example.com',
+      firstName: 'Second',
+      lastName: 'User',
+      role: 'STUDENT',
+    );
+
+    await vault.saveAccount(
+      user: first,
+      password: 'first-password',
+      mpin: '1234',
+    );
+    await vault.saveAccount(
+      user: second,
+      password: 'second-password',
+      mpin: '5678',
+    );
+
+    await vault.remove(first.id);
+
+    final remaining = await vault.accounts();
+    expect(remaining, hasLength(1));
+    expect(remaining.single.userId, second.id);
+    expect((await vault.verifyMpin(first.id, '1234')).allowed, isFalse);
+    expect((await vault.verifyMpin(second.id, '5678')).allowed, isTrue);
+  });
 }

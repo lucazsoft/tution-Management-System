@@ -39,6 +39,8 @@ class TeacherPortalRepository {
   static const String geoOutPath = '/api/attendance/out';
   static String sessionUpdatePath(String sessionId) =>
       '/api/teacher/session/$sessionId/update';
+  static String sessionTakenPath(String sessionId) =>
+      '/api/teacher/session/$sessionId/taken';
   static String classAttendancePath(String classId) =>
       '/api/teacher/class/$classId/attendance';
 
@@ -57,7 +59,7 @@ class TeacherPortalRepository {
       return [
         for (final row in rows)
           if (row is Map<String, dynamic>) TeacherMessageContact.fromJson(row)
-      ];
+      ].where((contact) => contact.isAuthorizedParentContact).toList();
     } on DioException catch (error) {
       // Older API containers did not expose the contacts endpoint. Avoid
       // leaking a raw route-level 404 while the API deployment catches up.
@@ -68,6 +70,12 @@ class TeacherPortalRepository {
 
   Future<List<TeacherMessageItem>> fetchMessageThread(
       TeacherMessageContact contact) async {
+    if (!contact.isAuthorizedParentContact) {
+      throw const ApiException(
+        kind: ApiErrorKind.forbidden,
+        message: 'This parent conversation is not authorized.',
+      );
+    }
     try {
       final response = await _dio.get<dynamic>(
           '/api/communication/messages/thread/${Uri.encodeComponent(contact.studentId)}',
@@ -94,6 +102,12 @@ class TeacherPortalRepository {
   }
 
   Future<void> sendMessage(TeacherMessageContact contact, String text) async {
+    if (!contact.isAuthorizedParentContact) {
+      throw const ApiException(
+        kind: ApiErrorKind.forbidden,
+        message: 'This parent conversation is not authorized.',
+      );
+    }
     try {
       await _dio.post<dynamic>('/api/communication/messages', data: {
         'studentId': contact.studentId,
@@ -121,6 +135,62 @@ class TeacherPortalRepository {
         for (final item in events)
           if (item is Map<String, dynamic>) TeacherAcademicEvent.fromJson(item)
       ];
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
+  Future<List<TeacherMessageContact>> fetchMessageRecipients() async {
+    final available = <TeacherMessageContact>[];
+    try {
+      // Parent contacts are already returned with the conversation list and
+      // remain available even when an older API deployment has no dedicated
+      // recipients route.
+      final contactsResponse =
+          await _dio.get<dynamic>('/api/communication/messages/contacts');
+      final contactRows = contactsResponse.data is Map<String, dynamic>
+          ? contactsResponse.data['availableContacts']
+          : null;
+      if (contactRows is List) {
+        available.addAll([
+          for (final row in contactRows)
+            if (row is Map<String, dynamic>) TeacherMessageContact.fromJson(row)
+        ]);
+      }
+
+      final response =
+          await _dio.get<dynamic>('/api/communication/messages/recipients');
+      final rows = response.data is Map<String, dynamic>
+          ? response.data['recipients']
+          : null;
+      if (rows is! List) {
+        throw const ApiException(
+            kind: ApiErrorKind.unknown,
+            message: 'New-chat recipients returned an unexpected response.');
+      }
+      final recipients = [
+        for (final row in rows)
+          if (row is Map<String, dynamic>) TeacherMessageContact.fromJson(row)
+      ].where((contact) => contact.isAuthorizedParentContact).toList();
+      available.removeWhere((contact) => !contact.isAuthorizedParentContact);
+      final byConversation = <String, TeacherMessageContact>{
+        for (final item in [...available, ...recipients])
+          '${item.studentId}:${item.parentId}': item,
+      };
+      return byConversation.values.toList();
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 404) {
+        return available
+            .where((contact) => contact.isAuthorizedParentContact)
+            .toList();
+      }
+      throw _typed(error);
+    }
+  }
+
+  Future<void> markSessionTaken(String sessionId) async {
+    try {
+      await _dio.post<dynamic>(sessionTakenPath(sessionId));
     } on DioException catch (error) {
       throw _typed(error);
     }
@@ -187,10 +257,28 @@ class TeacherPortalRepository {
     }
   }
 
+  Future<void> updateChapterProgress({
+    required String syllabusId,
+    required String chapterId,
+    required String status,
+    String? notes,
+  }) async {
+    try {
+      await _dio.post<dynamic>('/api/teacher/syllabus/$syllabusId/log', data: {
+        'chapterId': chapterId,
+        'status': status,
+        'notes': notes,
+        'logDate': _dateOnly(DateTime.now()),
+      });
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
   Future<void> createSyllabus(
       {required String classId,
       required String subject,
-      required List<String> chapters}) async {
+      required List<Map<String, dynamic>> chapters}) async {
     try {
       await _dio.post<dynamic>('/api/teacher/syllabus',
           data: {'classId': classId, 'subject': subject, 'chapters': chapters});
@@ -199,13 +287,18 @@ class TeacherPortalRepository {
     }
   }
 
-  Future<void> updateSyllabus(
+  Future<Map<String, dynamic>> updateSyllabus(
       {required String syllabusId,
       required String subject,
       required List<Map<String, String?>> chapters}) async {
     try {
-      await _dio.patch<dynamic>('/api/teacher/syllabus/$syllabusId',
+      final response = await _dio.patch<dynamic>(
+          '/api/teacher/syllabus/$syllabusId',
           data: {'subject': subject, 'chapters': chapters});
+      final data = response.data;
+      return data is Map && data['syllabus'] is Map
+          ? Map<String, dynamic>.from(data['syllabus'] as Map)
+          : const <String, dynamic>{};
     } on DioException catch (error) {
       throw _typed(error);
     }
@@ -218,6 +311,34 @@ class TeacherPortalRepository {
     try {
       await _dio.post<dynamic>('/api/teacher/syllabus/$syllabusId/topics',
           data: {'chapterId': chapterId, 'title': title});
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
+  Future<void> updateSyllabusTopic({
+    required String syllabusId,
+    required String topicId,
+    required String title,
+  }) async {
+    try {
+      await _dio.patch<dynamic>(
+        '/api/teacher/syllabus/$syllabusId/topics/$topicId',
+        data: {'title': title.trim()},
+      );
+    } on DioException catch (error) {
+      throw _typed(error);
+    }
+  }
+
+  Future<void> deleteSyllabusTopic({
+    required String syllabusId,
+    required String topicId,
+  }) async {
+    try {
+      await _dio.delete<dynamic>(
+        '/api/teacher/syllabus/$syllabusId/topics/$topicId',
+      );
     } on DioException catch (error) {
       throw _typed(error);
     }

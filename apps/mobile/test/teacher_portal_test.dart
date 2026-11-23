@@ -4,7 +4,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
+import 'package:tms_mobile/core/network/api_exception.dart';
 import 'package:tms_mobile/core/sync/sync.dart';
 import 'package:tms_mobile/features/teacher/data/teacher_portal_repository.dart';
 import 'package:tms_mobile/features/teacher/models/teacher_portal_dto.dart';
@@ -251,6 +253,7 @@ Future<void> _pumpWithRepository(
   WidgetTester tester,
   Widget child,
   _FakeRepository repository,
+  {GoRouter? router}
 ) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -268,7 +271,9 @@ Future<void> _pumpWithRepository(
           ),
         ),
       ],
-      child: MaterialApp(home: child),
+      child: router == null
+          ? MaterialApp(home: child)
+          : MaterialApp.router(routerConfig: router),
     ),
   );
   await tester.pump();
@@ -442,6 +447,145 @@ void main() {
         ],
       });
     });
+
+    test('uses available contacts when the new-chat recipients route is absent',
+        () async {
+      final requestedPaths = <String>[];
+      final dio = ApiClient.buildDio(
+        baseUrl: 'https://test.invalid',
+        extraInterceptors: [
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              requestedPaths.add(options.path);
+              if (options.path == '/api/communication/messages/contacts') {
+                handler.resolve(Response<dynamic>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: {
+                    'contacts': const [],
+                    'availableContacts': const [
+                      {
+                        'studentId': '',
+                        'studentName': 'Direct message',
+                        'gradeName': 'Teacher',
+                        'parentId': 'staff-1',
+                        'parentName': 'Unassigned Staff',
+                      },
+                      {
+                        'studentId': 'student-1',
+                        'studentName': 'Saanvi',
+                        'gradeName': 'Grade 7',
+                        'parentId': 'parent-1',
+                        'parentName': 'Anita',
+                      },
+                    ],
+                  },
+                ));
+                return;
+              }
+              handler.reject(DioException(
+                requestOptions: options,
+                response: Response<dynamic>(
+                  requestOptions: options,
+                  statusCode: 404,
+                ),
+                type: DioExceptionType.badResponse,
+              ));
+            },
+          ),
+        ],
+      );
+
+      final recipients =
+          await TeacherPortalRepository(dio: dio).fetchMessageRecipients();
+
+      expect(requestedPaths, [
+        '/api/communication/messages/contacts',
+        '/api/communication/messages/recipients',
+      ]);
+      expect(recipients, hasLength(1));
+      expect(recipients.single.parentName, 'Anita');
+      expect(recipients.single.studentName, 'Saanvi');
+    });
+
+    test('sendMessage rejects unauthorized contacts before transport', () async {
+      var requestCount = 0;
+      final dio = ApiClient.buildDio(
+        baseUrl: 'https://test.invalid',
+        extraInterceptors: [
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              requestCount++;
+              handler.reject(
+                DioException(requestOptions: options),
+              );
+            },
+          ),
+        ],
+      );
+      final repository = TeacherPortalRepository(dio: dio);
+      const unauthorized = TeacherMessageContact(
+        studentId: '',
+        studentName: 'Direct message',
+        gradeName: 'Teacher',
+        parentId: 'staff-1',
+        parentName: 'Unassigned Staff',
+      );
+
+      await expectLater(
+        repository.sendMessage(unauthorized, 'Should be rejected'),
+        throwsA(
+          isA<ApiException>().having(
+            (error) => error.kind,
+            'kind',
+            ApiErrorKind.forbidden,
+          ),
+        ),
+      );
+      expect(requestCount, 0);
+    });
+
+    test('filters unauthorized direct staff chats from conversation contacts',
+        () async {
+      final dio = ApiClient.buildDio(
+        baseUrl: 'https://test.invalid',
+        extraInterceptors: [
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              handler.resolve(Response<dynamic>(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'contacts': const [
+                    {
+                      'studentId': '',
+                      'studentName': 'Direct message',
+                      'gradeName': 'Teacher',
+                      'parentId': 'staff-1',
+                      'parentName': 'Unassigned Staff',
+                    },
+                    {
+                      'studentId': 'student-1',
+                      'studentName': 'Saanvi',
+                      'gradeName': 'Grade 7',
+                      'parentId': 'parent-1',
+                      'parentName': 'Anita',
+                    },
+                  ],
+                },
+              ));
+            },
+          ),
+        ],
+      );
+
+      final contacts =
+          await TeacherPortalRepository(dio: dio).fetchMessageContacts();
+
+      expect(contacts, hasLength(1));
+      expect(contacts.single.parentId, 'parent-1');
+      expect(contacts.single.studentId, 'student-1');
+    });
   });
 
   group('teacher viewmodels', () {
@@ -528,12 +672,19 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await _pumpWithRepository(
         tester,
-        const TeacherHomeScreen(),
+        const TeacherHomeScreen(initialTab: 1),
         repository,
       );
 
-      await tester.tap(find.byType(NavigationDestination).at(1));
-      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('Attendance'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Teacher Home'), findsNothing);
+      expect(find.text('Teacher attendance'), findsNothing);
       expect(find.text('Aarya Rai'), findsOneWidget);
       expect(find.text('Bikash Lama'), findsOneWidget);
       expect(find.text('Excused leave recorded'), findsOneWidget);
@@ -564,10 +715,32 @@ void main() {
       );
       await tester.binding.setSurfaceSize(const Size(420, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
+      final router = GoRouter(
+        initialLocation: '/teacher/home',
+        routes: [
+          GoRoute(
+            path: '/teacher/home',
+            builder: (context, state) => TeacherHomeScreen(
+              initialTab: switch (state.uri.queryParameters['tab']) {
+                'attendance' => 1,
+                'classes' => 2,
+                'more' => 3,
+                _ => 0,
+              },
+            ),
+          ),
+          GoRoute(
+            path: '/teacher/timetable',
+            builder: (context, state) => const TeacherTimetableScreen(),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
       await _pumpWithRepository(
         tester,
         const TeacherHomeScreen(),
         repository,
+        router: router,
       );
 
       // The bottom-bar "Classes" switches to the in-home class list.
@@ -590,6 +763,7 @@ void main() {
       expect(find.text('Attendance history'), findsOneWidget);
       await tester.scrollUntilVisible(find.text('EXCUSED'), 300);
       expect(find.text('EXCUSED'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('home focuses on clock, teaching actions, and today timetable',
@@ -608,11 +782,42 @@ void main() {
       expect(find.text('Clocked in'), findsOneWidget);
       expect(find.text('Attendance'), findsWidgets);
       expect(find.text('Update syllabus'), findsOneWidget);
-      expect(find.text('Assign homework'), findsOneWidget);
+      expect(find.text('Homework'), findsOneWidget);
       expect(find.text('Enter results'), findsOneWidget);
       expect(find.text('Today\'s timetable'), findsOneWidget);
       expect(find.text('Full timetable'), findsOneWidget);
+      expect(find.text('Quick actions'), findsOneWidget);
       expect(find.text('Pending daily updates: 1'), findsNothing);
+
+      final actionButtons = [
+        find.widgetWithText(OutlinedButton, 'Attendance'),
+        find.widgetWithText(OutlinedButton, 'Update syllabus'),
+        find.widgetWithText(OutlinedButton, 'Homework'),
+        find.widgetWithText(OutlinedButton, 'Enter results'),
+      ];
+      final actionSizes = actionButtons.map(tester.getSize).toList();
+      expect(actionSizes.toSet(), hasLength(1));
+      expect(actionSizes.first.height, 44);
+      expect(tester.getTopLeft(actionButtons[0]).dy,
+          tester.getTopLeft(actionButtons[1]).dy);
+      expect(tester.getTopLeft(actionButtons[2]).dy,
+          tester.getTopLeft(actionButtons[3]).dy);
+      expect(tester.getTopLeft(actionButtons[0]).dx,
+          tester.getTopLeft(actionButtons[2]).dx);
+      expect(tester.getTopLeft(actionButtons[1]).dx,
+          tester.getTopLeft(actionButtons[3]).dx);
+      expect(
+        tester.getTopLeft(find.text('Today\'s timetable')).dy,
+        lessThan(tester.getTopLeft(actionButtons.first).dy),
+      );
+      expect(
+        tester.getTopLeft(find.text('Quick actions')).dy,
+        lessThan(tester.getTopLeft(actionButtons.first).dy),
+      );
+      expect(
+        tester.getTopLeft(find.text('Clocked in')).dy,
+        lessThan(tester.getTopLeft(find.text('Today\'s timetable')).dy),
+      );
     });
 
     testWidgets('learning workflows use workspace classes and records',
@@ -632,17 +837,51 @@ void main() {
       await _pumpWithRepository(
           tester, const TeacherSyllabusScreen(), repository);
       expect(find.text('Edit plan'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Algebra'), 250);
       expect(find.text('Algebra'), findsOneWidget);
+      expect(find.byTooltip('Update chapter progress'), findsNothing);
       await tester.tap(find.text('Algebra'));
       await tester.pumpAndSettle();
       expect(find.text('Linear equations'), findsOneWidget);
+      expect(find.text('Add topics'), findsOneWidget);
+      await tester.ensureVisible(find.text('Add topics'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add topics'));
+      await tester.pumpAndSettle();
+      expect(find.text('Add topics to Algebra'), findsOneWidget);
+      await tester.tap(find.text('Cancel').last);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      await tester.drag(find.byType(ListView).first, const Offset(0, 700));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Edit plan'));
+      await tester.pumpAndSettle();
+      expect(find.text('Chapter progress'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(DropdownButtonFormField<String>),
+          matching: find.text('In progress'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(TextFormField, 'Linear equations'),
+          findsOneWidget);
       expect(find.text('Add topic'), findsOneWidget);
+      expect(find.byTooltip('Delete topic'), findsOneWidget);
+      await tester.tap(find.text('Add topic'));
+      await tester.pumpAndSettle();
+      expect(
+          find.widgetWithText(TextFormField, 'Topic title'), findsNWidgets(2));
+      expect(tester.takeException(), isNull);
 
       await _pumpWithRepository(
           tester, const TeacherResultsScreen(), repository);
       expect(find.textContaining('First Term'), findsOneWidget);
       expect(find.text('Aarya Rai'), findsOneWidget);
       expect(find.text('Add paper'), findsWidgets);
+      await tester.drag(find.byType(ListView).first, const Offset(0, -600));
+      await tester.pumpAndSettle();
       expect(find.text('Publish results'), findsOneWidget);
     });
 
@@ -675,27 +914,35 @@ void main() {
       final repository = _FakeRepository(
         workspaces: [TeacherWorkspace.fromJson(body)],
       );
+      await tester.binding.setSurfaceSize(const Size(900, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       await _pumpWithRepository(
         tester,
         const TeacherTimetableScreen(),
         repository,
       );
 
-      await tester.tap(find.text('Today'));
-      await tester.pumpAndSettle();
+      // Today's card shows the slot subject ahead of the course name.
       expect(find.text('Algebra'), findsOneWidget);
-      expect(find.text('09:00-10:00'), findsOneWidget);
+      expect(find.text('Taken'), findsNothing);
+      expect(find.text('Not taken'), findsNothing);
 
-      await tester.tap(find.text('Sun'));
-      await tester.pumpAndSettle();
-      expect(find.text('Grade 8 - A • Baneshwor'), findsNWidgets(2));
-      expect(find.text('09:00-10:00'), findsOneWidget);
-      expect(find.text('13:00-14:00'), findsOneWidget);
+      final sundayOffset = (DateTime.sunday - DateTime.now().weekday) % 7;
+      final daysUntilSunday = sundayOffset == 0 ? 7 : sundayOffset;
+      for (var day = 0; day < daysUntilSunday; day++) {
+        await tester.tap(find.byTooltip('Next day'));
+        await tester.pumpAndSettle();
+      }
+      expect(find.text('Grade 8 - A'), findsNWidgets(2));
+      expect(find.text('09:00'), findsOneWidget);
+      expect(find.text('10:00'), findsOneWidget);
+      expect(find.text('13:00'), findsOneWidget);
+      expect(find.text('14:00'), findsOneWidget);
       expect(find.text('Geometry workshop'), findsOneWidget);
 
-      await tester.tap(find.text('Mon'));
+      await tester.tap(find.byTooltip('Next day'));
       await tester.pumpAndSettle();
-      expect(find.text('No classes on Mon'), findsOneWidget);
+      expect(find.text('Nothing scheduled for this day.'), findsOneWidget);
     });
 
     testWidgets('timetable cards open the class hub', (tester) async {
@@ -708,9 +955,14 @@ void main() {
         repository,
       );
 
-      await tester.tap(find.text('Sun'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Grade 8 - A • Baneshwor'));
+      // Step forward to the next Sunday, which the fixture schedules.
+      final sundayOffset = (DateTime.sunday - DateTime.now().weekday) % 7;
+      final daysUntilSunday = sundayOffset == 0 ? 7 : sundayOffset;
+      for (var day = 0; day < daysUntilSunday; day++) {
+        await tester.tap(find.byTooltip('Next day'));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.text('Grade 8 - A').first);
       await tester.pumpAndSettle();
 
       expect(find.text('Class tools'), findsOneWidget);
@@ -740,8 +992,6 @@ void main() {
         repository,
       );
 
-      await tester.tap(find.text('Today'));
-      await tester.pumpAndSettle();
       await tester.tap(find.text('Algebra'));
       await tester.pumpAndSettle();
 

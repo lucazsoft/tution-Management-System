@@ -12,15 +12,17 @@ void main() {
   GoogleFonts.config.allowRuntimeFetching = false;
 
   testWidgets('shows login screen by default', (tester) async {
-    // The real notifier restores the session over the network first and shows
-    // an endless spinner while it waits, so start from a settled signed-out
-    // state, which is what a fresh install reaches.
     SharedPreferences.setMockInitialValues({});
-    await tester.pumpWidget(ProviderScope(
-      overrides: [authProvider.overrideWith((ref) => _SignedOutAuth())],
-      child: const TMSApp(),
-    ));
-    await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authProvider.overrideWith((ref) => _SignedOutAuthNotifier()),
+        ],
+        child: const TMSApp(),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.text('Welcome Back'), findsOneWidget);
     expect(
@@ -57,8 +59,8 @@ void main() {
   });
 }
 
-class _SignedOutAuth extends AuthNotifier {
-  _SignedOutAuth() : super() {
+class _SignedOutAuthNotifier extends AuthNotifier {
+  _SignedOutAuthNotifier() : super() {
     state = const AuthState(isLoading: false);
   }
 }

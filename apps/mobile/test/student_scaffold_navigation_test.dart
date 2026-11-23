@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -27,11 +28,24 @@ void main() {
             body: Center(child: Text('Academics page')),
           ),
         ),
+        GoRoute(
+          path: '/student/certificates',
+          builder: (_, __) => const StudentScaffold(
+            title: 'Certificates',
+            body: Center(child: Text('Certificates page')),
+          ),
+        ),
+        GoRoute(
+          path: '/student/account',
+          builder: (_, __) => const Scaffold(body: Text('Student profile')),
+        ),
       ],
     );
   });
 
-  tearDown(() => router.dispose());
+  tearDown(() {
+    router.dispose();
+  });
 
   Future<void> pumpPortal(WidgetTester tester) async {
     await tester.pumpWidget(
@@ -64,6 +78,14 @@ void main() {
     await tester.tap(find.byTooltip('Open navigation menu'));
     await tester.pumpAndSettle();
 
+    for (final section in ['NAVIGATION', 'FEATURES']) {
+      expect(find.text(section, skipOffstage: false), findsOneWidget);
+    }
+    expect(
+      tester.getSize(find.byType(NavigationDrawerDestination).first).height,
+      48,
+    );
+
     for (final label in [
       'Academics',
       'Timetable',
@@ -76,11 +98,27 @@ void main() {
       expect(
         find.descendant(
           of: find.byType(NavigationDrawer),
-          matching: find.text(label),
+          matching: find.text(label, skipOffstage: false),
+          skipOffstage: false,
         ),
         findsOneWidget,
       );
     }
+
+    final drawer = find.byType(NavigationDrawer);
+    final academicsLabelDx = tester
+        .getTopLeft(
+          find.descendant(of: drawer, matching: find.text('Academics')),
+        )
+        .dx;
+    final academicsIconDx = tester
+        .getTopLeft(
+          find.descendant(
+            of: drawer,
+            matching: find.byIcon(Icons.school_outlined),
+          ),
+        )
+        .dx;
 
     final drawerScroll = find.descendant(
       of: find.byType(NavigationDrawer),
@@ -97,6 +135,7 @@ void main() {
       300,
       scrollable: drawerScroll,
     );
+    expect(find.text('ACCOUNT'), findsOneWidget);
     for (final label in [
       'Profile settings',
       'Change password',
@@ -106,9 +145,27 @@ void main() {
     ]) {
       expect(find.text(label), findsOneWidget);
     }
+
+    final profileLabel = find.descendant(
+      of: drawer,
+      matching: find.text('Profile settings'),
+    );
+    final profileIcon = find.descendant(
+      of: drawer,
+      matching: find.byIcon(Icons.manage_accounts_outlined),
+    );
+
+    expect(
+      tester.getTopLeft(profileLabel).dx,
+      moreOrLessEquals(academicsLabelDx, epsilon: .01),
+    );
+    expect(
+      tester.getTopLeft(profileIcon).dx,
+      moreOrLessEquals(academicsIconDx, epsilon: .01),
+    );
   });
 
-  testWidgets('device back returns a pushed student page to home',
+  testWidgets('device back always returns a main student page to home',
       (tester) async {
     await pumpPortal(tester);
     await tester.tap(find.byTooltip('Open navigation menu'));
@@ -122,9 +179,86 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Academics page'), findsOneWidget);
+    router.push('/student/certificates');
+    await tester.pumpAndSettle();
+    expect(find.text('Certificates page'), findsOneWidget);
+
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     expect(find.text('Home page'), findsOneWidget);
+  });
+
+  testWidgets('centered student drawer profile opens profile settings',
+      (tester) async {
+    await pumpPortal(tester);
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+
+    final header = find.byKey(const ValueKey('portal-drawer-profile-header'));
+    final avatar = find.descendant(
+      of: header,
+      matching: find.byType(CircleAvatar),
+    );
+    expect(
+      tester.getCenter(avatar).dx,
+      moreOrLessEquals(tester.getCenter(header).dx, epsilon: .01),
+    );
+
+    await tester.tap(header);
+    await tester.pumpAndSettle();
+    expect(find.text('Student profile'), findsOneWidget);
+  });
+
+  testWidgets('certificate route shades Certificates in the hamburger menu',
+      (tester) async {
+    await pumpPortal(tester);
+    router.push('/student/certificates');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Certificates page'), findsOneWidget);
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+
+    final drawer = tester.widget<NavigationDrawer>(
+      find.byType(NavigationDrawer),
+    );
+    expect(drawer.selectedIndex, 7);
+  });
+
+  testWidgets('home back shows a rounded double-back exit prompt',
+      (tester) async {
+    await pumpPortal(tester);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+
+    expect(find.text('Press back again to exit'), findsOneWidget);
+    final snackBar = tester.widget<SnackBar>(find.byType(SnackBar));
+    expect(snackBar.behavior, SnackBarBehavior.floating);
+    expect(snackBar.shape, isA<RoundedRectangleBorder>());
+  });
+
+  testWidgets('second home back press requests Android application exit',
+      (tester) async {
+    String? platformMethod;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'SystemNavigator.pop') platformMethod = call.method;
+        return null;
+      },
+    );
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+    await pumpPortal(tester);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.text('Press back again to exit'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(platformMethod, 'SystemNavigator.pop');
   });
 }

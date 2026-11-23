@@ -189,6 +189,16 @@ class _SequencedAcademicsRepository extends StudentAcademicsRepository {
 
   final List<StudentPortalSnapshot> snapshots;
   var calls = 0;
+  var completionCalls = 0;
+
+  @override
+  Future<void> markHomeworkDone({
+    required String homeworkId,
+    required String studentId,
+    CancelToken? cancelToken,
+  }) async {
+    completionCalls++;
+  }
 
   @override
   Future<StudentPortalSnapshot> fetchPortal({CancelToken? cancelToken}) async {
@@ -349,6 +359,36 @@ void main() {
   });
 
   group('StudentAcademicsViewModel', () {
+    test('does not submit overdue homework marked from the mobile portal',
+        () async {
+      final repository = _SequencedAcademicsRepository([
+        StudentPortalSnapshot.fromJson(portalJson(homeworkCount: 2)),
+      ]);
+      final container = ProviderContainer(
+        overrides: [
+          studentAcademicsViewModelProvider.overrideWith(
+            (ref) => StudentAcademicsViewModel(repository: repository),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final viewModel =
+          container.read(studentAcademicsViewModelProvider.notifier);
+      await viewModel.load();
+
+      expect(await viewModel.markHomeworkDone('hw-0'), isFalse);
+      expect(repository.completionCalls, 0);
+      expect(
+        container
+            .read(studentAcademicsViewModelProvider)
+            .homework
+            .first
+            .completed,
+        isFalse,
+      );
+    });
+
     test('loads data and paginates results/homework', () async {
       final container = ProviderContainer(
         overrides: [

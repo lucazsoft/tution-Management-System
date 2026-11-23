@@ -3,6 +3,23 @@ import 'package:nepali_utils/nepali_utils.dart';
 
 import '../../core/theme/app_theme.dart';
 
+const academicNepaliMonths = <String>[
+  'वैशाख',
+  'जेठ',
+  'असार',
+  'साउन',
+  'भदौ',
+  'असोज',
+  'कात्तिक',
+  'मंसिर',
+  'पुस',
+  'माघ',
+  'फागुन',
+  'चैत',
+];
+
+const academicNepaliWeekdays = <String>['आ', 'सो', 'मं', 'बु', 'बि', 'शु', 'श'];
+
 class AcademicCalendarEvent {
   const AcademicCalendarEvent({
     required this.id,
@@ -17,6 +34,40 @@ class AcademicCalendarEvent {
   final DateTime date;
   final String kind;
   final String details;
+}
+
+class AcademicCalendarAttendance {
+  const AcademicCalendarAttendance({
+    required this.id,
+    required this.date,
+    required this.subject,
+    required this.session,
+    required this.status,
+    this.details = '',
+  });
+
+  final String id;
+  final DateTime date;
+  final String subject;
+  final String session;
+  final String status;
+  final String details;
+}
+
+class AcademicCalendarClass {
+  const AcademicCalendarClass({
+    required this.id,
+    required this.weekday,
+    required this.subject,
+    required this.time,
+    required this.teacher,
+  });
+
+  final String id;
+  final int? weekday;
+  final String subject;
+  final String time;
+  final String teacher;
 }
 
 DateTime? parsePortalEventDate(String value) {
@@ -57,7 +108,6 @@ DateTime? parsePortalEventDate(String value) {
       int.parse(match.group(3)!), month, int.parse(match.group(1)!));
 }
 
-@visibleForTesting
 List<DateTime> nepaliMonthGrid(DateTime anchor) {
   final anchorBs = anchor.toNepaliDateTime();
   final month = NepaliDateTime(anchorBs.year, anchorBs.month);
@@ -73,7 +123,6 @@ List<DateTime> nepaliMonthGrid(DateTime anchor) {
   );
 }
 
-@visibleForTesting
 DateTime shiftNepaliMonth(DateTime anchor, int offset) {
   final current = anchor.toNepaliDateTime();
   final absoluteMonth = current.year * 12 + current.month - 1 + offset;
@@ -95,10 +144,26 @@ DateTime shiftNepaliMonth(DateTime anchor, int offset) {
 }
 
 class AcademicCalendar extends StatefulWidget {
-  const AcademicCalendar({super.key, required this.events, this.now});
+  const AcademicCalendar({
+    super.key,
+    required this.events,
+    this.attendance = const [],
+    this.scheduledClasses = const [],
+    this.now,
+    this.showGregorianDates = true,
+    this.showSelectedDayLabel = true,
+    this.showUpcomingEmptyDescription = true,
+    this.emphasizeUpcomingEmptyState = false,
+  });
 
   final List<AcademicCalendarEvent> events;
+  final List<AcademicCalendarAttendance> attendance;
+  final List<AcademicCalendarClass> scheduledClasses;
   final DateTime Function()? now;
+  final bool showGregorianDates;
+  final bool showSelectedDayLabel;
+  final bool showUpcomingEmptyDescription;
+  final bool emphasizeUpcomingEmptyState;
 
   @override
   State<AcademicCalendar> createState() => _AcademicCalendarState();
@@ -107,22 +172,6 @@ class AcademicCalendar extends StatefulWidget {
 class _AcademicCalendarState extends State<AcademicCalendar> {
   late DateTime _selected;
   late DateTime _monthAnchor;
-
-  static const _bsMonths = <String>[
-    'वैशाख',
-    'जेठ',
-    'असार',
-    'साउन',
-    'भदौ',
-    'असोज',
-    'कात्तिक',
-    'मंसिर',
-    'पुस',
-    'माघ',
-    'फागुन',
-    'चैत',
-  ];
-  static const _weekdays = <String>['आ', 'सो', 'मं', 'बु', 'बि', 'शु', 'श'];
 
   @override
   void initState() {
@@ -138,6 +187,19 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
 
   List<AcademicCalendarEvent> _eventsOn(DateTime day) =>
       widget.events.where((event) => _same(event.date, day)).toList();
+
+  List<AcademicCalendarAttendance> _attendanceOn(DateTime day) =>
+      widget.attendance.where((record) => _same(record.date, day)).toList();
+
+  List<AcademicCalendarClass> _classesOn(DateTime day) =>
+      widget.scheduledClasses
+          .where((session) => session.weekday == day.weekday)
+          .toList();
+
+  bool _isHoliday(AcademicCalendarEvent event) {
+    final text = '${event.kind} ${event.title}'.toLowerCase();
+    return text.contains('holiday') || text.contains('break');
+  }
 
   void _moveMonth(int offset) => setState(() {
         _monthAnchor = shiftNepaliMonth(_monthAnchor, offset);
@@ -155,9 +217,15 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
     ).toDateTime();
     final today = (widget.now ?? DateTime.now)();
     final selectedEvents = _eventsOn(_selected);
+    final selectedAttendance = _attendanceOn(_selected);
+    final selectedClasses = _classesOn(_selected);
+    final isSelectedHoliday = selectedEvents.any(_isHoliday);
+    final selectedIsPast = _selected.isBefore(
+      DateTime(today.year, today.month, today.day),
+    );
     final upcomingEvents = widget.events
-        .where((event) => !event.date.isBefore(
-            DateTime(today.year, today.month, today.day)))
+        .where((event) =>
+            !event.date.isBefore(DateTime(today.year, today.month, today.day)))
         .toList()
       ..sort((a, b) => a.date.compareTo(b.date));
     return Column(
@@ -173,14 +241,16 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                   final heading = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${_bsMonths[firstBs.month - 1]} ${firstBs.year} BS',
-                          style: Theme.of(context).textTheme.titleLarge),
                       Text(
-                          '${_englishMonth(_monthAnchor.month)} ${_monthAnchor.day} - ${_englishMonth(last.month)} ${last.day}, ${last.year}',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: kColorMutedText)),
+                          '${academicNepaliMonths[firstBs.month - 1]} ${firstBs.year} BS',
+                          style: Theme.of(context).textTheme.titleLarge),
+                      if (widget.showGregorianDates)
+                        Text(
+                            '${_englishMonth(_monthAnchor.month)} ${_monthAnchor.day} - ${_englishMonth(last.month)} ${last.day}, ${last.year}',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: kColorMutedText)),
                     ],
                   );
                   final controls =
@@ -204,7 +274,7 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                         onPressed: () => _moveMonth(1),
                         icon: const Icon(Icons.chevron_right)),
                   ]);
-                  if (constraints.maxWidth < 430)
+                  if (constraints.maxWidth < 430) {
                     return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -213,6 +283,7 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                           Align(
                               alignment: Alignment.centerRight, child: controls)
                         ]);
+                  }
                   return Row(children: [Expanded(child: heading), controls]);
                 }),
                 const SizedBox(height: 8),
@@ -220,7 +291,7 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                   for (var i = 0; i < 7; i++)
                     Expanded(
                         child: Center(
-                            child: Text(_weekdays[i],
+                            child: Text(academicNepaliWeekdays[i],
                                 style: TextStyle(
                                     fontWeight: FontWeight.w700,
                                     color: i == 6
@@ -246,14 +317,16 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                     final day = days[index];
                     final bs = day.toNepaliDateTime();
                     final events = _eventsOn(day);
+                    final attendance = _attendanceOn(day);
                     final selected = _same(day, _selected);
                     final isToday = _same(day, today);
                     final outside =
                         bs.year != firstBs.year || bs.month != firstBs.month;
                     return Semantics(
                       selected: selected,
-                      label:
-                          '${day.day} ${_englishMonth(day.month)}, ${events.length} events',
+                      label: widget.showGregorianDates
+                          ? '${day.day} ${_englishMonth(day.month)}, ${events.length} events, ${attendance.length} attendance records'
+                          : '${academicNepaliMonths[bs.month - 1]} ${bs.day}, ${bs.year} BS, ${events.length} events, ${attendance.length} attendance records',
                       child: InkWell(
                         key: ValueKey(
                             'calendar-day-${day.year}-${day.month}-${day.day}'),
@@ -287,16 +360,17 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
                                                         DateTime.saturday
                                                     ? kColorError
                                                     : kColorText)),
-                                Text('${day.day}',
-                                    style: TextStyle(
-                                        fontSize: 10,
-                                        color: selected
-                                            ? Colors.white70
-                                            : outside
-                                                ? kColorMutedText.withValues(
-                                                    alpha: .38)
-                                                : kColorMutedText)),
-                                if (events.isNotEmpty)
+                                if (widget.showGregorianDates)
+                                  Text('${day.day}',
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          color: selected
+                                              ? Colors.white70
+                                              : outside
+                                                  ? kColorMutedText.withValues(
+                                                      alpha: .38)
+                                                  : kColorMutedText)),
+                                if (events.isNotEmpty || attendance.isNotEmpty)
                                   Container(
                                       width: 5,
                                       height: 5,
@@ -320,44 +394,113 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
           ),
         ),
         const SizedBox(height: TmsSpace.md),
-        Text('Selected day',
-            style: Theme.of(context)
-                .textTheme
-                .labelLarge
-                ?.copyWith(color: kColorMutedText)),
+        if (widget.showSelectedDayLabel)
+          Text('Selected day',
+              style: Theme.of(context)
+                  .textTheme
+                  .labelLarge
+                  ?.copyWith(color: kColorMutedText)),
         Text(
-            '${_selected.toNepaliDateTime().day} ${_bsMonths[_selected.toNepaliDateTime().month - 1]} ${_selected.toNepaliDateTime().year} BS',
+            '${_selected.toNepaliDateTime().day} ${academicNepaliMonths[_selected.toNepaliDateTime().month - 1]} ${_selected.toNepaliDateTime().year} BS',
             style: Theme.of(context).textTheme.titleLarge),
         Text(
             '${_englishMonth(_selected.month)} ${_selected.day}, ${_selected.year}',
             style: Theme.of(context).textTheme.bodyMedium),
         const SizedBox(height: TmsSpace.sm),
-        if (selectedEvents.isEmpty)
+        if (isSelectedHoliday)
+          for (final event in selectedEvents.where(_isHoliday))
+            _DayRecordTile(
+              icon: Icons.beach_access_outlined,
+              color: kColorWarning,
+              title: event.title,
+              details: event.details,
+            )
+        else if (selectedAttendance.isNotEmpty)
+          for (final record in selectedAttendance)
+            _DayRecordTile(
+              icon: record.status.toLowerCase() == 'present'
+                  ? Icons.check_circle_outline
+                  : Icons.cancel_outlined,
+              color: record.status.toLowerCase() == 'present'
+                  ? kColorSuccess
+                  : record.status.toLowerCase().contains('excused')
+                      ? kColorWarning
+                      : kColorError,
+              title: '${record.status} - ${record.subject}',
+              details: [
+                if (record.session.isNotEmpty) record.session,
+                if (record.details.isNotEmpty) record.details,
+              ].join(' - '),
+            )
+        else if (selectedIsPast && selectedClasses.isNotEmpty)
+          const _DayRecordTile(
+            icon: Icons.pending_actions_outlined,
+            color: kColorWarning,
+            title: 'Attendance not recorded',
+            details:
+                'This was a scheduled class day, but no attendance mark is available.',
+          ),
+        if (!isSelectedHoliday && selectedClasses.isNotEmpty)
+          for (final session in selectedClasses)
+            _DayRecordTile(
+              icon: Icons.menu_book_outlined,
+              color: kColorPrimary,
+              title: session.subject,
+              details: [session.time, session.teacher]
+                  .where((value) => value.isNotEmpty)
+                  .join(' - '),
+            ),
+        for (final event in selectedEvents.where((event) => !_isHoliday(event)))
+          _DayRecordTile(
+            icon: Icons.event_outlined,
+            color: kColorPrimary,
+            title: event.title,
+            details: [event.kind, event.details]
+                .where((value) => value.isNotEmpty)
+                .join(' - '),
+          ),
+        if (selectedEvents.isEmpty &&
+            selectedAttendance.isEmpty &&
+            selectedClasses.isEmpty)
           const Card(
-              child: Padding(
-                  padding: EdgeInsets.all(TmsSpace.md),
-                  child: Text(
-                      'No events scheduled for this day. Select another date to review its schedule.')))
-        else
-          for (final event in selectedEvents)
-            Card(
-                child: ListTile(
-                    leading: const Icon(Icons.event, color: kColorPrimary),
-                    title: Text(event.title),
-                    subtitle: Text([
-                      event.kind,
-                      if (event.details.isNotEmpty) event.details
-                    ].join(' · ')))),
+            child: Padding(
+              padding: EdgeInsets.all(TmsSpace.md),
+              child: Text(
+                'No class, attendance, holiday, or event is recorded for this day.',
+              ),
+            ),
+          ),
         const SizedBox(height: TmsSpace.lg),
         Text('Upcoming events', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: TmsSpace.xs),
         if (upcomingEvents.isEmpty)
-          const Card(
-            child: ListTile(
-              leading: Icon(Icons.event_busy_outlined),
-              title: Text('No upcoming events published'),
-              subtitle: Text(
-                'Holidays, exams, ceremonies and deadlines will appear here when the institution publishes them.',
+          Card(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: widget.emphasizeUpcomingEmptyState ? 96 : 0,
+              ),
+              child: ListTile(
+                contentPadding: widget.emphasizeUpcomingEmptyState
+                    ? const EdgeInsets.symmetric(
+                        horizontal: TmsSpace.md,
+                        vertical: TmsSpace.md,
+                      )
+                    : null,
+                leading: Icon(
+                  Icons.event_busy_outlined,
+                  size: widget.emphasizeUpcomingEmptyState ? 32 : 24,
+                ),
+                title: Text(
+                  'No upcoming events published',
+                  style: widget.emphasizeUpcomingEmptyState
+                      ? Theme.of(context).textTheme.titleMedium
+                      : null,
+                ),
+                subtitle: widget.showUpcomingEmptyDescription
+                    ? const Text(
+                        'Holidays, exams, ceremonies and deadlines will appear here when the institution publishes them.',
+                      )
+                    : null,
               ),
             ),
           )
@@ -365,10 +508,16 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
           for (final event in upcomingEvents.take(12))
             Card(
               child: ListTile(
-                leading: CircleAvatar(child: Text('${event.date.day}')),
+                leading: CircleAvatar(
+                    child: Text(widget.showGregorianDates
+                        ? '${event.date.day}'
+                        : '${event.date.toNepaliDateTime().day}')),
                 title: Text(event.title),
                 subtitle: Text([
-                  '${_englishMonth(event.date.month)} ${event.date.day}, ${event.date.year}',
+                  if (widget.showGregorianDates)
+                    '${_englishMonth(event.date.month)} ${event.date.day}, ${event.date.year}'
+                  else
+                    _nepaliDate(event.date),
                   event.kind,
                   if (event.details.isNotEmpty) event.details,
                 ].join(' - ')),
@@ -398,4 +547,32 @@ class _AcademicCalendarState extends State<AcademicCalendar> {
         'November',
         'December'
       ][month - 1];
+
+  String _nepaliDate(DateTime date) {
+    final bs = date.toNepaliDateTime();
+    return '${academicNepaliMonths[bs.month - 1]} ${bs.day}, ${bs.year} BS';
+  }
+}
+
+class _DayRecordTile extends StatelessWidget {
+  const _DayRecordTile({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.details,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String details;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: ListTile(
+          leading: Icon(icon, color: color),
+          title: Text(title),
+          subtitle: details.isEmpty ? null : Text(details),
+        ),
+      );
 }

@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tms_mobile/core/navigation/android_back_coordinator.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
 import 'package:tms_mobile/features/auth/data/device_account_vault.dart';
 import 'package:tms_mobile/features/auth/data/account_repository.dart';
+import 'package:tms_mobile/shared/widgets/portal_navigation_drawer.dart';
 
 import '../student_design.dart';
 
@@ -30,8 +32,9 @@ class StudentScaffold extends ConsumerStatefulWidget {
 }
 
 class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
+  static const _primaryNavigationItemCount = 5;
+
   DateTime? _lastHomeBackPress;
-  late final Future<PersonalAccount?> _drawerAccount;
 
   static const _bottomRoutes = <String>[
     '/student/home',
@@ -87,24 +90,24 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
 
   bool get _isHome => widget.selectedIndex == 0;
 
-  @override
-  void initState() {
-    super.initState();
-    _drawerAccount = ApiClient.instance.isInitialized
-        ? AccountRepository().load()
-        : Future<PersonalAccount?>.value();
-  }
-
   void _open(String route) {
     Navigator.of(context).pop();
-    if (widget.selectedIndex != null &&
-        widget.selectedIndex! < 5 &&
-        _navigationItems[widget.selectedIndex!].route == route) {
+    final current = _matchedLocation(context);
+    if (current == route) {
       return;
     }
     Future<void>.microtask(() {
-      if (mounted) context.push(route);
+      if (!mounted) return;
+      route == '/student/home' ? context.go(route) : context.push(route);
     });
+  }
+
+  String? _matchedLocation(BuildContext context) {
+    try {
+      return GoRouterState.of(context).matchedLocation;
+    } on GoError {
+      return GoRouter.maybeOf(context)?.routeInformationProvider.value.uri.path;
+    }
   }
 
   Future<void> _switchAccount() async {
@@ -147,11 +150,7 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
   void _handleBack(bool didPop, Object? result) {
     if (didPop) return;
     if (!_isHome) {
-      if (context.canPop()) {
-        context.pop();
-      } else {
-        context.go('/student/home');
-      }
+      context.go('/student/home');
       return;
     }
 
@@ -162,14 +161,7 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
       return;
     }
     _lastHomeBackPress = now;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('Press back again to exit'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+    showAndroidExitPrompt(context);
   }
 
   @override
@@ -194,7 +186,9 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
                     selectedIndex: widget.selectedIndex!,
                     onDestinationSelected: (index) {
                       if (index != widget.selectedIndex) {
-                        context.push(_bottomRoutes[index]);
+                        index == 0
+                            ? context.go(_bottomRoutes[index])
+                            : context.push(_bottomRoutes[index]);
                       }
                     },
                     destinations: const [
@@ -233,128 +227,111 @@ class _StudentScaffoldState extends ConsumerState<StudentScaffold> {
 
   Widget _buildDrawer(BuildContext context) {
     final user = ref.watch(authProvider).user;
-    final baseTheme = Theme.of(context);
-    return Theme(
-      data: baseTheme.copyWith(
-        navigationDrawerTheme: NavigationDrawerThemeData(
-          backgroundColor: Colors.white,
-          surfaceTintColor: Colors.transparent,
-          indicatorColor: StudentColors.primary.withValues(alpha: .10),
-          iconTheme: const WidgetStatePropertyAll(IconThemeData(
-            color: StudentColors.primary,
-          )),
-          labelTextStyle: WidgetStateProperty.resolveWith(
-            (states) => baseTheme.textTheme.bodyMedium?.copyWith(
-              color: StudentColors.text,
-              fontWeight: states.contains(WidgetState.selected)
-                  ? FontWeight.w700
-                  : FontWeight.w500,
-            ),
-          ),
-        ),
-        listTileTheme: const ListTileThemeData(
-          iconColor: StudentColors.primary,
-          textColor: StudentColors.text,
-          minLeadingWidth: 24,
-          horizontalTitleGap: 16,
-        ),
-        dividerColor: StudentColors.border,
-        textTheme: baseTheme.textTheme.apply(
-          bodyColor: StudentColors.text,
-          displayColor: StudentColors.text,
-        ),
-      ),
+    final account = ApiClient.instance.isInitialized
+        ? ref.watch(personalAccountProvider).asData?.value
+        : null;
+    final location = _matchedLocation(context);
+    final drawerIndex =
+        _navigationItems.indexWhere((item) => item.route == location);
+    return PortalDrawerTheme(
       child: NavigationDrawer(
-        selectedIndex: widget.selectedIndex,
+        tilePadding: const EdgeInsets.symmetric(horizontal: 8),
+        selectedIndex: drawerIndex < 0 ? null : drawerIndex,
         onDestinationSelected: (index) => _open(_navigationItems[index].route),
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(28, 24, 28, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                FutureBuilder<PersonalAccount?>(
-                  future: _drawerAccount,
-                  builder: (context, snapshot) {
-                    final account = snapshot.data;
-                    return CircleAvatar(
-                      radius: 38,
-                      backgroundColor: Colors.white,
-                      foregroundImage: account?.photoUrl?.isNotEmpty == true
-                          ? NetworkImage(account!.photoUrl!)
-                          : null,
-                      child: account?.photoUrl?.isNotEmpty == true
-                          ? null
-                          : Text(
-                              account?.initials.isNotEmpty == true
-                                  ? account!.initials
-                                  : (user?.name.isNotEmpty == true
-                                      ? user!.name[0].toUpperCase()
-                                      : 'S'),
-                              style: const TextStyle(
-                                color: StudentColors.primary,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  user?.name ?? 'Student',
-                  style: Theme.of(context).textTheme.titleMedium,
-                  textAlign: TextAlign.center,
-                ),
-                if (user?.email.isNotEmpty == true)
-                  Text(
-                    user!.email,
-                    style: Theme.of(context).textTheme.bodySmall,
-                    textAlign: TextAlign.center,
+          PortalDrawerHeader(
+            name: account?.name.isNotEmpty == true
+                ? account!.name
+                : user?.name ?? 'Student',
+            subtitle: account?.email.isNotEmpty == true
+                ? account!.email
+                : user?.email.isNotEmpty == true
+                    ? user!.email
+                    : 'Student portal',
+            onTap: () => _open('/student/account'),
+            avatar: CircleAvatar(
+              radius: 30,
+              backgroundColor: StudentColors.primary.withValues(alpha: .10),
+              foregroundImage: account?.photoUrl?.isNotEmpty == true
+                  ? NetworkImage(account!.photoUrl!)
+                  : null,
+              child: account?.photoUrl?.isNotEmpty == true
+                  ? null
+                  : Text(
+                      account?.initials.isNotEmpty == true
+                          ? account!.initials
+                          : (user?.name.isNotEmpty == true
+                              ? user!.name[0].toUpperCase()
+                              : 'S'),
+                      style: const TextStyle(
+                        color: StudentColors.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+            ),
+          ),
+          const PortalDrawerSectionLabel('Navigation'),
+          ..._navigationItems.take(_primaryNavigationItemCount).map(
+                (item) => NavigationDrawerDestination(
+                  icon: Icon(item.icon),
+                  selectedIcon: Icon(item.icon),
+                  label: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 200),
+                    child: Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-              ],
-            ),
-          ),
-          ..._navigationItems.map(
-            (item) => NavigationDrawerDestination(
-              icon: Icon(item.icon),
-              selectedIcon: Icon(item.icon),
-              label: Text(item.label),
-            ),
-          ),
-          const Divider(indent: 28, endIndent: 28),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(28, 8, 28, 4),
-            child: Text('ACCOUNT'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.manage_accounts_outlined),
-            title: const Text('Profile settings'),
+                ),
+              ),
+          const PortalDrawerDivider(),
+          const PortalDrawerSectionLabel('Features'),
+          ..._navigationItems.skip(_primaryNavigationItemCount).map(
+                (item) => NavigationDrawerDestination(
+                  icon: Icon(item.icon),
+                  selectedIcon: Icon(item.icon),
+                  label: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 200),
+                    child: Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ),
+          const PortalDrawerDivider(),
+          const PortalDrawerSectionLabel('Account'),
+          PortalDrawerAction(
+            icon: Icons.manage_accounts_outlined,
+            label: 'Profile settings',
+            useExactAndroidDestinationLayout: true,
             onTap: () => _open('/student/account'),
           ),
-          ListTile(
-            leading: const Icon(Icons.key_rounded),
-            title: const Text('Change password'),
+          PortalDrawerAction(
+            icon: Icons.key_rounded,
+            label: 'Change password',
+            useExactAndroidDestinationLayout: true,
             onTap: () => _open('/student/change-password'),
           ),
-          ListTile(
-            leading: const Icon(Icons.pin_outlined),
-            title: const Text('Set or change MPIN'),
+          PortalDrawerAction(
+            icon: Icons.pin_outlined,
+            label: 'Set or change MPIN',
+            useExactAndroidDestinationLayout: true,
             onTap: () => _open('/student/mpin'),
           ),
-          ListTile(
-            leading: const Icon(Icons.switch_account_rounded),
-            title: const Text('Switch account'),
+          PortalDrawerAction(
+            icon: Icons.switch_account_rounded,
+            label: 'Switch account',
+            useExactAndroidDestinationLayout: true,
             onTap: _switchAccount,
           ),
-          ListTile(
-            leading: const Icon(
-              Icons.logout_rounded,
-              color: StudentColors.error,
-            ),
-            title: const Text(
-              'Log out',
-              style: TextStyle(color: StudentColors.error),
-            ),
+          PortalDrawerAction(
+            icon: Icons.logout_rounded,
+            label: 'Log out',
+            destructive: true,
+            useExactAndroidDestinationLayout: true,
             onTap: () {
               Navigator.of(context).pop();
               ref.read(authProvider.notifier).logout();

@@ -27,14 +27,16 @@ class _StudentLeaveScreenState extends State<StudentLeaveScreen> {
           future: _portal,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting &&
-                !snapshot.hasData)
+                !snapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
-            if (snapshot.hasError || !snapshot.hasData)
+            }
+            if (snapshot.hasError || !snapshot.hasData) {
               return Center(
                   child: FilledButton.icon(
                       onPressed: _reload,
                       icon: const Icon(Icons.refresh),
                       label: const Text('Retry loading leave requests')));
+            }
             final portal = snapshot.data!;
             return RefreshIndicator(
               onRefresh: _reload,
@@ -43,12 +45,14 @@ class _StudentLeaveScreenState extends State<StudentLeaveScreen> {
                   subjectName: portal.profile.name,
                   history: portal.leaves
                       .map((item) => LeaveHistoryItem(
-                          item.dates, item.reason, item.state, item.detail))
+                          item.dates, item.reason, item.state, item.detail,
+                          startDate: item.startDate, endDate: item.endDate))
                       .toList(),
                   onSubmit: (type, start, end, reason) async {
-                    if (portal.profile.branchId.isEmpty)
+                    if (portal.profile.branchId.isEmpty) {
                       throw StateError(
                           'No active branch is linked to this student account.');
+                    }
                     await _repository.requestLeave(
                         branchId: portal.profile.branchId,
                         leaveType: type,

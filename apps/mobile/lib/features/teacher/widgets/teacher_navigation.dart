@@ -1,17 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tms_mobile/core/navigation/android_back_coordinator.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/features/auth/data/device_account_vault.dart';
+import 'package:tms_mobile/features/auth/data/account_repository.dart';
 import 'package:tms_mobile/core/theme/app_theme.dart';
+import 'package:tms_mobile/shared/widgets/portal_navigation_drawer.dart';
 
 /// Shared navigation chrome for the teacher portal's route-based screens.
 abstract final class TeacherNavigation {
+  static const primaryNavigationItemCount = 4;
+
   static const drawerItems = <({String label, IconData icon, String route})>[
     (label: 'Home', icon: Icons.home_outlined, route: '/teacher/home'),
     (
-      label: 'Timetable',
-      icon: Icons.calendar_view_week_outlined,
+      label: 'Attendance',
+      icon: Icons.check_circle_outline,
+      route: '/teacher/home?tab=attendance'
+    ),
+    (label: 'Messages', icon: Icons.forum_outlined, route: '/teacher/messages'),
+    (
+      label: 'Classes',
+      icon: Icons.school_outlined,
       route: '/teacher/timetable'
     ),
     (
@@ -24,7 +35,6 @@ abstract final class TeacherNavigation {
       icon: Icons.calendar_month_outlined,
       route: '/teacher/calendar'
     ),
-    (label: 'Messages', icon: Icons.forum_outlined, route: '/teacher/messages'),
     (
       label: 'Meetings',
       icon: Icons.groups_outlined,
@@ -72,130 +82,137 @@ abstract final class TeacherNavigation {
 
   static Widget drawer(BuildContext context) {
     final router = GoRouter.maybeOf(context);
-    final location =
-        router?.routeInformationProvider.value.uri.path ?? '/teacher/home';
-    final selected = drawerItems.indexWhere((item) => item.route == location);
+    String? location;
+    Uri? uri;
+    try {
+      location = GoRouterState.of(context).matchedLocation;
+      uri = GoRouterState.of(context).uri;
+    } on GoError {
+      uri = router?.routeInformationProvider.value.uri;
+      location = uri?.path;
+    }
+    final currentRoute = uri == null
+        ? location
+        : '${uri.path}${uri.hasQuery ? '?${uri.query}' : ''}';
+    final selected =
+        drawerItems.indexWhere((item) => item.route == currentRoute);
 
     void open(String route) {
       Navigator.of(context).pop();
-      if (route != location) router?.push(route);
+      if (route != currentRoute) router?.push(route);
     }
 
     return Consumer(
-      builder: (context, ref, _) => Theme(
-        data: Theme.of(context).copyWith(
-          navigationDrawerTheme: NavigationDrawerThemeData(
-            backgroundColor: Colors.white,
-            surfaceTintColor: Colors.transparent,
-            indicatorColor: kColorPrimary.withValues(alpha: .10),
-            iconTheme: const WidgetStatePropertyAll(
-              IconThemeData(color: kColorPrimary, size: 24),
-            ),
-          ),
-          listTileTheme: const ListTileThemeData(
-            iconColor: kColorPrimary,
-            minLeadingWidth: 24,
-            horizontalTitleGap: 16,
-          ),
-        ),
-        child: NavigationDrawer(
-          selectedIndex: selected < 0 ? null : selected,
-          onDestinationSelected: (index) => open(drawerItems[index].route),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(28, 28, 28, 18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CircleAvatar(
-                    radius: 30,
-                    backgroundColor:
-                        Theme.of(context).colorScheme.primaryContainer,
-                    child: const Icon(Icons.person_rounded, size: 30),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    ref.watch(authProvider).user?.name ?? 'Teacher',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  Text(
-                    ref.watch(authProvider).user?.email ?? 'Teacher portal',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-            for (final item in drawerItems)
-              NavigationDrawerDestination(
-                icon: Icon(item.icon),
-                selectedIcon: Icon(item.icon),
-                label: SizedBox(
-                  width: 150,
-                  child: Text(
-                    item.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+      builder: (context, ref, _) {
+        final account = ref.watch(personalAccountProvider).asData?.value;
+        final user = ref.watch(authProvider).user;
+        return PortalDrawerTheme(
+          child: NavigationDrawer(
+            tilePadding: const EdgeInsets.symmetric(horizontal: 8),
+            selectedIndex: selected < 0 ? null : selected,
+            onDestinationSelected: (index) => open(drawerItems[index].route),
+            children: [
+              PortalDrawerHeader(
+                name: account?.name.isNotEmpty == true
+                    ? account!.name
+                    : user?.name ?? 'Teacher',
+                subtitle: account?.email.isNotEmpty == true
+                    ? account!.email
+                    : user?.email ?? 'Teacher portal',
+                onTap: () => open('/teacher/account'),
+                avatar: CircleAvatar(
+                  radius: 30,
+                  backgroundColor:
+                      Theme.of(context).colorScheme.primaryContainer,
+                  foregroundColor: kColorPrimary,
+                  child: const Icon(Icons.person_rounded, size: 30),
                 ),
               ),
-            const Divider(indent: 28, endIndent: 28),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(28, 8, 28, 4),
-              child: Text('ACCOUNT'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.manage_accounts_outlined),
-              title: const Text('Profile settings'),
-              onTap: () => open('/teacher/account'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.key_rounded),
-              title: const Text('Change password'),
-              onTap: () => open('/teacher/change-password'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.pin_outlined),
-              title: const Text('Set or change MPIN'),
-              onTap: () => open('/teacher/mpin'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.switch_account_rounded),
-              title: const Text('Switch account'),
-              onTap: () async {
-                Navigator.of(context).pop();
-                final currentId = ref.read(authProvider).user?.id;
-                final accounts = await DeviceAccountVault().accounts();
-                final hasCurrentMpin =
-                    accounts.any((account) => account.userId == currentId);
-                if (!hasCurrentMpin) {
-                  router?.push(
-                    '/teacher/mpin?switchAccount=${accounts.isEmpty ? 'add' : 'accounts'}',
-                  );
-                } else {
-                  router?.push(accounts.length > 1
-                      ? '/teacher/accounts'
-                      : '/teacher/accounts/add');
-                }
-              },
-            ),
-            ListTile(
-              leading: Icon(
-                Icons.logout_rounded,
-                color: Theme.of(context).colorScheme.error,
+              const PortalDrawerSectionLabel('Navigation'),
+              for (final item in drawerItems.take(primaryNavigationItemCount))
+                NavigationDrawerDestination(
+                  icon: Icon(item.icon),
+                  selectedIcon: Icon(item.icon),
+                  label: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 200),
+                    child: Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              const PortalDrawerDivider(),
+              const PortalDrawerSectionLabel('Features'),
+              for (final item in drawerItems.skip(primaryNavigationItemCount))
+                NavigationDrawerDestination(
+                  icon: Icon(item.icon),
+                  selectedIcon: Icon(item.icon),
+                  label: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 200),
+                    child: Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              const PortalDrawerDivider(),
+              const PortalDrawerSectionLabel('Account'),
+              PortalDrawerAction(
+                icon: Icons.manage_accounts_outlined,
+                label: 'Profile settings',
+                useExactAndroidDestinationLayout: true,
+                onTap: () => open('/teacher/account'),
               ),
-              title: Text(
-                'Log out',
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              PortalDrawerAction(
+                icon: Icons.key_rounded,
+                label: 'Change password',
+                useExactAndroidDestinationLayout: true,
+                onTap: () => open('/teacher/change-password'),
               ),
-              onTap: () {
-                Navigator.of(context).pop();
-                ref.read(authProvider.notifier).logout();
-              },
-            ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
+              PortalDrawerAction(
+                icon: Icons.pin_outlined,
+                label: 'Set or change MPIN',
+                useExactAndroidDestinationLayout: true,
+                onTap: () => open('/teacher/mpin'),
+              ),
+              PortalDrawerAction(
+                icon: Icons.switch_account_rounded,
+                label: 'Switch account',
+                useExactAndroidDestinationLayout: true,
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  final currentId = ref.read(authProvider).user?.id;
+                  final accounts = await DeviceAccountVault().accounts();
+                  final hasCurrentMpin =
+                      accounts.any((account) => account.userId == currentId);
+                  if (!hasCurrentMpin) {
+                    router?.push(
+                      '/teacher/mpin?switchAccount=${accounts.isEmpty ? 'add' : 'accounts'}',
+                    );
+                  } else {
+                    router?.push(accounts.length > 1
+                        ? '/teacher/accounts'
+                        : '/teacher/accounts/add');
+                  }
+                },
+              ),
+              PortalDrawerAction(
+                icon: Icons.logout_rounded,
+                label: 'Log out',
+                destructive: true,
+                useExactAndroidDestinationLayout: true,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  ref.read(authProvider.notifier).logout();
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -205,15 +222,18 @@ class TeacherDashboardNavigationBar extends StatelessWidget {
     super.key,
     required this.selectedIndex,
     this.onDestinationSelected,
+    this.onBack,
   });
 
   final int selectedIndex;
   final ValueChanged<int>? onDestinationSelected;
+  final bool Function()? onBack;
 
   @override
   Widget build(BuildContext context) {
     final textScale = MediaQuery.textScalerOf(context).scale(1);
-    return NavigationBar(
+    final router = GoRouter.maybeOf(context);
+    final navigationBar = NavigationBar(
       height: 80.0 + ((textScale - 1).clamp(0.0, 1.0) * 16.0).toDouble(),
       selectedIndex: selectedIndex,
       onDestinationSelected: onDestinationSelected ??
@@ -246,6 +266,13 @@ class TeacherDashboardNavigationBar extends StatelessWidget {
         ),
       ],
     );
+    return router == null
+        ? navigationBar
+        : AndroidBackCoordinator(
+            router: router,
+            onBack: onBack,
+            child: navigationBar,
+          );
   }
 }
 
@@ -254,17 +281,29 @@ class TeacherPortalScaffold extends StatelessWidget {
       {super.key,
       required this.title,
       required this.body,
-      this.floatingActionButton});
+      this.floatingActionButton,
+      this.onBack});
   final String title;
   final Widget body;
   final Widget? floatingActionButton;
+  final bool Function()? onBack;
 
   @override
   Widget build(BuildContext context) {
-    final path =
-        GoRouter.maybeOf(context)?.routeInformationProvider.value.uri.path ??
-            '';
-    final selected = path == '/teacher/messages' ? 2 : 0;
+    var path = '';
+    try {
+      path = GoRouterState.of(context).matchedLocation;
+    } on GoError {
+      path =
+          GoRouter.maybeOf(context)?.routeInformationProvider.value.uri.path ??
+              '';
+    }
+    final selected = switch (path) {
+      '/teacher/messages' => 2,
+      '/teacher/timetable' => 3,
+      '/teacher/home' => 0,
+      _ => 4,
+    };
     return Scaffold(
       drawer: TeacherNavigation.drawer(context),
       appBar: AppBar(title: Text(title)),
@@ -280,8 +319,8 @@ class TeacherPortalScaffold extends StatelessWidget {
         ),
       ),
       floatingActionButton: floatingActionButton,
-      bottomNavigationBar:
-          TeacherDashboardNavigationBar(selectedIndex: selected),
+      bottomNavigationBar: TeacherDashboardNavigationBar(
+          selectedIndex: selected, onBack: onBack),
     );
   }
 }

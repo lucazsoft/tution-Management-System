@@ -14,6 +14,8 @@ import 'package:tms_mobile/features/parent/data/parent_portal_repository.dart';
 import 'package:tms_mobile/features/parent/models/parent_portal.dart';
 import 'package:tms_mobile/features/parent/screens/parent_academics_screen.dart';
 import 'package:tms_mobile/features/parent/screens/parent_attendance_screen.dart';
+import 'package:tms_mobile/features/parent/screens/parent_appointments_screen.dart';
+import 'package:tms_mobile/features/parent/screens/parent_calendar_screen.dart';
 import 'package:tms_mobile/features/parent/screens/parent_fees_screen.dart';
 import 'package:tms_mobile/features/parent/screens/parent_home_screen.dart';
 import 'package:tms_mobile/features/parent/screens/parent_messages_screen.dart';
@@ -23,6 +25,7 @@ Map<String, dynamic> _portalJson({
   String selectedId = 'student-1',
   String selectedName = 'API Child One',
   String invoiceId = 'invoice-api',
+  List<Map<String, dynamic>>? attendance,
 }) =>
     {
       'bookingWindowHours': 36,
@@ -72,22 +75,23 @@ Map<String, dynamic> _portalJson({
           'type': 'Regular',
         },
       ],
-      'attendance': [
-        {
-          'id': 'attendance-1',
-          'date': '6 Sep 2026',
-          'subject': 'API Mathematics',
-          'session': 'Morning API Class',
-          'state': 'Present',
-        },
-        {
-          'id': 'attendance-2',
-          'date': '5 Sep 2026',
-          'subject': 'API Science',
-          'session': 'Afternoon API Class',
-          'state': 'Absent (Excused)',
-        },
-      ],
+      'attendance': attendance ??
+          [
+            {
+              'id': 'attendance-1',
+              'date': '6 Sep 2026',
+              'subject': 'API Mathematics',
+              'session': 'Morning API Class',
+              'state': 'Present',
+            },
+            {
+              'id': 'attendance-2',
+              'date': '5 Sep 2026',
+              'subject': 'API Science',
+              'session': 'Afternoon API Class',
+              'state': 'Absent (Excused)',
+            },
+          ],
       'invoices': [
         {
           'id': invoiceId,
@@ -132,6 +136,21 @@ Map<String, dynamic> _portalJson({
           'initials': 'BS',
           'role': 'BRANCH_ADMIN',
         },
+        {
+          'id': 'staff-api',
+          'name': 'Unassigned Staff',
+          'subject': 'Teaching staff',
+          'initials': 'US',
+          'role': 'STAFF',
+        },
+        {
+          'id': 'other-child-teacher',
+          'childId': 'student-2',
+          'name': 'Other Child Teacher',
+          'subject': 'Science',
+          'initials': 'OT',
+          'role': 'TEACHER',
+        },
       ],
       'messages': [
         {
@@ -145,9 +164,10 @@ Map<String, dynamic> _portalJson({
     };
 
 class _FakeParentPortalRepository extends ParentPortalRepository {
-  _FakeParentPortalRepository() : super(dio: Dio());
+  _FakeParentPortalRepository({this.attendance}) : super(dio: Dio());
 
   final List<String?> selectedIds = [];
+  final List<Map<String, dynamic>>? attendance;
 
   @override
   Future<ParentPortal> fetchPortal({
@@ -161,9 +181,47 @@ class _FakeParentPortalRepository extends ParentPortalRepository {
         selectedId: studentId ?? 'student-1',
         selectedName:
             studentId == 'student-2' ? 'API Child Two' : 'API Child One',
+        attendance: attendance,
       ),
     );
   }
+
+  @override
+  Future<ParentPerformanceDetail> fetchPerformance(
+    String studentId, {
+    CancelToken? cancelToken,
+  }) async =>
+      ParentPerformanceDetail.fromJson({
+        'scores': [
+          {
+            'id': 'score-1',
+            'subject': 'API Mathematics',
+            'assessment': 'First Term',
+            'score': 72,
+            'maximum': 100,
+            'testDate': '2026-04-15T00:00:00.000Z',
+          },
+          {
+            'id': 'score-2',
+            'subject': 'API Mathematics',
+            'assessment': 'Second Term',
+            'score': 84,
+            'maximum': 100,
+            'testDate': '2026-08-15T00:00:00.000Z',
+          },
+        ],
+        'insights': const [],
+        'remarks': [
+          {
+            'id': 'remark-api',
+            'subject': 'API Science',
+            'author': 'API Teacher',
+            'message': 'API progress remark',
+            'date': '6 Sep 2026',
+            'signal': 'Improving',
+          },
+        ],
+      });
 }
 
 class _PendingPortalRequest {
@@ -247,6 +305,7 @@ Future<void> _pumpPortalScreen(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        parentPortalRepositoryProvider.overrideWith((ref) => repository),
         parentPortalProvider.overrideWith(
           (ref) => ParentPortalViewModel(repository: repository),
         ),
@@ -262,6 +321,62 @@ Future<void> _pumpPortalScreen(
 }
 
 void main() {
+  group('parent meeting notice', () {
+    test('requires an explicitly selected booking time', () {
+      expect(
+        parentMeetingTimeValidation(
+          hasSelectedTime: false,
+          scheduled: DateTime(2026, 10, 13, 12, 30),
+        ),
+        'Enter the time to book.',
+      );
+      expect(
+        parentMeetingTimeValidation(
+          hasSelectedTime: true,
+          scheduled: DateTime(2026, 10, 13, 12, 30),
+        ),
+        isNull,
+      );
+    });
+
+    test('requires exactly 30 minutes when current time is on a minute', () {
+      final now = DateTime(2026, 10, 13, 12);
+      expect(parentMeetingEarliest(now), DateTime(2026, 10, 13, 12, 30));
+    });
+
+    test('rounds up so minute-only picker values cannot be under 30 minutes',
+        () {
+      final now = DateTime(2026, 10, 13, 12, 0, 29);
+      expect(parentMeetingEarliest(now), DateTime(2026, 10, 13, 12, 31));
+    });
+
+    test('limits advance booking to 30 days', () {
+      final earliest = DateTime(2026, 10, 13, 12, 30);
+      expect(parentMeetingLatest(earliest), DateTime(2026, 11, 12, 12, 30));
+    });
+
+    test('blocks Saturdays and published holidays', () {
+      final holidayKeys = parentMeetingHolidayKeys(const [
+        ParentEventItem(
+          id: 'holiday-1',
+          day: '09',
+          month: 'Oct',
+          date: '2026-10-09',
+          title: 'School holiday',
+          kind: 'Holiday',
+          details: '',
+        ),
+      ]);
+
+      expect(parentMeetingDayAvailable(DateTime(2026, 10, 9), holidayKeys),
+          isFalse);
+      expect(parentMeetingDayAvailable(DateTime(2026, 10, 10), holidayKeys),
+          isFalse);
+      expect(parentMeetingDayAvailable(DateTime(2026, 10, 11), holidayKeys),
+          isTrue);
+    });
+  });
+
   group('ParentPortalRepository', () {
     test('sends authorized student selector and parses portal DTOs', () async {
       final dio = ApiClient.buildDio(
@@ -814,17 +929,29 @@ void main() {
     );
   });
 
-  testWidgets('home renders API data and switches by student id',
+  testWidgets('home opens child picker after a 250ms hold and switches child',
       (tester) async {
     final repository = _FakeParentPortalRepository();
     await _pumpPortalScreen(tester, const ParentHomeScreen(), repository);
 
-    expect(find.text('API Child One'), findsWidgets);
+    expect(
+      find.text('API Child One · Grade 8'),
+      findsOneWidget,
+    );
     expect(find.text('80%'), findsWidgets);
     expect(find.text('Aarav'), findsNothing);
 
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    final hold = await tester.startGesture(
+      tester.getCenter(find.text('80%').first),
+    );
+    await tester.pump(const Duration(milliseconds: 249));
+    expect(find.text('Switch child'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 1));
+    await hold.up();
     await tester.pumpAndSettle();
+
+    expect(find.text('Switch child'), findsOneWidget);
     await tester.tap(find.text('API Child Two').last);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -833,21 +960,64 @@ void main() {
     expect(find.text('100%'), findsWidgets);
   });
 
+  testWidgets('home hero reports when the child is absent today',
+      (tester) async {
+    final now = DateTime.now();
+    final repository = _FakeParentPortalRepository(attendance: [
+      {
+        'id': 'attendance-today',
+        'date':
+            '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
+        'occurredAt': now.toIso8601String(),
+        'subject': 'Daily attendance',
+        'session': 'School day',
+        'state': 'Absent',
+      },
+    ]);
+
+    await _pumpPortalScreen(tester, const ParentHomeScreen(), repository);
+
+    expect(
+      find.text('Welcome! Your child was absent today.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Nepal time'), findsOneWidget);
+  });
+
   testWidgets('attendance renders API records without demo dates',
       (tester) async {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final now = DateTime.now();
+    final expectedDate = '${now.day} ${months[now.month - 1]} ${now.year}';
     await _pumpPortalScreen(
       tester,
       const ParentAttendanceScreen(),
-      _FakeParentPortalRepository(),
+      _FakeParentPortalRepository(attendance: [
+        {
+          'id': 'attendance-current-month',
+          'date': expectedDate,
+          'occurredAt': now.toIso8601String(),
+          'subject': 'API Mathematics',
+          'session': 'Morning API Class',
+          'state': 'Present',
+        },
+      ]),
     );
 
-    // The screen defaults to the current month; the fixture records are
-    // fixed in Sep 2026, so view all records to keep this independent of
-    // the date the suite runs on.
-    await tester.tap(find.text('All'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('6 Sep 2026'), findsOneWidget);
+    expect(find.text(expectedDate), findsOneWidget);
     expect(find.textContaining('Morning API Class'), findsOneWidget);
     expect(find.text('Fri, Jul 18'), findsNothing);
   });
@@ -865,16 +1035,41 @@ void main() {
     expect(find.textContaining('July 2026'), findsNothing);
   });
 
-  testWidgets('academics renders API remarks without demo curriculum',
+  testWidgets('calendar content keeps horizontal spacing from screen edges',
       (tester) async {
     await _pumpPortalScreen(
       tester,
-      const ParentAcademicsScreen(),
+      const ParentCalendarScreen(),
       _FakeParentPortalRepository(),
     );
 
+    final description = find.text(
+      "API Child One's holidays, exams, ceremonies, and fee deadlines.",
+    );
+    expect(description, findsOneWidget);
+    expect(tester.getTopLeft(description).dx, greaterThanOrEqualTo(16));
+    expect(
+      tester.getTopRight(description).dx,
+      lessThanOrEqualTo(tester.view.physicalSize.width - 16),
+    );
+  });
+
+  testWidgets('academics renders API remarks without demo curriculum',
+      (tester) async {
+    final repository = _FakeParentPortalRepository();
+    await _pumpPortalScreen(
+      tester,
+      const ParentAcademicsScreen(),
+      repository,
+    );
+    await tester.pumpAndSettle();
+
     expect(find.text('API progress remark'), findsOneWidget);
     expect(find.text('API Science'), findsWidgets);
+    expect(find.text('Score trend'), findsOneWidget);
+    expect(find.text('Improving by 12.0 points'), findsOneWidget);
+    expect(find.text('Latest'), findsOneWidget);
+    expect(find.text('84%'), findsWidgets);
     expect(find.text('Algebraic Expressions'), findsNothing);
   });
 
@@ -886,10 +1081,33 @@ void main() {
       _FakeParentPortalRepository(),
     );
 
-    expect(find.text('Authorized contacts'), findsOneWidget);
+    expect(find.text('Recent chats'), findsOneWidget);
+    expect(find.text('New chat'), findsOneWidget);
+    expect(find.byIcon(Icons.search_rounded), findsOneWidget);
     expect(find.text('Teacher API'), findsWidgets);
     expect(find.text('Branch Support'), findsOneWidget);
-    expect(find.text('API message about your child'), findsOneWidget);
+    expect(find.text('Unassigned Staff'), findsNothing);
+    expect(find.text('Other Child Teacher'), findsNothing);
+    expect(find.text('API message about your child'), findsWidgets);
     expect(find.text('Message about API Child One'), findsOneWidget);
+  });
+
+  testWidgets('messages opens a contact without an existing thread',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await _pumpPortalScreen(
+      tester,
+      const ParentMessagesScreen(),
+      _FakeParentPortalRepository(),
+    );
+
+    await tester.tap(find.text('Branch Support'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Say hello'), findsOneWidget);
+    expect(find.text('Send a message about API Child One.'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Message about API Child One'),
+        findsOneWidget);
   });
 }

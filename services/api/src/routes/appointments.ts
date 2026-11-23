@@ -9,6 +9,15 @@ import { canAccessBranch, isTenantAdmin, managedBranchIds } from '../utils/acces
 
 const router = Router();
 
+const androidAppointmentNoticeMs = 30 * 60 * 1000;
+const isAndroidClient = (body: any) => body?.clientPlatform === 'ANDROID';
+const appointmentMinimum = (body: any, windowHours: number) =>
+  isAndroidClient(body)
+    ? Math.floor((Date.now() + androidAppointmentNoticeMs) / 60000) * 60000
+    : Date.now() + windowHours * 60 * 60 * 1000;
+const appointmentNoticeLabel = (body: any, windowHours: number) =>
+  isAndroidClient(body) ? '30 minutes' : `${windowHours} hours`;
+
 async function linkedStudent(parentUserId: string, tenantId: string, studentId: string) {
   return prisma.student.findFirst({
     where: {
@@ -81,9 +90,9 @@ router.post('/request', authMiddleware, async (req: TenantRequest, res: Response
     if (!student || !tenant) return res.status(404).json({ error: 'Linked student was not found.' });
     const scheduledDate = new Date(scheduledTime);
     if (Number.isNaN(scheduledDate.getTime())) return res.status(422).json({ error: 'Choose a valid appointment date and time.' });
-    const minimum = Date.now() + tenant.appointmentWindowHours * 60 * 60 * 1000;
+    const minimum = appointmentMinimum(req.body, tenant.appointmentWindowHours);
     if (scheduledDate.getTime() < minimum) {
-      return res.status(422).json({ error: `Appointments must be scheduled at least ${tenant.appointmentWindowHours} hours in advance.` });
+      return res.status(422).json({ error: `Appointments must be scheduled at least ${appointmentNoticeLabel(req.body, tenant.appointmentWindowHours)} in advance.` });
     }
 
     const assignedTeacherIds = new Set(student.enrollments.map((enrollment) => enrollment.class.teacherId).filter((id): id is string => Boolean(id)));
@@ -225,9 +234,10 @@ router.post('/parent-respond/:appointmentId', authMiddleware, async (req: Tenant
     }
     const alternativeDate = new Date(req.body?.alternativeSlot);
     const tenant = await prisma.tenant.findUnique({ where: { id: req.tenantId! }, select: { appointmentWindowHours: true } });
-    const minimum = Date.now() + (tenant?.appointmentWindowHours ?? 24) * 3600000;
+    const windowHours = tenant?.appointmentWindowHours ?? 24;
+    const minimum = appointmentMinimum(req.body, windowHours);
     if (!Number.isFinite(alternativeDate.getTime()) || alternativeDate.getTime() < minimum) {
-      return res.status(422).json({ error: `Choose a time at least ${tenant?.appointmentWindowHours ?? 24} hours in advance.` });
+      return res.status(422).json({ error: `Choose a time at least ${appointmentNoticeLabel(req.body, windowHours)} in advance.` });
     }
     const participants = (Array.isArray(appointment.participantIds) ? appointment.participantIds : [appointment.teacherId]).filter((id): id is string => typeof id === 'string');
     const updated = await prisma.appointment.update({
@@ -244,6 +254,153 @@ router.post('/parent-respond/:appointmentId', authMiddleware, async (req: Tenant
     return res.json({ message: 'Another time proposed.', appointment: updated });
   } catch (error: any) {
     return res.status(500).json({ error: 'Failed to update appointment negotiation.', details: error.message });
+  }
+});
+
+router.patch('/:appointmentId', authMiddleware, async (req: TenantRequest, res: Response) => {
+  const scheduledTime = new Date(req.body?.scheduledTime);
+  const remarks = typeof req.body?.remarks === 'string' ? req.body.remarks.trim() : '';
+  if (!Number.isFinite(scheduledTime.getTime()) || scheduledTime.getTime() <= Date.now()) {
+    return res.status(422).json({ error: 'Choose a valid future appointment date and time.' });
+  }
+  if (!remarks || remarks.length > 5000) {
+    return res.status(400).json({ error: 'A meeting reason of at most 5000 characters is required.' });
+  }
+  try {
+    const appointment = await prisma.appointment.findFirst({
+      where: { id: req.params.appointmentId, tenantId: req.tenantId! },
+    });
+    if (!appointment) return res.status(404).json({ error: 'Appointment not found.' });
+    if (['REJECTED', 'CANCELLED', 'COMPLETED'].includes(appointment.status)) {
+      return res.status(409).json({ error: 'Closed appointments cannot be edited.' });
+    }
+    const participants = (Array.isArray(appointment.participantIds)
+      ? appointment.participantIds
+      : [appointment.teacherId]).filter((id): id is string => typeof id === 'string');
+    const isParent = appointment.requestedById === req.user!.id;
+    const isParticipant = participants.includes(req.user!.id);
+    if (!isParent && !isParticipant) return res.status(403).json({ error: 'You cannot edit this appointment.' });
+    if (isParent && appointment.status !== 'REQUESTED') {
+      return res.status(409).json({ error: 'Only pending requests can be edited. Use reschedule for confirmed meetings.' });
+    }
+    if (isParent) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: req.tenantId! },
+        select: { appointmentWindowHours: true },
+      });
+      const windowHours = tenant?.appointmentWindowHours ?? 24;
+      const minimum = appointmentMinimum(req.body, windowHours);
+      if (scheduledTime.getTime() < minimum) {
+        return res.status(422).json({
+          error: `Appointments must be scheduled at least ${appointmentNoticeLabel(req.body, windowHours)} in advance.`,
+        });
+      }
+    }
+
+    const updated = isParent
+      ? await prisma.appointment.update({
+          where: { id: appointment.id },
+          data: { scheduledTime, remarks, responseRemarks: null },
+        })
+      : await prisma.appointment.update({
+          where: { id: appointment.id },
+          data: {
+            status: 'ALTERNATIVE_PROPOSED',
+            alternativeTime: scheduledTime,
+            proposedById: req.user!.id,
+            responseRemarks: remarks,
+            participantApprovals: Object.fromEntries(participants.map((id) => [id, 'PENDING'])),
+          },
+        });
+    await notifyAppointmentUsers(
+      req.tenantId!,
+      isParent ? participants : [appointment.requestedById],
+      'Appointment updated',
+      isParent ? 'A parent updated a pending meeting request.' : 'A teacher proposed an updated meeting time.',
+      isParent ? '/teacher/meetings' : '/parent/appointments',
+      appointment.id,
+    );
+    return res.json({ message: 'Appointment updated.', appointment: updated });
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Failed to update appointment.', details: error.message });
+  }
+});
+
+router.post('/cancel/:appointmentId', authMiddleware, async (req: TenantRequest, res: Response) => {
+  const remarks = typeof req.body?.remarks === 'string' ? req.body.remarks.trim() : '';
+  try {
+    const appointment = await prisma.appointment.findFirst({
+      where: { id: req.params.appointmentId, tenantId: req.tenantId! },
+    });
+    if (!appointment) return res.status(404).json({ error: 'Appointment not found.' });
+    if (['REJECTED', 'CANCELLED', 'COMPLETED'].includes(appointment.status)) {
+      return res.status(409).json({ error: 'This appointment is already closed.' });
+    }
+    const participants = (Array.isArray(appointment.participantIds)
+      ? appointment.participantIds
+      : [appointment.teacherId]).filter((id): id is string => typeof id === 'string');
+    const isParent = appointment.requestedById === req.user!.id;
+    if (!isParent && !participants.includes(req.user!.id)) {
+      return res.status(403).json({ error: 'You cannot cancel this appointment.' });
+    }
+    const updated = await prisma.appointment.update({
+      where: { id: appointment.id },
+      data: {
+        status: 'CANCELLED',
+        alternativeTime: null,
+        proposedById: null,
+        responseRemarks: remarks || `Cancelled by ${isParent ? 'parent' : 'teacher'}.`,
+      },
+    });
+    await notifyAppointmentUsers(
+      req.tenantId!,
+      isParent ? participants : [appointment.requestedById],
+      'Appointment cancelled',
+      remarks || `The meeting was cancelled by the ${isParent ? 'parent' : 'teacher'}.`,
+      isParent ? '/teacher/meetings' : '/parent/appointments',
+      appointment.id,
+    );
+    return res.json({ message: 'Appointment cancelled.', appointment: updated });
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Failed to cancel appointment.', details: error.message });
+  }
+});
+
+router.post('/complete/:appointmentId', authMiddleware, async (req: TenantRequest, res: Response) => {
+  try {
+    const appointment = await prisma.appointment.findFirst({
+      where: { id: req.params.appointmentId, tenantId: req.tenantId! },
+    });
+    if (!appointment) return res.status(404).json({ error: 'Appointment not found.' });
+    const participants = (Array.isArray(appointment.participantIds)
+      ? appointment.participantIds
+      : [appointment.teacherId]).filter((id): id is string => typeof id === 'string');
+    if (!participants.includes(req.user!.id)) {
+      return res.status(403).json({ error: 'Only participating staff can complete this meeting.' });
+    }
+    if (!['APPROVED', 'CONFIRMED'].includes(appointment.status)) {
+      return res.status(409).json({ error: 'Only an approved meeting can be marked completed.' });
+    }
+    const updated = await prisma.appointment.update({
+      where: { id: appointment.id },
+      data: {
+        status: 'COMPLETED',
+        alternativeTime: null,
+        proposedById: null,
+        responseRemarks: 'Meeting completed.',
+      },
+    });
+    await notifyAppointmentUsers(
+      req.tenantId!,
+      [appointment.requestedById],
+      'Meeting completed',
+      'The teacher marked your meeting as completed.',
+      '/parent/appointments',
+      appointment.id,
+    );
+    return res.json({ message: 'Meeting marked completed.', appointment: updated });
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Failed to complete meeting.', details: error.message });
   }
 });
 router.get('/branch', authMiddleware, async (req: TenantRequest, res: Response) => {

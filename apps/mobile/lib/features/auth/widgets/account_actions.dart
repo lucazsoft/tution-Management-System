@@ -32,8 +32,10 @@ class AccountActions extends ConsumerWidget {
               onTap: () => context.push(_mpinRoute)),
           ListTile(
             leading: const Icon(Icons.switch_account_rounded),
-            title: const Text('Switch account'),
-            subtitle: const Text('Sign in with another account on this device'),
+            title: const Text('Switch or manage accounts'),
+            subtitle: const Text(
+              'Switch, add, or remove saved accounts on this device',
+            ),
             onTap: () async {
               final currentId = ref.read(authProvider).user?.id;
               final accounts = await DeviceAccountVault().accounts();

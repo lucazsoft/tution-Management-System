@@ -1,23 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tms_mobile/core/navigation/android_back_coordinator.dart';
 import 'package:tms_mobile/core/providers/auth_provider.dart';
 import 'package:tms_mobile/features/auth/data/device_account_vault.dart';
+import 'package:tms_mobile/features/auth/data/account_repository.dart';
 import 'package:tms_mobile/core/theme/app_theme.dart';
+import 'package:tms_mobile/shared/widgets/portal_navigation_drawer.dart';
 
 /// Shared navigation chrome for every top-level parent destination.
 abstract final class ParentNavigation {
+  static const primaryNavigationItemCount = 4;
+
   static const drawerItems = <({String label, IconData icon, String route})>[
     (label: 'Home', icon: Icons.home_outlined, route: '/parent/home'),
+    (label: 'Classes', icon: Icons.school_outlined, route: '/parent/academics'),
+    (label: 'Chat', icon: Icons.forum_outlined, route: '/parent/messages'),
+    (
+      label: 'Meetings',
+      icon: Icons.event_outlined,
+      route: '/parent/appointments'
+    ),
     (
       label: 'Notifications',
       icon: Icons.notifications_outlined,
       route: '/parent/notifications'
-    ),
-    (
-      label: 'Academics',
-      icon: Icons.school_outlined,
-      route: '/parent/academics'
     ),
     (
       label: 'Timetable',
@@ -49,12 +56,6 @@ abstract final class ParentNavigation {
       icon: Icons.campaign_outlined,
       route: '/parent/notices'
     ),
-    (label: 'Messages', icon: Icons.forum_outlined, route: '/parent/messages'),
-    (
-      label: 'Meetings',
-      icon: Icons.event_available_outlined,
-      route: '/parent/appointments'
-    ),
   ];
 
   static const routes = <String>[
@@ -70,15 +71,12 @@ abstract final class ParentNavigation {
       return;
     }
     final route = routes[index];
-    if (GoRouterState.of(context).matchedLocation != route) context.go(route);
+    if (GoRouterState.of(context).matchedLocation == route) return;
+    index == 0 ? context.go(route) : context.push(route);
   }
 
   static void back(BuildContext context) {
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go('/parent/home');
-    }
+    context.go('/parent/home');
   }
 
   static Widget drawer(BuildContext context) {
@@ -100,144 +98,187 @@ abstract final class ParentNavigation {
     }
 
     return Consumer(
-      builder: (context, ref, _) => Theme(
-        data: Theme.of(context).copyWith(
-          navigationDrawerTheme: NavigationDrawerThemeData(
-            backgroundColor: Colors.white,
-            surfaceTintColor: Colors.transparent,
-            indicatorColor: kColorPrimary.withValues(alpha: .10),
-            iconTheme: const WidgetStatePropertyAll(
-              IconThemeData(color: kColorPrimary, size: 24),
-            ),
-          ),
-          listTileTheme: const ListTileThemeData(
-            iconColor: kColorPrimary,
-            minLeadingWidth: 24,
-            horizontalTitleGap: 16,
-          ),
-        ),
-        child: NavigationDrawer(
-          selectedIndex: selected < 0 ? null : selected,
-          onDestinationSelected: (index) => open(drawerItems[index].route),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(28, 28, 28, 18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CircleAvatar(
-                    radius: 30,
-                    backgroundColor:
-                        Theme.of(context).colorScheme.primaryContainer,
-                    child: const Icon(Icons.family_restroom_rounded, size: 30),
+      builder: (context, ref, _) {
+        final account = ref.watch(personalAccountProvider).asData?.value;
+        final user = ref.watch(authProvider).user;
+        return PortalDrawerTheme(
+          child: NavigationDrawer(
+            tilePadding: const EdgeInsets.symmetric(horizontal: 8),
+            selectedIndex: selected < 0 ? null : selected,
+            onDestinationSelected: (index) => open(drawerItems[index].route),
+            children: [
+              PortalDrawerHeader(
+                name: account?.name.isNotEmpty == true
+                    ? account!.name
+                    : user?.name ?? 'Parent',
+                subtitle: account?.email.isNotEmpty == true
+                    ? account!.email
+                    : user?.email ?? 'Parent portal',
+                onTap: () => open('/parent/account'),
+                avatar: CircleAvatar(
+                  radius: 30,
+                  backgroundColor:
+                      Theme.of(context).colorScheme.primaryContainer,
+                  foregroundColor: kColorPrimary,
+                  child: const Icon(Icons.family_restroom_rounded, size: 30),
+                ),
+              ),
+              const PortalDrawerSectionLabel('Navigation'),
+              for (final item in drawerItems.take(primaryNavigationItemCount))
+                NavigationDrawerDestination(
+                  icon: Icon(item.icon),
+                  selectedIcon: Icon(item.icon),
+                  label: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 200),
+                    child: Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  Text(ref.watch(authProvider).user?.name ?? 'Parent',
-                      style: Theme.of(context).textTheme.titleLarge),
-                  Text(ref.watch(authProvider).user?.email ?? 'Parent portal',
-                      style: Theme.of(context).textTheme.bodySmall),
-                ],
+                ),
+              const PortalDrawerDivider(),
+              const PortalDrawerSectionLabel('Features'),
+              for (final item in drawerItems.skip(primaryNavigationItemCount))
+                NavigationDrawerDestination(
+                  icon: Icon(item.icon),
+                  selectedIcon: Icon(item.icon),
+                  label: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 200),
+                    child: Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              const PortalDrawerDivider(),
+              const PortalDrawerSectionLabel('Account'),
+              PortalDrawerAction(
+                icon: Icons.manage_accounts_outlined,
+                label: 'Profile settings',
+                useExactAndroidDestinationLayout: true,
+                onTap: () => open('/parent/account'),
               ),
-            ),
-            for (final item in drawerItems)
-              NavigationDrawerDestination(
-                icon: Icon(item.icon),
-                selectedIcon: Icon(item.icon),
-                label: Text(item.label),
+              PortalDrawerAction(
+                icon: Icons.key_rounded,
+                label: 'Change password',
+                useExactAndroidDestinationLayout: true,
+                onTap: () => open('/parent/change-password'),
               ),
-            const Divider(indent: 28, endIndent: 28),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(28, 8, 28, 4),
-              child: Text('ACCOUNT'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.manage_accounts_outlined),
-              title: const Text('Profile settings'),
-              onTap: () => open('/parent/account'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.key_rounded),
-              title: const Text('Change password'),
-              onTap: () => open('/parent/change-password'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.pin_outlined),
-              title: const Text('Set or change MPIN'),
-              onTap: () => open('/parent/mpin'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.switch_account_rounded),
-              title: const Text('Switch account'),
-              onTap: () async {
-                Navigator.of(context).pop();
-                final currentId = ref.read(authProvider).user?.id;
-                final accounts = await DeviceAccountVault().accounts();
-                final hasCurrentMpin =
-                    accounts.any((account) => account.userId == currentId);
-                if (!hasCurrentMpin) {
-                  router?.push(
-                    '/parent/mpin?switchAccount=${accounts.isEmpty ? 'add' : 'accounts'}',
-                  );
-                } else {
-                  router?.push(accounts.length > 1
-                      ? '/parent/accounts'
-                      : '/parent/accounts/add');
-                }
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.logout_rounded,
-                  color: Theme.of(context).colorScheme.error),
-              title: Text('Log out',
-                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
-              onTap: () {
-                Navigator.of(context).pop();
-                ref.read(authProvider.notifier).logout();
-              },
-            ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
+              PortalDrawerAction(
+                icon: Icons.pin_outlined,
+                label: 'Set or change MPIN',
+                useExactAndroidDestinationLayout: true,
+                onTap: () => open('/parent/mpin'),
+              ),
+              PortalDrawerAction(
+                icon: Icons.switch_account_rounded,
+                label: 'Switch account',
+                useExactAndroidDestinationLayout: true,
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  final currentId = ref.read(authProvider).user?.id;
+                  final accounts = await DeviceAccountVault().accounts();
+                  final hasCurrentMpin =
+                      accounts.any((account) => account.userId == currentId);
+                  if (!hasCurrentMpin) {
+                    router?.push(
+                      '/parent/mpin?switchAccount=${accounts.isEmpty ? 'add' : 'accounts'}',
+                    );
+                  } else {
+                    router?.push(accounts.length > 1
+                        ? '/parent/accounts'
+                        : '/parent/accounts/add');
+                  }
+                },
+              ),
+              PortalDrawerAction(
+                icon: Icons.logout_rounded,
+                label: 'Log out',
+                destructive: true,
+                useExactAndroidDestinationLayout: true,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  ref.read(authProvider.notifier).logout();
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
     );
   }
 }
 
 class ParentNavigationBar extends StatelessWidget {
-  const ParentNavigationBar({super.key, required this.selectedIndex});
+  const ParentNavigationBar({
+    super.key,
+    required this.selectedIndex,
+    this.coordinateSystemBack = true,
+    this.onBack,
+  });
 
   final int selectedIndex;
+  final bool coordinateSystemBack;
+  final bool Function()? onBack;
 
   @override
-  Widget build(BuildContext context) => NavigationBar(
-        selectedIndex: selectedIndex,
-        onDestinationSelected: (index) => ParentNavigation.open(context, index),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.school_outlined),
-            selectedIcon: Icon(Icons.school_rounded),
-            label: 'Classes',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.forum_outlined),
-            selectedIcon: Icon(Icons.forum_rounded),
-            label: 'Chat',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.event_outlined),
-            selectedIcon: Icon(Icons.event_rounded),
-            label: 'Meetings',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.more_horiz_rounded),
-            selectedIcon: Icon(Icons.more_rounded),
-            label: 'More',
-          ),
-        ],
-      );
+  Widget build(BuildContext context) {
+    final router = GoRouter.maybeOf(context);
+    String? path;
+    try {
+      path = GoRouterState.of(context).matchedLocation;
+    } on GoError {
+      path = router?.routeInformationProvider.value.uri.path;
+    }
+    final effectiveSelectedIndex = switch (path) {
+      '/parent/home' => 0,
+      '/parent/academics' || '/parent/timetable' => 1,
+      '/parent/messages' => 2,
+      '/parent/appointments' => 3,
+      null => selectedIndex,
+      _ => 4,
+    };
+    final navigationBar = NavigationBar(
+      selectedIndex: effectiveSelectedIndex,
+      onDestinationSelected: (index) => ParentNavigation.open(context, index),
+      destinations: const [
+        NavigationDestination(
+          icon: Icon(Icons.home_outlined),
+          selectedIcon: Icon(Icons.home_rounded),
+          label: 'Home',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.school_outlined),
+          selectedIcon: Icon(Icons.school_rounded),
+          label: 'Classes',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.forum_outlined),
+          selectedIcon: Icon(Icons.forum_rounded),
+          label: 'Chat',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.event_outlined),
+          selectedIcon: Icon(Icons.event_rounded),
+          label: 'Meetings',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.more_horiz_rounded),
+          selectedIcon: Icon(Icons.more_rounded),
+          label: 'More',
+        ),
+      ],
+    );
+    if (!coordinateSystemBack) return navigationBar;
+    return router == null
+        ? navigationBar
+        : AndroidBackCoordinator(
+            router: router,
+            onBack: onBack,
+            child: navigationBar,
+          );
+  }
 }
