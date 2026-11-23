@@ -1,0 +1,197 @@
+import assert from 'node:assert/strict';
+import {
+  createConfiguredFirebaseProvider,
+  pushTokenErrorIsPermanent,
+  createPushNotificationService,
+} from './push-notification';
+
+const cases: Array<[string, () => Promise<void>]> = [];
+const test = (name: string, run: () => Promise<void>) => cases.push([name, run]);
+
+test('push delivery loads only tenant-scoped tokens for the requested user', async () => {
+  let query: any;
+  let delivery: any;
+  const service = createPushNotificationService({
+    tokenStore: {
+      findMany: async (args: any) => {
+        query = args;
+        return [{ token: 'token-a' }, { token: 'token-b' }];
+      },
+    },
+    provider: {
+      send: async (tokens, message) => {
+        delivery = { tokens, message };
+        return { successCount: 2, failureCount: 0 };
+      },
+    },
+    logger: { warn: () => undefined },
+  });
+
+  const result = await service.sendPush(
+    'tenant-a',
+    'user-a',
+    'Schedule changed',
+    'Your class moved.',
+    { deepLink: '/teacher/timetable' },
+  );
+
+  assert.deepEqual(query, {
+    where: { tenantId: 'tenant-a', userId: 'user-a' },
+    select: { token: true },
+  });
+  assert.deepEqual(delivery, {
+    tokens: ['token-a', 'token-b'],
+    message: {
+      title: 'Schedule changed',
+      body: 'Your class moved.',
+      data: { deepLink: '/teacher/timetable' },
+    },
+  });
+  assert.deepEqual(result, { success: true, sent: 2, failed: 0 });
+});
+
+test('push delivery safely skips when Firebase is not configured', async () => {
+  const warnings: Array<Record<string, unknown>> = [];
+  const service = createPushNotificationService({
+    tokenStore: { findMany: async () => [{ token: 'secret-device-token' }] },
+    provider: null,
+    logger: { warn: (entry) => warnings.push(entry) },
+  });
+
+  const result = await service.sendPush('tenant-a', 'user-a', 'Title', 'Body');
+  assert.deepEqual(result, { success: false, sent: 0, failed: 0, skipped: true });
+  assert.equal(JSON.stringify(warnings).includes('secret-device-token'), false);
+  assert.equal(warnings[0]?.event, 'PUSH_PROVIDER_UNCONFIGURED');
+});
+
+test('provider errors fail open without leaking device tokens', async () => {
+  const warnings: Array<Record<string, unknown>> = [];
+  const service = createPushNotificationService({
+    tokenStore: { findMany: async () => [{ token: 'secret-device-token' }] },
+    provider: { send: async () => { throw new Error('provider unavailable: secret-device-token'); } },
+    logger: { warn: (entry) => warnings.push(entry) },
+  });
+
+  const result = await service.sendPush('tenant-a', 'user-a', 'Title', 'Body');
+  assert.deepEqual(result, { success: false, sent: 0, failed: 1 });
+  assert.equal(JSON.stringify(warnings).includes('secret-device-token'), false);
+  assert.equal(warnings[0]?.event, 'PUSH_DELIVERY_FAILED');
+});
+
+test('multi-user push uses one tenant-scoped token query and prunes dead tokens', async () => {
+  let query: any;
+  let pruned: any;
+  let delivered: string[] = [];
+  const service = createPushNotificationService({
+    tokenStore: {
+      findMany: async (args: any) => { query = args; return [{ token: 'live' }, { token: 'dead' }, { token: 'live' }]; },
+      deleteMany: async (args: any) => { pruned = args; return { count: 1 }; },
+    },
+    provider: {
+      send: async (tokens) => { delivered = tokens; return { successCount: 1, failureCount: 1, invalidTokens: ['dead'] }; },
+    },
+    logger: { warn: () => undefined },
+  });
+
+  const result = await service.sendPushToUsers('tenant-a', ['u1', 'u2', 'u1'], 'Exam: Finals', 'Mon', { deepLink: '/student/calendar' });
+  assert.deepEqual(query, { where: { tenantId: 'tenant-a', userId: { in: ['u1', 'u2'] } }, select: { token: true } });
+  assert.deepEqual(delivered, ['live', 'dead']);
+  assert.deepEqual(pruned, { where: { tenantId: 'tenant-a', token: { in: ['dead'] } } });
+  assert.deepEqual(result, { success: false, sent: 1, failed: 1 });
+});
+
+test('multi-user push with no recipients does not query tokens', async () => {
+  let queried = false;
+  const service = createPushNotificationService({
+    tokenStore: { findMany: async () => { queried = true; return []; } },
+    provider: null,
+    logger: { warn: () => undefined },
+  });
+  assert.deepEqual(await service.sendPushToUsers('tenant-a', [], 'T', 'B'), { success: false, sent: 0, failed: 0, skipped: true });
+  assert.equal(queried, false);
+});
+
+test('a recipient with no registered device is skipped, not delivered', async () => {
+  const service = createPushNotificationService({
+    tokenStore: { findMany: async () => [] },
+    provider: { send: async () => { throw new Error('must not send'); } },
+    logger: { warn: () => undefined },
+  });
+  assert.deepEqual(await service.sendPush('tenant-a', 'user-a', 'Title', 'Body'),
+    { success: false, sent: 0, failed: 0, skipped: true });
+});
+
+test('Firebase is opt-in even when credential-shaped values exist', async () => {
+  assert.equal(createConfiguredFirebaseProvider({
+    PUSH_PROVIDER: 'DISABLED', FIREBASE_PROJECT_ID: 'test-project',
+    FIREBASE_CLIENT_EMAIL: 'service@example.test', FIREBASE_PRIVATE_KEY: 'test-only',
+  }), null);
+});
+
+test('payload errors do not permanently remove registration tokens', async () => {
+  assert.equal(pushTokenErrorIsPermanent('messaging/invalid-argument'), false);
+  assert.equal(pushTokenErrorIsPermanent('messaging/registration-token-not-registered'), true);
+  assert.equal(pushTokenErrorIsPermanent('messaging/invalid-registration-token'), true);
+});
+
+test('Firebase provider is created only with complete credentials', async () => {
+  assert.equal(createConfiguredFirebaseProvider({}), null);
+  assert.equal(createConfiguredFirebaseProvider({ PUSH_PROVIDER: 'FIREBASE', FIREBASE_PROJECT_ID: 'project-only' }), null);
+  assert.equal(createConfiguredFirebaseProvider({
+    PUSH_PROVIDER: 'FIREBASE',
+    FIREBASE_PROJECT_ID: 'project',
+    FIREBASE_CLIENT_EMAIL: 'firebase@example.test',
+    FIREBASE_PRIVATE_KEY: 'not-a-real-private-key',
+  }), null);
+});
+
+test('recipient policy blocks single-user delivery before querying tokens', async () => {
+  let queried = false;
+  const service = createPushNotificationService({
+    tokenStore: { findMany: async () => { queried = true; return [{ token: 'must-not-send' }]; } },
+    provider: { send: async () => { throw new Error('must not send'); } },
+    recipientPolicy: () => false,
+    logger: { warn: () => undefined },
+  });
+  assert.deepEqual(await service.sendPush('tenant-a', 'user-a', 'T', 'B'),
+    { success: false, sent: 0, failed: 0, skipped: true });
+  assert.equal(queried, false);
+});
+
+test('recipient policy filters mixed bulk audiences within the exact tenant', async () => {
+  let query: any;
+  let sends = 0;
+  const service = createPushNotificationService({
+    tokenStore: { findMany: async (args) => { query = args; return [{ token: 'approved-token' }]; } },
+    provider: { send: async () => { sends++; return { successCount: 1, failureCount: 0 }; } },
+    recipientPolicy: (tenant, user) => tenant === 'approved-tenant' && user === 'approved-user',
+    logger: { warn: () => undefined },
+  });
+  await service.sendPushToUsers('approved-tenant', ['other', 'approved-user', 'other'], 'T', 'B');
+  assert.deepEqual(query.where, { tenantId: 'approved-tenant', userId: { in: ['approved-user'] } });
+  assert.equal(sends, 1);
+  assert.deepEqual(await service.sendPushToUsers('other-tenant', ['approved-user'], 'T', 'B'),
+    { success: false, sent: 0, failed: 0, skipped: true });
+  assert.equal(sends, 1);
+});
+
+test('unreadable private-key file fails closed without falling back to an environment key', async () => {
+  assert.equal(createConfiguredFirebaseProvider({ PUSH_PROVIDER: 'FIREBASE',
+    FIREBASE_PROJECT_ID: 'test-project', FIREBASE_CLIENT_EMAIL: 'sender@example.test',
+    FIREBASE_PRIVATE_KEY_FILE: '/path-that-does-not-exist/tms-key.pem', FIREBASE_PRIVATE_KEY: 'ignored' }), null);
+});
+
+async function main() {
+  let failed = 0;
+  for (const [name, run] of cases) {
+    try { await run(); console.log(`PASS ${name}`); }
+    catch (error) { failed++; console.error(`FAIL ${name}`, error); }
+  }
+  assert.equal(failed, 0, `${failed} push notification scenarios failed`);
+  console.log(`Push notification service: ${cases.length} scenarios passed.`);
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
