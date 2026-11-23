@@ -7,6 +7,7 @@ import { authMiddleware } from '../middleware/auth';
 import { getSmsSender } from '../utils/sms';
 import { previewFeeReminders, sendFeeReminders } from '../services/fee-reminders';
 import { PushNotificationService } from '../services/push-notification';
+import { recordNotification } from '../services/notification-records';
 import { isTenantAdmin } from '../utils/access-control';
 import { reconcilePendingConnectIps } from '../utils/connectips';
 import { generateDailyTeacherSessions } from '../services/timetable-service';
@@ -135,13 +136,25 @@ router.post(
           },
           select: { id: true },
         });
-        await Promise.all(tenantAdmins.map((admin) => PushNotificationService.sendPush(
+        const inboxResults = await Promise.all(tenantAdmins.map((admin) => recordNotification(prisma, {
+          tenantId: req.tenantId!, userId: admin.id, category: 'PAYROLL',
+          title: 'Payroll calculation reminder',
+          body: 'Open payroll to review the monthly calculation.',
+          destination: '/tenant/payroll',
+        })));
+        const stored = inboxResults.filter(Boolean).length;
+        logs.push(`Payroll inbox: ${stored} record(s) stored, ${inboxResults.length - stored} persistence failure(s).`);
+        const deliveries = await Promise.all(tenantAdmins.map((admin) => PushNotificationService.sendPush(
           req.tenantId!,
           admin.id,
           'Payroll Calculation Reminder',
           'It is the 25th of the month. Please run and calculate payrolls for all staff.',
+          { deepLink: '/tenant/home', webDeepLink: '/tenant/payroll' },
         )));
-        logs.push(`Sent payroll calculation notification to ${tenantAdmins.length} Tenant Admin(s).`);
+        const accepted = deliveries.reduce((sum, result) => sum + (result.sent ?? 0), 0);
+        const failed = deliveries.reduce((sum, result) => sum + (result.failed ?? 0), 0);
+        const skipped = deliveries.filter((result) => result.skipped).length;
+        logs.push(`Payroll reminder: ${accepted} device message(s) accepted by provider, ${failed} failed, ${skipped} recipient(s) skipped. Device delivery is not confirmed.`);
       } else if (taskName === 'petty-cash-reset') {
         logs.push('Petty cash caps reset for all branches.');
       } else if (taskName === 'contract-expiry-alerts') {

@@ -5,6 +5,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'firebase_runtime_config.dart';
 import 'push_notification_service.dart';
+import 'notification_banner.dart';
 
 /// Android channel used for every TMS alert. The API targets the same id
 /// (`ANDROID_PUSH_CHANNEL_ID`) so background pushes arrive as heads-up alerts.
@@ -54,6 +55,15 @@ class FirebaseMessagingGateway implements PushMessagingGateway {
   Future<void> requestPermission() async {
     await _messaging.requestPermission(alert: true, badge: true, sound: true);
   }
+}
+
+/// Flutter web uses the app stream/banner for foreground updates. The bundled
+/// messaging worker handles background alerts; no native plugin calls on web.
+class WebInAppNotificationPresenter implements LocalNotificationPresenter {
+  @override
+  Future<void> initialize() async {}
+  @override
+  Future<void> show(PushMessage message) async { showBrowserPushBanner(message); }
 }
 
 class FlutterLocalNotificationPresenter implements LocalNotificationPresenter {
@@ -120,13 +130,16 @@ Future<PushNotificationService?> initializeFirebasePushNotifications() async {
         };
   if (platform == null) return null;
 
-  // Credentials come from --dart-define (see FirebaseRuntimeConfig); native
-  // builds may instead ship google-services.json / GoogleService-Info.plist.
+  // This build uses explicit --dart-define options on every platform.
+  // A native config file alone does not configure this bootstrap.
   final config = FirebaseRuntimeConfig.current;
-  if (kIsWeb && config == null) return null;
+  if (config == null) {
+    debugPrint('Push disabled: Firebase client build configuration is incomplete.');
+    return null;
+  }
 
   try {
-    await Firebase.initializeApp(options: config?.options);
+    await Firebase.initializeApp(options: config.options);
     void openDeepLink(String deepLink) {
       PushNotifications.deepLinkHandler?.call(deepLink);
     }
@@ -134,11 +147,12 @@ Future<PushNotificationService?> initializeFirebasePushNotifications() async {
     return PushNotificationService(
       messaging: FirebaseMessagingGateway(
         FirebaseMessaging.instance,
-        webVapidKey: config?.webVapidKey,
+        webVapidKey: config.webVapidKey,
       ),
       api: const ApiPushTokenApi(),
-      localNotifications:
-          FlutterLocalNotificationPresenter(onDeepLink: openDeepLink),
+      localNotifications: kIsWeb
+          ? WebInAppNotificationPresenter()
+          : FlutterLocalNotificationPresenter(onDeepLink: openDeepLink),
       platform: platform,
       onDeepLink: openDeepLink,
     );

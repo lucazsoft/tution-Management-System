@@ -57,14 +57,24 @@ class _TeacherNotificationsScreenState
 
   Future<void> _markRead(PersistentNotification item) async {
     if (!item.unread) return;
-    await ApiClient.instance.dio.post<dynamic>(
-        '/api/notifications/${Uri.encodeComponent(item.id)}/read');
-    await _load();
+    try {
+      await ApiClient.instance.dio.post<dynamic>(
+          '/api/notifications/${Uri.encodeComponent(item.id)}/read');
+      await _load();
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Read status did not sync. Retry when connected.')));
+    }
   }
 
   Future<void> _markAllRead() async {
-    await ApiClient.instance.dio.post<dynamic>('/api/notifications/read-all');
-    await _load();
+    try {
+      await ApiClient.instance.dio.post<dynamic>('/api/notifications/read-all');
+      await _load();
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Read status did not sync. Retry mark-all when connected.')));
+    }
   }
 
   @override

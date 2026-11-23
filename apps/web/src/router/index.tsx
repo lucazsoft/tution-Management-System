@@ -1,3 +1,4 @@
+import { NotificationCenter } from '../components/patterns/NotificationCenter';
 import { AccountantAccountPage } from '../pages/AccountantAccountPage';
 import { AccountPage } from '../pages/AccountPage';
 import { TenantAccountPage } from '../pages/TenantAccountPage';
@@ -82,6 +83,7 @@ function RequireAuth() {
     <>
       <Suspense fallback={null}><SessionTimeoutDialog /></Suspense>
       <Outlet />
+      <NotificationCenter />
     </>
   );
 }

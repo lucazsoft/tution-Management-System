@@ -43,8 +43,13 @@ export const ANDROID_PUSH_CHANNEL_ID = 'tms_updates';
 const PERMANENT_TOKEN_ERRORS = new Set([
   'messaging/registration-token-not-registered',
   'messaging/invalid-registration-token',
-  'messaging/invalid-argument',
 ]);
+
+function isPermanentTokenError(code: string | undefined): boolean {
+  return code !== undefined && PERMANENT_TOKEN_ERRORS.has(code);
+}
+
+export const pushTokenErrorIsPermanent = isPermanentTokenError;
 
 export function createPushNotificationService(dependencies: {
   tokenStore: TokenStore;
@@ -58,7 +63,7 @@ export function createPushNotificationService(dependencies: {
     logContext: Record<string, unknown>,
   ): Promise<PushResult> {
     if (tokens.length === 0) {
-      return { success: true, sent: 0, failed: 0, skipped: true };
+      return { success: false, sent: 0, failed: 0, skipped: true };
     }
     if (!dependencies.provider) {
       dependencies.logger.warn({
@@ -67,7 +72,7 @@ export function createPushNotificationService(dependencies: {
         ...logContext,
         tokenCount: tokens.length,
       });
-      return { success: true, sent: 0, failed: 0, skipped: true };
+      return { success: false, sent: 0, failed: 0, skipped: true };
     }
 
     try {
@@ -89,7 +94,8 @@ export function createPushNotificationService(dependencies: {
         tenantId,
         ...logContext,
         tokenCount: tokens.length,
-        error: error instanceof Error ? error.message : String(error),
+        // Do not log provider text: it may contain a registration token.
+        errorCode: 'push/provider-error',
       });
       return { success: false, sent: 0, failed: tokens.length };
     }
@@ -128,7 +134,7 @@ export function createPushNotificationService(dependencies: {
     ): Promise<PushResult> {
       const unique = [...new Set(userIds)];
       if (unique.length === 0) {
-        return { success: true, sent: 0, failed: 0, skipped: true };
+        return { success: false, sent: 0, failed: 0, skipped: true };
       }
       const records = await dependencies.tokenStore.findMany({
         where: { tenantId, userId: { in: unique } },
@@ -147,6 +153,8 @@ export function createPushNotificationService(dependencies: {
 export function createConfiguredFirebaseProvider(
   environment: NodeJS.ProcessEnv = process.env,
 ): PushProvider | null {
+  // Explicit opt-in across all Firebase callers; credentials alone do not enable alerts.
+  if (environment.PUSH_PROVIDER?.toUpperCase() !== 'FIREBASE') return null;
   const projectId = environment.FIREBASE_PROJECT_ID;
   const clientEmail = environment.FIREBASE_CLIENT_EMAIL;
   const privateKey = environment.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
@@ -183,12 +191,14 @@ export function createConfiguredFirebaseProvider(
               notification: { channelId: ANDROID_PUSH_CHANNEL_ID, sound: 'default' },
             },
             apns: { payload: { aps: { sound: 'default' } } },
+            // Minimize lock-screen content in the newly supported browser path.
+            webpush: { notification: { title: 'TMS update', body: 'Open TMS to see your update.' } },
           });
           successCount += result.successCount;
           failureCount += result.failureCount;
           result.responses.forEach((response, index) => {
             const code = response.error?.code;
-            if (code && PERMANENT_TOKEN_ERRORS.has(code)) invalidTokens.push(batch[index]);
+            if (isPermanentTokenError(code)) invalidTokens.push(batch[index]);
           });
         }
         return { successCount, failureCount, invalidTokens };
@@ -197,7 +207,7 @@ export function createConfiguredFirebaseProvider(
   } catch (error) {
     console.warn(JSON.stringify({
       event: 'PUSH_PROVIDER_CONFIGURATION_INVALID',
-      error: error instanceof Error ? error.message : String(error),
+      errorCode: 'push/configuration-invalid',
     }));
     return null;
   }

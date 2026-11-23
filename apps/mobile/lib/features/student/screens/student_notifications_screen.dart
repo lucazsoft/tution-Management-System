@@ -1,10 +1,6 @@
-/// API-backed notifications inbox screen (MOB-104).
-///
-/// Items come from [StudentNotificationsViewModel] (derived portal notices).
-/// Supports all/unread filtering, tap-to-open the notice destination (marks
-/// the notice read), and mark-all-read. Read state is local — see the
-/// ViewModel file doc for the missing server endpoint TODO. States: loading,
-/// empty, error with retry, denied (403), offline.
+/// Student notification sources remain distinct to preserve event history and
+/// portal read states. The screen shows load/sync warnings instead of claiming
+/// local-only read changes have reached the server.
 library;
 
 import 'package:flutter/material.dart';
@@ -30,10 +26,17 @@ class StudentNotificationsScreen extends ConsumerWidget {
           ? 'Notifications (${state.unreadCount})'
           : 'Notifications',
       actions: [
-        TextButton(
-          onPressed: state.isEmpty ? null : () => viewModel.markAllRead(),
-          child: const Text('Mark all read'),
-        ),
+        if (MediaQuery.sizeOf(context).width < 360)
+          IconButton(
+            tooltip: 'Mark all read',
+            onPressed: state.isEmpty ? null : () => viewModel.markAllRead(),
+            icon: const Icon(Icons.done_all_rounded),
+          )
+        else
+          TextButton(
+            onPressed: state.isEmpty ? null : () => viewModel.markAllRead(),
+            child: const Text('Mark all read'),
+          ),
       ],
       body: Builder(
         builder: (context) {
@@ -113,6 +116,10 @@ class StudentNotificationsScreen extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: TmsSpace.sm),
+          if (state.hasError) Padding(
+            padding: const EdgeInsets.only(bottom: TmsSpace.sm),
+            child: Text(state.error ?? 'Some updates could not be synchronized.'),
+          ),
           if (visible.isEmpty)
             const StudentEmptyView(
               icon: Icons.mark_email_read_outlined,
@@ -120,7 +127,13 @@ class StudentNotificationsScreen extends ConsumerWidget {
               message: 'No unread notifications.',
             )
           else
-            for (final notice in visible) ...[
+            for (final source in NotificationSource.values) ...[
+              if (visible.any((notice) => notice.source == source)) Padding(
+                padding: const EdgeInsets.symmetric(vertical: TmsSpace.sm),
+                child: Text(source == NotificationSource.account ? 'Account updates' : 'Current student alerts',
+                  style: Theme.of(context).textTheme.titleSmall),
+              ),
+              for (final notice in visible.where((notice) => notice.source == source)) ...[
               Card(
                 color: notice.isRead
                     ? StudentColors.background
@@ -128,7 +141,7 @@ class StudentNotificationsScreen extends ConsumerWidget {
                 child: InkWell(
                   borderRadius: BorderRadius.circular(TmsRadius.card),
                   onTap: () {
-                    viewModel.markRead(notice.raw.id);
+                    viewModel.markRead(notice.raw.id, source: notice.source);
                     final destination = notice.raw.destination;
                     if (destination.isNotEmpty) {
                       context.push(destination);
@@ -188,6 +201,7 @@ class StudentNotificationsScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: TmsSpace.sm),
+              ],
             ],
         ],
       ),

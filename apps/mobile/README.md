@@ -24,10 +24,23 @@ Release builds refuse to run without an HTTPS URL.
 
 iOS simulator uses `http://localhost:3001`; physical devices need the machine LAN IP.
 
+## Notification build options
+
+The local notification-readiness patch requires explicit Firebase client build
+options. The API URL alone does not enable notifications. See
+`../../docs/notification-readiness-local.md` for server/client separation,
+public web worker generation, and the outstanding native/staging checks.
+Do not use a service-account private key in any Flutter build.
+
+Example: start from `firebase-client.example.json`, fill only that platform's
+public Firebase app options, and pass it with `--dart-define-from-file`.
+Empty example values intentionally leave push disabled. A real configuration
+and a successful build are not proof of provider/device delivery. Keep real build values in an ignored local JSON file, for example `firebase-client.android.local.json` or `firebase-client.web.local.json`; do not mix platform app IDs. Set `API_BASE_URL` to the explicitly selected test/release environment, not a copied placeholder.
+
 ## Checks
 
-`flutter analyze` (0 errors enforced), `flutter test` (26 tests).
-CI runs both on every push to main/develop/staging/mobile-app.
+`flutter analyze --no-fatal-warnings --no-fatal-infos` and `flutter test` pass for the current notification patch with Flutter 3.47.0 / Dart 3.13.0 and the original enforced lockfile: 289 tests, no analyzer errors, 24 warnings/info. See `../../docs/notification-validation-2026-11-22.md` for the exact scope and unverified APK/device/release checks.
+CI runs analyzer/tests on pushes to main/develop/staging/mobile-app. Its floating stable SDK may resolve SDK-pinned dependencies differently; local verification did not retain those dependency updates.
 
 ## Release identity & signing
 

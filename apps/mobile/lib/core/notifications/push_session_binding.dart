@@ -27,6 +27,8 @@ final pushSessionBindingProvider = Provider<void>((ref) {
     final user = next.user;
     if (next.isAuthenticated && !next.isTwoFactorPending && user != null) {
       unawaited(PushNotifications.startAuthenticatedSession(user.id));
+    } else {
+      PushNotifications.suspendSession();
     }
   }, fireImmediately: true);
 
@@ -35,11 +37,10 @@ final pushSessionBindingProvider = Provider<void>((ref) {
     if (ref.exists(studentNotificationsViewModelProvider)) {
       unawaited(ref.read(studentNotificationsViewModelProvider.notifier).refresh());
     }
-    if (message.data['category'] != calendarPushCategory) return;
     if (ref.exists(parentPortalProvider)) {
       unawaited(ref.read(parentPortalProvider.notifier).refresh());
     }
-    if (ref.exists(studentCalendarViewModelProvider)) {
+    if (message.data['category'] == calendarPushCategory && ref.exists(studentCalendarViewModelProvider)) {
       unawaited(ref.read(studentCalendarViewModelProvider.notifier).refresh());
     }
     if (ref.exists(studentHomeViewModelProvider)) {

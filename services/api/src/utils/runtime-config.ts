@@ -61,8 +61,13 @@ export function validateRuntimeConfig(env: Environment = process.env): RuntimeCo
       throw new Error('AAKASH_SMS_AUTH_TOKEN is required when SMS_PROVIDER=AAKASH.');
     }
     const pushProvider = (env.PUSH_PROVIDER || 'DISABLED').toUpperCase();
-    if (!['WEBHOOK', 'DISABLED'].includes(pushProvider)) {
-      throw new Error('PUSH_PROVIDER must be WEBHOOK or DISABLED in production.');
+    if (!['FIREBASE', 'WEBHOOK', 'DISABLED'].includes(pushProvider)) {
+      throw new Error('PUSH_PROVIDER must be FIREBASE, WEBHOOK or DISABLED in production.');
+    }
+    if (pushProvider === 'FIREBASE') {
+      required(env, 'FIREBASE_PROJECT_ID');
+      required(env, 'FIREBASE_CLIENT_EMAIL');
+      required(env, 'FIREBASE_PRIVATE_KEY');
     }
     if (pushProvider === 'WEBHOOK') {
       validateUrl(required(env, 'PUSH_WEBHOOK_URL'), 'PUSH_WEBHOOK_URL', true);

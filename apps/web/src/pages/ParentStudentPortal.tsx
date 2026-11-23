@@ -1,3 +1,4 @@
+import { INBOX_READ_EVENT, PUSH_INBOX_EVENT } from '../services/browser-push';
 import { AcademicCalendarView } from '../components/calendar/AcademicCalendarView';
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -275,7 +276,23 @@ export function ParentStudentPortal() {
   const [data, setData] = useState<ParentPortalDataset | null>(null);
   const [loadError, setLoadError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  useEffect(() => {
+    const refresh = () => setReloadKey((value) => value + 1);
+    const visible = () => { if (document.visibilityState === 'visible') refresh(); };
+    window.addEventListener(INBOX_READ_EVENT, refresh);
+    window.addEventListener(PUSH_INBOX_EVENT, refresh);
+    window.addEventListener('online', refresh);
+    document.addEventListener('visibilitychange', visible);
+    return () => {
+      window.removeEventListener(INBOX_READ_EVENT, refresh);
+      window.removeEventListener(PUSH_INBOX_EVENT, refresh);
+      window.removeEventListener('online', refresh);
+      document.removeEventListener('visibilitychange', visible);
+    };
+  }, []);
+
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [readWarning, setReadWarning] = useState('');
   const view = useMemo<ParentView>(() => {
     const segment = location.pathname.split('/').filter(Boolean).at(-1);
     return segment && segment in VIEW_COPY ? segment as ParentView : 'home';
@@ -299,7 +316,12 @@ export function ParentStudentPortal() {
   const [title, subtitle] = VIEW_COPY[view];
   const go = (next: ParentView) => navigate(`/parent/${next}?child=${child.id}`);
   const refresh = () => setReloadKey((value) => value + 1);
-  const storeRead = (ids: Set<string>) => { const previous = readIds; setReadIds(ids); void markParentNotificationsRead([...ids]).catch(() => setReadIds(previous)); };
+  const storeRead = (ids: Set<string>) => {
+    setReadWarning('');
+    void markParentNotificationsRead([...ids])
+      .then(() => window.dispatchEvent(new Event(INBOX_READ_EVENT)))
+      .catch(() => setReadWarning('Read status did not sync. Please retry when connected.'));
+  };
   const unread = data.notifications.filter((notice) => notice.unread && !readIds.has(notice.id)).length;
   const content = view === 'home' ? <DashboardView child={child} go={go} />
     : view === 'timetable' ? <TimetableView child={child} />
@@ -315,5 +337,5 @@ export function ParentStudentPortal() {
                       : view === 'profile' ? <ProfileView />
                         : view === 'security' ? <SecurityView />
                         : <NotificationsView child={child} go={go} readIds={readIds} storeRead={storeRead} />;
-  return <ParentDataContext.Provider value={data}><div className="parent-portal"><ChildSwitcher linkedChildren={data.children} activeChild={child} onSelect={(id) => navigate(`${location.pathname}?child=${id}`, { replace: true })} /><header className="parent-page-header"><div><span className="parent-eyebrow">PARENT PORTAL · {child.name.toUpperCase()}</span><h1>{title}</h1><p>{subtitle}</p><span className="parent-sync" role="status">{icon('cloud_done')}Loaded · {new Date(data.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div><button type="button" className="parent-notification-button" aria-label={`${unread} unread notifications for ${child.name}`} onClick={() => go('notifications')}>{icon('notifications')}<span>{unread}</span></button></header><ChildContext child={child} />{content}</div></ParentDataContext.Provider>;
+  return <ParentDataContext.Provider value={data}><div className="parent-portal"><ChildSwitcher linkedChildren={data.children} activeChild={child} onSelect={(id) => navigate(`${location.pathname}?child=${id}`, { replace: true })} /><header className="parent-page-header"><div><span className="parent-eyebrow">PARENT PORTAL · {child.name.toUpperCase()}</span><h1>{title}</h1><p>{subtitle}</p><span className="parent-sync" role="status">{icon('cloud_done')}Loaded · {new Date(data.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div><button type="button" className="parent-notification-button" aria-label={`${unread} unread notifications for ${child.name}`} onClick={() => go('notifications')}>{icon('notifications')}<span>{unread}</span></button></header><ChildContext child={child} />{readWarning && <p role="alert">{readWarning}</p>}{content}</div></ParentDataContext.Provider>;
 }

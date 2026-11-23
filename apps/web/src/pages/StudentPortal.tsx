@@ -1,3 +1,4 @@
+import { INBOX_READ_EVENT, PUSH_INBOX_EVENT } from '../services/browser-push';
 import { AcademicCalendarView } from '../components/calendar/AcademicCalendarView';
 import { SyllabusTracker } from '../components/syllabus/SyllabusTracker';
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -397,7 +398,23 @@ export function StudentPortal() {
   const [refreshWarning, setRefreshWarning] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [readWarning, setReadWarning] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  useEffect(() => {
+    const refresh = () => setReloadKey((value) => value + 1);
+    const visible = () => { if (document.visibilityState === 'visible') refresh(); };
+    window.addEventListener(INBOX_READ_EVENT, refresh);
+    window.addEventListener(PUSH_INBOX_EVENT, refresh);
+    window.addEventListener('online', refresh);
+    document.addEventListener('visibilitychange', visible);
+    return () => {
+      window.removeEventListener(INBOX_READ_EVENT, refresh);
+      window.removeEventListener(PUSH_INBOX_EVENT, refresh);
+      window.removeEventListener('online', refresh);
+      document.removeEventListener('visibilitychange', visible);
+    };
+  }, []);
+
   const location = useLocation();
   const navigate = useNavigate();
   const enrollmentId = data?.studentProfile.enrollmentId;
@@ -459,9 +476,10 @@ export function StudentPortal() {
   const unread = data.notifications.filter((item) => item.unread && !readIds.has(item.id)).length;
   const go = (next: StudentView) => navigate(`/student/${next}`);
   const storeReadIds = (next: Set<string>) => {
-    const previous = readIds;
-    setReadIds(next);
-    void markStudentNotificationsRead([...next]).catch(() => setReadIds(previous));
+    setReadWarning('');
+    void markStudentNotificationsRead([...next])
+      .then(() => window.dispatchEvent(new Event(INBOX_READ_EVENT)))
+      .catch(() => setReadWarning('Read status did not sync. Please retry when connected.'));
   };
   const markRead = (id: string) => storeReadIds(new Set(readIds).add(id));
   const markAllRead = () => storeReadIds(new Set(data.notifications.map((item) => item.id)));
@@ -485,6 +503,7 @@ export function StudentPortal() {
         <div><span className="student-eyebrow">STUDENT PORTAL · READ ONLY</span><h1>{title}</h1><p>{subtitle}</p><span className={`student-sync ${refreshWarning ? 'is-warning' : ''}`} role="status">{icon(refreshWarning ? 'cloud_off' : isRefreshing ? 'sync' : 'cloud_done')}{refreshWarning || `${isRefreshing ? 'Loading this section' : 'Loaded'} · ${new Date(data.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}</span></div>
         <button type="button" className="student-notification-button" aria-label={`${unread} unread notifications`} onClick={() => go('notifications')}>{icon('notifications')}<span>{unread}</span></button>
       </header>
+      {readWarning && <p role="alert">{readWarning}</p>}
       {content}
     </div></StudentDataContext.Provider>
   );

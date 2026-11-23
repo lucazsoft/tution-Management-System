@@ -105,7 +105,7 @@ function statusSentence(status: LeaveStatus, leaveType: string): string {
 
 async function notify(userIds: Iterable<string>, input: { tenantId: string; branchId: string; title: string; body: string; entityId: string }) {
   await Promise.all([...new Set(userIds)].map(async (userId) => {
-    await getPushSender().sendPush(userId, input.title, input.body);
+    await getPushSender(input.tenantId).sendPush(userId, input.title, input.body);
     // Persistent inbox record. Fail-open: never rolls back the saved leave.
     await recordNotification(prisma, { ...input, userId, category: 'LEAVE', destination: 'leave' });
   }));
@@ -310,7 +310,7 @@ router.post('/request', authMiddleware, async (req: TenantRequest, res: Response
       .map((enrollment) => enrollment.class.teacherId)
       .filter((id): id is string => Boolean(id));
     const reviewers = [...branchAdmins.map((admin) => admin.id), ...teacherIds].filter((id) => id !== requesterUserId);
-    await Promise.all([...new Set(reviewers)].map((userId) => getPushSender().sendPush(
+    await Promise.all([...new Set(reviewers)].map((userId) => getPushSender(req.tenantId!).sendPush(
       userId,
       leaveStudent ? 'Student leave requested' : 'Staff leave requested',
       `${leaveStudent ? (targetStudent ? 'A linked parent' : 'A student') : 'A staff member'} requested ${label} leave from ${startDate} to ${endDate}.`,

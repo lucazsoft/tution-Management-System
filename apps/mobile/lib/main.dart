@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:tms_mobile/core/notifications/notification_banner.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tms_mobile/core/database/app_database.dart';
 import 'package:tms_mobile/core/network/api_client.dart';
@@ -48,6 +49,7 @@ class TMSApp extends ConsumerWidget {
     ref.watch(pushSessionBindingProvider);
     return MaterialApp.router(
       title: 'TMS',
+      scaffoldMessengerKey: notificationMessengerKey,
       theme: buildTmsTheme(),
       routerConfig: router,
       debugShowCheckedModeBanner: false,

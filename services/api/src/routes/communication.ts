@@ -126,7 +126,10 @@ router.post('/messages', authMiddleware, async (req: TenantRequest, res: Respons
     } catch (notificationError) {
       console.warn('Message saved but inbox notification persistence failed.', notificationError);
     }
-    await PushNotificationService.sendPush(req.tenantId!, receiverId, 'New school message', `New message regarding ${access.student.id}.`);
+    await PushNotificationService.sendPush(req.tenantId!, receiverId, 'New school message', 'Open TMS to read your message.', {
+      deepLink: access.userIsParent ? '/teacher/messages' : '/parent/messages',
+      entityId: message.id,
+    });
     return res.status(201).json({ message: 'Message sent.', record: message });
   } catch (error: any) {
     return res.status(500).json({ error: 'Failed to send message.', details: error.message });

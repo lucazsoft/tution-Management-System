@@ -8,12 +8,14 @@
     "build": "tsc -b && webpack --mode production",
     "lint": "oxlint",
     "test:account-menu": "testcafe chrome:headless tests/account-menu.js --disable-native-automation --app \"webpack serve --mode development --port 5192 --no-open --no-client-overlay\" --app-init-delay 5000",
-    "test:two-step-settings": "testcafe chrome:headless tests/two-step-settings.js --disable-native-automation --app \"webpack serve --mode development --port 5193 --no-open --no-client-overlay\" --app-init-delay 5000"
-    ,"test:student": "testcafe chrome:headless tests/student-live-smoke.js --disable-native-automation --app \"webpack serve --mode development --port 5173 --no-open --no-client-overlay\" --app-init-delay 5000"
-    ,"test:parent": "testcafe chrome:headless tests/parent-smoke.js --disable-native-automation --app \"webpack serve --mode development --port 5173 --no-open --no-client-overlay\" --app-init-delay 5000"
+    "test:two-step-settings": "testcafe chrome:headless tests/two-step-settings.js --disable-native-automation --app \"webpack serve --mode development --port 5193 --no-open --no-client-overlay\" --app-init-delay 5000",
+    "test:student": "testcafe chrome:headless tests/student-live-smoke.js --disable-native-automation --app \"webpack serve --mode development --port 5173 --no-open --no-client-overlay\" --app-init-delay 5000",
+    "test:parent": "testcafe chrome:headless tests/parent-smoke.js --disable-native-automation --app \"webpack serve --mode development --port 5173 --no-open --no-client-overlay\" --app-init-delay 5000",
+    "test:notifications:mock": "node tests/browser-push.unit.cjs && node tests/push-worker.unit.cjs && node tests/notification-center.mock.mjs && node tests/notification-sources.mock.mjs"
   },
   "dependencies": {
     "better-auth": "^1.6.23",
+    "firebase": "12.0.0",
     "nepali-date-library": "^1.1.16",
     "qrcode": "^1.5.4",
     "react": "^19.2.7",
@@ -28,6 +30,7 @@
     "css-loader": "^6.10.0",
     "html-webpack-plugin": "^5.6.0",
     "oxlint": "^1.71.0",
+    "playwright-core": "1.65.1",
     "style-loader": "^3.3.0",
     "testcafe": "^3.7.6",
     "ts-loader": "^9.5.0",

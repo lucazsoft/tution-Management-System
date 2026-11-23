@@ -97,3 +97,15 @@ assert.equal(loginEmailDomain({ WEB_ORIGIN: 'https://tms.example.com.np' }), 'lo
 assert.equal(loginEmailDomain({ WEB_ORIGIN: 'http://localhost:5173' }), 'login.tms.test');
 assert.throws(() => loginEmailDomain({ LOGIN_EMAIL_DOMAIN: 'https://x.com' }), /bare hostname/);
 console.log('Login email domain tests passed.');
+
+// Firebase is an explicit provider choice, never enabled by credential presence alone.
+const firebaseBase = {
+  NODE_ENV: 'production', BETTER_AUTH_SECRET: secureSecret,
+  BETTER_AUTH_URL: 'https://api.example.test', WEB_ORIGIN: 'https://app.example.test',
+  SMS_PROVIDER: 'DISABLED', NEPALPAY_WEBHOOK_SECRET: secureSecret, PUSH_PROVIDER: 'FIREBASE',
+};
+assert.throws(() => validateRuntimeConfig(firebaseBase), /FIREBASE_PROJECT_ID/);
+assert.doesNotThrow(() => validateRuntimeConfig({ ...firebaseBase,
+  FIREBASE_PROJECT_ID: 'test-project', FIREBASE_CLIENT_EMAIL: 'test@example.test',
+  FIREBASE_PRIVATE_KEY: 'placeholder-only-not-a-key',
+}));

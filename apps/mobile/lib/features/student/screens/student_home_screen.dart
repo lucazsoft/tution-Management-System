@@ -1,3 +1,4 @@
+import 'package:tms_mobile/core/notifications/inbox_unread_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -38,6 +39,7 @@ class StudentHomeScreen extends ConsumerWidget {
     final viewModel = ref.read(studentHomeViewModelProvider.notifier);
     final connectivity = ref.watch(connectivityMonitorProvider);
     final portal = state.portal;
+    final accountUnread = ref.watch(inboxUnreadCountProvider).valueOrNull ?? 0;
 
     if (state.isLoading && portal == null) {
       return const StudentScaffold(
@@ -60,6 +62,7 @@ class StudentHomeScreen extends ConsumerWidget {
       );
     }
 
+    final unread = portal.unreadCount + accountUnread;
     final showOfflineBar = connectivity == ConnectivityState.offline;
 
     return StudentScaffold(
@@ -67,14 +70,20 @@ class StudentHomeScreen extends ConsumerWidget {
       selectedIndex: 0,
       actions: [
         Semantics(
-          label: '${portal.unreadCount} unread notifications',
+          label: '$unread unread notifications',
           button: true,
           child: Badge(
-            isLabelVisible: portal.unreadCount > 0,
-            label: Text('${portal.unreadCount}'),
+            isLabelVisible: unread > 0,
+            label: Text('$unread'),
             child: IconButton(
               tooltip: 'Notifications',
-              onPressed: () => context.push('/student/notifications'),
+              onPressed: () async {
+                await context.push('/student/notifications');
+                if (context.mounted) {
+                  ref.invalidate(inboxUnreadCountProvider);
+                  await viewModel.refresh();
+                }
+              },
               icon: const Icon(Icons.notifications_outlined),
             ),
           ),
