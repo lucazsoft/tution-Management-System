@@ -1,5 +1,5 @@
+# Staging-only complete compose. Same DB volume and SMS settings as compose.yml.
 name: tms
-
 services:
   db:
     image: postgres:16-alpine
@@ -9,34 +9,40 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
     expose:
-      - "5432"
+    - '5432'
     volumes:
-      - tms_postgres_data:/var/lib/postgresql/data
+    - tms_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-tms}"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-tms}
       interval: 5s
       timeout: 5s
       retries: 12
-
   migrate:
     build:
       context: .
       dockerfile: services/api/Dockerfile
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/${POSTGRES_DB:-tms}?schema=public
-    command: ["npx", "prisma", "migrate", "deploy"]
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD
+        must be set}@db:5432/${POSTGRES_DB:-tms}?schema=public
+    command:
+    - npx
+    - prisma
+    - migrate
+    - deploy
     depends_on:
       db:
         condition: service_healthy
-    restart: "no"
-
+    restart: 'no'
   api:
     build:
       context: .
       dockerfile: services/api/Dockerfile
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/${POSTGRES_DB:-tms}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD
+        must be set}@db:5432/${POSTGRES_DB:-tms}?schema=public
       PORT: 3001
       NODE_ENV: ${NODE_ENV:-production}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}
@@ -54,7 +60,8 @@ services:
       FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY:-}
       SMS_PROVIDER: ${SMS_PROVIDER:-MOCK}
       AAKASH_SMS_AUTH_TOKEN: ${AAKASH_SMS_AUTH_TOKEN:-}
-      NEPALPAY_WEBHOOK_SECRET: ${NEPALPAY_WEBHOOK_SECRET:?NEPALPAY_WEBHOOK_SECRET must be set}
+      NEPALPAY_WEBHOOK_SECRET: ${NEPALPAY_WEBHOOK_SECRET:?NEPALPAY_WEBHOOK_SECRET
+        must be set}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
       SEED_ADMIN_2FA: ${SEED_ADMIN_2FA:-false}
@@ -70,8 +77,9 @@ services:
       CONNECTIPS_VALIDATE_PASSWORD: ${CONNECTIPS_VALIDATE_PASSWORD:-}
       CONNECTIPS_GATEWAY_URL: ${CONNECTIPS_GATEWAY_URL:-https://uat.connectips.com/connectipswebgw/loginpage}
       CONNECTIPS_VALIDATE_URL: ${CONNECTIPS_VALIDATE_URL:-https://uat.connectips.com/connectipswebws/api/creditor/validatetxn}
+      FIREBASE_PRIVATE_KEY_FILE: /run/secrets/tms_firebase_key
     expose:
-      - "3001"
+    - '3001'
     depends_on:
       db:
         condition: service_healthy
@@ -79,17 +87,16 @@ services:
         condition: service_completed_successfully
     healthcheck:
       test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://localhost:3001/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
-        ]
+      - CMD
+      - node
+      - -e
+      - fetch('http://localhost:3001/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 10s
-
+    secrets:
+    - tms_firebase_key
   web:
     build:
       context: .
@@ -104,10 +111,12 @@ services:
         TMS_API_BASE_URL: ${TMS_API_BASE_URL:?TMS_API_BASE_URL must be set}
     restart: unless-stopped
     expose:
-      - "80"
+    - '80'
     depends_on:
       api:
         condition: service_healthy
-
 volumes:
-  tms_postgres_data:
+  tms_postgres_data: null
+secrets:
+  tms_firebase_key:
+    file: /data/tms-firebase-staging/private.pem
