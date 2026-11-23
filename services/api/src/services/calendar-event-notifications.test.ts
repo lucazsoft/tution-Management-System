@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  calendarEventAsNotice,
   calendarNotificationText,
   notifyCalendarEventPublished,
   type PublishedCalendarEvent,
@@ -148,6 +149,18 @@ test('notification text shows the Nepal-time date range and trims long details',
   assert.ok(range.body.includes('–'));
   assert.ok(range.body.endsWith('…'));
   assert.ok(range.body.length < 220);
+});
+
+test('calendar events appear on the notice board with full details and audience roles', async () => {
+  const createdAt = new Date('2026-10-01T05:00:00Z');
+  const notice = calendarEventAsNotice({ ...baseEvent, audience: 'STUDENTS', description: 'x'.repeat(300), createdAt });
+  assert.equal(notice.source, 'CALENDAR');
+  assert.equal(notice.id, 'event-1');
+  assert.equal(notice.title, 'Holiday: Dashain break');
+  assert.ok(notice.message.endsWith('x'.repeat(300)), 'notice board keeps the untruncated description');
+  assert.deepEqual(notice.audienceRoles, ['Student', 'Parent']);
+  assert.equal(notice.createdAt, createdAt);
+  assert.equal(calendarEventAsNotice({ ...baseEvent, description: '  ', createdAt }).message.includes('\n'), false);
 });
 
 async function main() {

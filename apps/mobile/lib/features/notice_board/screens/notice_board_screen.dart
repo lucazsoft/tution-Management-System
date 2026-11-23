@@ -135,7 +135,11 @@ class _NoticeBoardScreenState extends State<NoticeBoardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const CircleAvatar(child: Icon(Icons.campaign_outlined)),
+                  CircleAvatar(
+                    child: Icon(notice.isCalendarEvent
+                        ? Icons.event_outlined
+                        : Icons.campaign_outlined),
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -150,7 +154,7 @@ class _NoticeBoardScreenState extends State<NoticeBoardScreen> {
                       ],
                     ),
                   ),
-                  if (_canManage)
+                  if (_canManage && !notice.isCalendarEvent)
                     IconButton(
                       tooltip: 'Delete notice',
                       onPressed: () => _delete(notice),

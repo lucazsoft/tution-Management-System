@@ -9,12 +9,15 @@ class SchoolNotice {
     required this.audienceRoles,
     required this.createdAt,
     required this.authorName,
+    this.isCalendarEvent = false,
   });
 
   factory SchoolNotice.fromJson(Map<String, dynamic> json) {
     final author = json['author'];
     final authorMap = author is Map<String, dynamic> ? author : null;
+    final isCalendarEvent = json['source'] == 'CALENDAR';
     return SchoolNotice(
+      isCalendarEvent: isCalendarEvent,
       id: json['id']?.toString() ?? '',
       title: json['title']?.toString() ?? 'School notice',
       message: json['message']?.toString() ?? '',
@@ -24,7 +27,7 @@ class SchoolNotice {
       createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
       authorName: authorMap == null
-          ? 'School administration'
+          ? (isCalendarEvent ? 'Academic calendar' : 'School administration')
           : '${authorMap['firstName'] ?? ''} ${authorMap['lastName'] ?? ''}'
               .trim(),
     );
@@ -36,6 +39,9 @@ class SchoolNotice {
   final List<String> audienceRoles;
   final DateTime createdAt;
   final String authorName;
+
+  /// Published from the academic calendar; edited or removed there, not here.
+  final bool isCalendarEvent;
 }
 
 class NoticeBoardRepository {
