@@ -31,7 +31,7 @@ const VIEW_COPY: Record<TeacherView, [string, string]> = {
   ],
   "geo-attendance": [
     "Geo attendance",
-    "Location-verified Teacher attendance is planned for a future release.",
+    "Mark attendance at your assigned branch using a fresh location reading.",
   ],
   attendance: [
     "Class attendance",
@@ -882,10 +882,12 @@ function Syllabus({
   reload,
   classId: propClassId,
   onClassChange,
+  syllabusId,
 }: {
   data: TeacherDashboard;
   reload: () => Promise<void>;
   classId?: string;
+  syllabusId?: string;
   onClassChange?: (id: string) => void;
 }) {
   const { showToast } = useToast();
@@ -893,7 +895,7 @@ function Syllabus({
   const classId = propClassId ?? internalClassId;
   const setClassId = onClassChange ?? setInternalClassId;
   const selected = data.classes.find((item) => item.id === classId);
-  const syllabus = selected?.syllabi[0];
+  const syllabus = selected?.syllabi.find((item) => item.id === syllabusId) ?? selected?.syllabi[0];
   const [subject, setSubject] = useState(selected?.subject || "");
   const [chapters, setChapters] = useState<
     Array<{ id: string; persistedId?: string; title: string }>
@@ -1094,6 +1096,7 @@ function Syllabus({
         </section>
       ) : (
         <SyllabusTracker
+          initialSubjectId={syllabus.id}
           syllabus={{
             id: syllabus.id,
             subject: syllabus.subject,
@@ -1483,10 +1486,11 @@ function TopicSyllabus({
   const { showToast } = useToast();
   const [classId, setClassId] = useState(data.classes[0]?.id || "");
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
+  const [editingSyllabusId, setEditingSyllabusId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const selected = data.classes.find((item) => item.id === classId);
-  const syllabus = selected?.syllabi[0];
+  const syllabus = selected?.syllabi.find((item) => item.id === editingSyllabusId) ?? selected?.syllabi[0];
   const teacherSyllabi = useMemo(
     () =>
       data.classes.flatMap((klass) =>
@@ -1513,14 +1517,31 @@ function TopicSyllabus({
   if (!editingClassId)
     return (
       <div className="teacher-view">
+        <section className="teacher-section">
+          <header>
+            <div>
+              <h2>Manage class syllabus</h2>
+              <p>Select an assigned class to create or edit its plan.</p>
+            </div>
+          </header>
+          <ClassPicker classes={data.classes} value={classId} onChange={(id) => { setClassId(id); setEditingSyllabusId(null); }} />
+          <button
+            type="button"
+            className="teacher-secondary-action"
+            onClick={() => { setEditingSyllabusId(null); setEditingClassId(classId); }}
+          >
+            {syllabus ? "Edit selected class plan" : "Create syllabus for selected class"}
+          </button>
+        </section>
         <SyllabusTracker
           syllabi={teacherSyllabi}
           role="teacher"
-          onEditPlan={() => {
-            const firstClassId = data.classes[0]?.id;
-            if (!firstClassId) return;
-            setClassId(firstClassId);
-            setEditingClassId(firstClassId);
+          onEditPlan={(syllabusId) => {
+            const target = teacherSyllabi.find((item) => item.id === syllabusId);
+            if (!target) return;
+            setClassId(target.classId);
+            setEditingSyllabusId(target.id);
+            setEditingClassId(target.classId);
           }}
         />
       </div>
@@ -1539,7 +1560,8 @@ function TopicSyllabus({
           data={data}
           reload={reload}
           classId={classId}
-          onClassChange={setClassId}
+          onClassChange={(id) => { setClassId(id); setEditingSyllabusId(null); }}
+          syllabusId={editingSyllabusId ?? undefined}
         />
       </div>
     );
@@ -1604,13 +1626,14 @@ function TopicSyllabus({
       <ClassPicker
         classes={data.classes}
         value={classId}
-        onChange={setClassId}
+        onChange={(id) => { setClassId(id); setEditingSyllabusId(null); }}
       />
       <Syllabus
         data={data}
         reload={reload}
         classId={classId}
-        onClassChange={setClassId}
+        onClassChange={(id) => { setClassId(id); setEditingSyllabusId(null); }}
+        syllabusId={editingSyllabusId ?? undefined}
       />
       <section className="teacher-section">
         <header>
