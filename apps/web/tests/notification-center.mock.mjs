@@ -73,7 +73,8 @@ try {
     const box = await panel.boundingBox();
     assert(box.x >= 0 && box.x + box.width <= width, `Inbox overflow at ${width}`);
     assert.equal(await panel.locator('li').count(), 2);
-    assert(await panel.getByRole('button', { name: 'Enable browser notifications', exact: true }).isDisabled());
+    // Push is not configured in this build, so no browser-alert controls are shown.
+    assert.equal(await panel.locator('footer').count(), 0);
     await page.screenshot({ path: path.join(output, `inbox-${width}.png`), fullPage: true });
     await page.keyboard.press('Escape');
     assert.equal(await panel.count(), 0);
@@ -87,13 +88,16 @@ try {
   await page.getByRole('button', { name: 'Mark all read', exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('.tms-inbox-toggle strong'));
   assert.equal(markAll, 1);
+  // Nothing unread: the action goes away.
+  assert.equal(await page.getByRole('button', { name: 'Mark all read', exact: true }).count(), 0);
+  // Re-opening the panel reloads it.
   failInbox = true;
-  await page.locator('.tms-inbox-panel').getByRole('button', { name: 'Refresh', exact: true }).click();
+  await page.keyboard.press('Escape'); await toggle.click();
   await page.getByRole('alert').filter({ hasText: 'Could not load updates' }).waitFor();
   failInbox = false;
   notices = [];
-  await page.locator('.tms-inbox-panel').getByRole('button', { name: 'Refresh', exact: true }).click();
-  await page.getByText('No account updates yet.', { exact: true }).waitFor();
+  await page.locator('.tms-inbox-panel').getByRole('button', { name: 'Retry', exact: true }).click();
+  await page.getByText('You’re all caught up. New updates will appear here.', { exact: true }).waitFor();
   permissionRequests = await page.evaluate(() => window.__permissionRequests);
   assert.equal(permissionRequests, 0, 'No permission prompt on load or disabled-config UI');
   assert(attemptedExternal.every((url) => url === 'https://fonts.googleapis.com'), 'No provider/API requests beyond blocked existing font stylesheets');

@@ -5,6 +5,8 @@ import { authMiddleware } from '../middleware/auth';
 import { PushNotificationService } from '../services/push-notification';
 import { isTenantAdmin, managedBranchIds } from '../utils/access-control';
 import { parseStrictKeys, readTrimmedString } from '../utils/request-validation';
+import { calendarAccessWhere, CalendarAccessError } from '../services/calendar-access';
+import { calendarEventAsNotice } from '../services/calendar-event-notifications';
 
 const router = Router();
 
@@ -369,10 +371,24 @@ router.get('/broadcasts', authMiddleware, async (req: TenantRequest, res: Respon
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
-    const broadcasts = records.filter((record) => {
+    const notices = records.filter((record) => {
       const audience = Array.isArray(record.audienceRoles) ? record.audienceRoles.filter((role: unknown): role is string => typeof role === 'string') : [];
       return audience.length === 0 || audience.some((role) => roleNames.has(role));
-    });
+    }).map((record) => ({ ...record, source: 'BROADCAST' as const }));
+    // Academic calendar events are school notices too. They are read live with
+    // the calendar's own scope, so edits and deletions there show up here and
+    // readers only see events for their branch, class and audience.
+    let calendarNotices: ReturnType<typeof calendarEventAsNotice>[] = [];
+    try {
+      const where = await calendarAccessWhere(req.user!, req.tenantId!);
+      const events = await prisma.academicEvent.findMany({ where, orderBy: { createdAt: 'desc' }, take: 100 });
+      calendarNotices = events.map(calendarEventAsNotice);
+    } catch (error) {
+      if (!(error instanceof CalendarAccessError)) throw error;
+    }
+    const broadcasts = [...notices, ...calendarNotices]
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 100);
     return res.json({ broadcasts });
   } catch {
     return res.status(500).json({ error: 'Failed to load broadcasts.' });

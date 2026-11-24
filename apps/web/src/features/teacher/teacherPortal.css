@@ -76,3 +76,10 @@
 @media(prefers-reduced-motion:reduce){.teacher-topic-queue button{transition:none}}
 .teacher-topic-log-card fieldset input:focus-visible+span{outline:3px solid color-mix(in srgb,var(--t-blue) 35%,transparent);outline-offset:1px}
 .teacher-save-confirmation{display:flex;align-items:center;gap:7px;margin:0;padding:10px 12px;border:1px solid color-mix(in srgb,var(--color-success) 35%,var(--t-border));border-radius:7px;background:color-mix(in srgb,var(--color-success) 8%,var(--t-surface));color:var(--color-success);font-size:12px;font-weight:700}.teacher-save-confirmation.is-neutral{border-color:var(--t-border);background:var(--t-bg);color:var(--t-muted)}.teacher-save-confirmation .material-symbols-outlined{font-size:18px}
+
+/* Keep the attendance heading legible on its dark geofence card. */
+.teacher-geo-card h2{color:#fff}
+.teacher-geo-orbit{flex-shrink:0}
+[data-theme="dark"] .teacher-page-head h1,[data-theme="dark"] .teacher-section h2{color:var(--t-text)}
+
+[data-theme="dark"] .teacher-status--info{color:#b9d8ff;background:rgba(87,157,240,.18)}

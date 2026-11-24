@@ -49,7 +49,7 @@ export interface SyllabusTrackerProps {
   syllabi?: SyllabusData[];
   initialSubjectId?: string;
   role?: 'teacher' | 'student' | 'admin' | 'parent';
-  onEditPlan?: () => void;
+  onEditPlan?: (syllabusId: string) => void;
   onLogChapter?: (chapterId: string) => void;
   headerActions?: React.ReactNode;
   className?: string;
@@ -58,7 +58,7 @@ export interface SyllabusTrackerProps {
 interface SubjectSyllabusViewProps {
   syllabus: SyllabusData;
   role?: 'teacher' | 'student' | 'admin' | 'parent';
-  onEditPlan?: () => void;
+  onEditPlan?: (syllabusId: string) => void;
   onLogChapter?: (chapterId: string) => void;
   headerActions?: React.ReactNode;
   className?: string;
@@ -249,7 +249,7 @@ function SubjectSyllabusView({
               <button
                 type="button"
                 className="syllabus-btn syllabus-btn--primary"
-                onClick={onEditPlan}
+                onClick={() => onEditPlan?.(syllabus.id)}
                 aria-label="Edit syllabus plan"
               >
                 {icon('edit')}
@@ -1056,7 +1056,7 @@ export function SyllabusTracker({
                       </div>
                       <div className="syl-subject-progress-labels">
                         <span>{completed} of {total} chapters</span>
-                        <span>{inProgress > 0 ? `${inProgress} in progress` : 'Up to date'}</span>
+                        <span>{inProgress > 0 ? `${inProgress} in progress` : completed === total && total > 0 ? 'Completed' : total > 0 ? `${total - completed} not started` : 'No chapters yet'}</span>
                       </div>
                     </div>
                   </div>

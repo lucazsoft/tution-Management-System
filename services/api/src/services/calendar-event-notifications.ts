@@ -145,6 +145,33 @@ export function calendarNotificationText(event: PublishedCalendarEvent) {
   return { title: `${label}: ${event.title}`, body };
 }
 
+const READER_ROLE_NAMES: Record<CalendarReader, string> = { TEACHER: 'Teacher', PARENT: 'Parent', STUDENT: 'Student' };
+
+/**
+ * Shapes a calendar event as a school notice so it appears on the notice board
+ * next to broadcasts. Visibility is decided by the caller with
+ * `calendarAccessWhere`, so the board never shows an event the calendar hides.
+ */
+export function calendarEventAsNotice(event: PublishedCalendarEvent & { createdAt: Date }) {
+  const { title } = calendarNotificationText(event);
+  const start = formatDay(event.startDate);
+  const end = formatDay(event.endDate);
+  const when = start === end ? start : `${start} – ${end}`;
+  const details = event.description?.trim();
+  return {
+    id: event.id,
+    source: 'CALENDAR' as const,
+    title,
+    message: details ? `${when}\n\n${details}` : when,
+    audienceRoles: (AUDIENCE_NOTIFIES[event.audience as CalendarAudience] ?? []).map((reader) => READER_ROLE_NAMES[reader]),
+    createdAt: event.createdAt,
+    author: null,
+    eventType: event.eventType,
+    startDate: event.startDate,
+    endDate: event.endDate,
+  };
+}
+
 /**
  * Writes an inbox notification for every designated recipient and pushes it
  * to their registered devices. Fail-open: an event is already saved when this

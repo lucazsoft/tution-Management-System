@@ -82,8 +82,12 @@ router.get(
 // Administrator targeting options are restricted to managed classes.
 router.get('/options', authMiddleware, hasPermission('manage_branch_calendar'), async (req: TenantRequest, res: Response) => {
   try {
-    const classes = await prisma.class.findMany({ where: { archivedAt: null, course: { tenantId: req.tenantId! }, ...(isTenantAdmin(req.user!) ? {} : { branchId: { in: managedBranchIds(req.user!) } }) }, select: { id: true, name: true, branchId: true, branch: { select: { name: true } } }, orderBy: { name: 'asc' } });
-    return res.json({ classes });
+    const tenantWide = isTenantAdmin(req.user!);
+    const [branches, classes] = await Promise.all([
+      prisma.branch.findMany({ where: { tenantId: req.tenantId!, ...(tenantWide ? {} : { id: { in: managedBranchIds(req.user!) } }) }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
+      prisma.class.findMany({ where: { archivedAt: null, course: { tenantId: req.tenantId! }, ...(tenantWide ? {} : { branchId: { in: managedBranchIds(req.user!) } }) }, select: { id: true, name: true, branchId: true, branch: { select: { name: true } } }, orderBy: { name: 'asc' } }),
+    ]);
+    return res.json({ branches, classes });
   } catch { return res.status(500).json({ error: 'Could not load event targeting options.' }); }
 });
 

@@ -69,6 +69,12 @@ const webConfig = {
         test: /\.css$/,
         use: ['style-loader', 'css-loader'],
       },
+      {
+        // Emitted as hashed files so photos stay out of the JS bundle and cache forever.
+        test: /\.(png|jpe?g|webp|svg)$/i,
+        type: 'asset/resource',
+        generator: { filename: 'assets/[name].[contenthash:8][ext]' },
+      },
     ],
   },
   plugins: [

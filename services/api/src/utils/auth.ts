@@ -42,7 +42,8 @@ export const auth = betterAuth({
     window: 15 * 60,
     max: 100,
     customRules: {
-      '/sign-in/email': { window: 15 * 60, max: 5 },
+      // Sign-in is limited by limitFailedCredentialSignIn (wrong passwords only), not by this per-request counter.
+      '/sign-in/email': false,
       '/two-factor/send-otp': { window: 15 * 60, max: 5 },
       '/two-factor/verify-otp': { window: 15 * 60, max: 5 },
       '/request-password-reset': { window: 15 * 60, max: 5 },
