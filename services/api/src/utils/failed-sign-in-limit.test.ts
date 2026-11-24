@@ -95,3 +95,27 @@ test('failures recorded while others are in flight still count once', async () =
   if (b.ok) await b.finish(false);
   assert.equal(store.m.get('k')!.count, 1);
 });
+
+test('failures whose write failed still count, and sign-ins fail closed while the store is down', async () => {
+  let t = 1_000_000;
+  const store = mem();
+  let down = false;
+  const flaky: FailureStore = {
+    get: (k) => store.get(k),
+    async recordFailure(k, now, w) { if (down) throw new Error('db down'); return store.recordFailure(k, now, w); },
+  };
+  const lim = new FailedSignInLimiter(flaky, 5, W, () => t);
+  down = true;
+  // Three attempts are already in flight when the database goes down; all three fail and none can be saved.
+  down = false;
+  const inflight = await Promise.all([lim.begin('k'), lim.begin('k'), lim.begin('k')]);
+  down = true;
+  for (const r of inflight) if (r.ok) await assert.rejects(r.finish(true));
+  // Store still down: the unsaved failures cannot be written, so begin() throws instead of letting attempts through.
+  await assert.rejects(lim.begin('k'));
+  down = false;
+  // Recovered: the 3 unrecorded failures are saved first, leaving room for 2 more.
+  for (let i = 0; i < 2; i++) { const r = await lim.begin('k'); assert.equal(r.ok, true); if (r.ok) await r.finish(true); }
+  assert.equal(store.m.get('k')!.count, 5);
+  assert.equal((await lim.begin('k')).ok, false);
+});
