@@ -131,6 +131,41 @@ class TeacherPortalViewModel extends BaseViewModel<TeacherPortalState> {
     }
   }
 
+  Future<bool> updateTopicProgress({
+    required String syllabusId,
+    required String topicId,
+    required String status,
+    String? notes,
+  }) async {
+    state = state.copyWith(
+      updatingSessionId: topicId,
+      clearError: true,
+      clearErrorKind: true,
+    );
+    try {
+      await _repository.updateTopicProgress(
+        syllabusId: syllabusId,
+        topicId: topicId,
+        status: status,
+        notes: notes,
+      );
+      await refresh();
+      state = state.copyWith(clearUpdatingSessionId: true);
+      return true;
+    } on ApiException catch (error) {
+      if (error.kind == ApiErrorKind.cancelled) {
+        state = state.copyWith(clearUpdatingSessionId: true);
+        return false;
+      }
+      state = state.copyWith(
+        clearUpdatingSessionId: true,
+        error: error.message,
+        errorKind: error.kind,
+      );
+      return false;
+    }
+  }
+
   Future<bool> submitSessionUpdate({
     required String sessionId,
     required String updateContent,

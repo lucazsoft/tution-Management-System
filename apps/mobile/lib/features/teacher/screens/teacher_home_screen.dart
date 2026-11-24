@@ -186,6 +186,7 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
             onUpdateSyllabus: () => context.push('/teacher/syllabus'),
             onAssignHomework: () => context.push('/teacher/homework'),
             onEnterResults: () => context.push('/teacher/results'),
+            onOpenDailyUpdates: () => context.push('/teacher/daily-updates'),
           ),
         );
     }
@@ -291,6 +292,7 @@ class _TodayTab extends StatelessWidget {
     required this.onUpdateSyllabus,
     required this.onAssignHomework,
     required this.onEnterResults,
+    this.onOpenDailyUpdates,
   });
 
   final TeacherWorkspace workspace;
@@ -303,6 +305,7 @@ class _TodayTab extends StatelessWidget {
   final VoidCallback onUpdateSyllabus;
   final VoidCallback onAssignHomework;
   final VoidCallback onEnterResults;
+  final VoidCallback? onOpenDailyUpdates;
 
   @override
   Widget build(BuildContext context) {
@@ -311,6 +314,11 @@ class _TodayTab extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       children: [
         _ClockCard(workspace: workspace, onPressed: onClockAttendance),
+        const SizedBox(height: 16),
+        _PendingDailyUpdatesAlertCard(
+          pendingCount: workspace.pendingUpdateCount,
+          onTap: onOpenDailyUpdates ?? () => context.push('/teacher/daily-updates'),
+        ),
         const SizedBox(height: 16),
         Row(children: [
           Expanded(
@@ -1281,6 +1289,16 @@ class _MoreTab extends StatelessWidget {
           subtitle: const Text('Enter marks and publish paper evidence'),
           onTap: () => context.push('/teacher/results'),
         ),
+        ListTile(
+          leading: const Icon(Icons.edit_note_rounded),
+          title: const Text('Daily updates'),
+          subtitle: Text(
+            workspace.pendingUpdateCount > 0
+                ? '${workspace.pendingUpdateCount} pending classroom notes'
+                : 'All daily updates submitted',
+          ),
+          onTap: () => context.push('/teacher/daily-updates'),
+        ),
         const ListTile(
           leading: Icon(Icons.receipt_long_outlined),
           title: Text('Salary slips'),
@@ -1288,6 +1306,160 @@ class _MoreTab extends StatelessWidget {
           enabled: false,
         ),
       ],
+    );
+  }
+}
+
+class _PendingDailyUpdatesAlertCard extends StatelessWidget {
+  const _PendingDailyUpdatesAlertCard({
+    required this.pendingCount,
+    required this.onTap,
+  });
+
+  final int pendingCount;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isPending = pendingCount > 0;
+    final backgroundColor =
+        isPending ? const Color(0xFFFFF7ED) : const Color(0xFFF0FDF4);
+    final borderColor =
+        isPending ? const Color(0xFFFED7AA) : const Color(0xFFBBF7D0);
+    final iconColor =
+        isPending ? const Color(0xFFEA580C) : const Color(0xFF16A34A);
+    final titleColor =
+        isPending ? const Color(0xFF9A3412) : const Color(0xFF166534);
+    final subtitleColor =
+        isPending ? const Color(0xFFB45309) : const Color(0xFF15803D);
+
+    return Card(
+      color: backgroundColor,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: borderColor, width: 1.2),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: isPending
+                      ? const Color(0xFFFFEDD5)
+                      : const Color(0xFFDCFCE7),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isPending
+                      ? Icons.notification_important_rounded
+                      : Icons.task_alt_rounded,
+                  color: iconColor,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            isPending
+                                ? '$pendingCount ${pendingCount == 1 ? 'Daily Update Pending' : 'Daily Updates Pending'}'
+                                : 'Daily Updates',
+                            style: GoogleFonts.roboto(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: titleColor,
+                            ),
+                          ),
+                        ),
+                        if (isPending) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEA580C),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '$pendingCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      isPending
+                          ? 'Classroom progress notes required · Tap to record'
+                          : '0 updates pending · All classroom notes recorded',
+                      style: GoogleFonts.roboto(
+                        fontSize: 12.5,
+                        color: subtitleColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isPending) ...[
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: onTap,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEA580C),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    minimumSize: const Size(0, 36),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Update',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      SizedBox(width: 4),
+                      Icon(Icons.arrow_forward_rounded, size: 14),
+                    ],
+                  ),
+                ),
+              ] else ...[
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 15,
+                  color: iconColor.withValues(alpha: 0.8),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

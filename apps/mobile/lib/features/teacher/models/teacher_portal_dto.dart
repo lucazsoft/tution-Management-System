@@ -152,35 +152,77 @@ class TeacherHomework {
           createdAt: _date(json['createdAt']));
 }
 
+class TeacherTopicLog {
+  const TeacherTopicLog({
+    required this.id,
+    required this.status,
+    required this.logDate,
+    this.notes,
+    this.updatedAt,
+  });
+
+  final String id;
+  final String status;
+  final DateTime logDate;
+  final String? notes;
+  final DateTime? updatedAt;
+
+  factory TeacherTopicLog.fromJson(Map<String, dynamic> json) {
+    return TeacherTopicLog(
+      id: _str(json['id']),
+      status: _str(json['status']),
+      logDate: _date(json['logDate']) ?? DateTime.now(),
+      notes: json['notes'] as String?,
+      updatedAt: _date(json['updatedAt']),
+    );
+  }
+}
+
 class TeacherSyllabusTopic {
-  const TeacherSyllabusTopic(
-      {required this.id, required this.title, required this.status});
+  const TeacherSyllabusTopic({
+    required this.id,
+    required this.title,
+    required this.status,
+    this.logs = const [],
+  });
+
   final String id;
   final String title;
   final String status;
+  final List<TeacherTopicLog> logs;
+
   factory TeacherSyllabusTopic.fromJson(Map<String, dynamic> json) =>
       TeacherSyllabusTopic(
-          id: _str(json['id']),
-          title: _str(json['title']),
-          status: _str(json['status']));
+        id: _str(json['id']),
+        title: _str(json['title']),
+        status: _str(json['status']),
+        logs: _mappedList(json['logs'], TeacherTopicLog.fromJson),
+      );
 }
 
 class TeacherSyllabusChapter {
-  const TeacherSyllabusChapter(
-      {required this.id,
-      required this.title,
-      required this.status,
-      required this.topics});
+  const TeacherSyllabusChapter({
+    required this.id,
+    required this.title,
+    required this.status,
+    required this.topics,
+    this.position = 0,
+  });
+
   final String id;
   final String title;
   final String status;
   final List<TeacherSyllabusTopic> topics;
+  final int position;
+
   factory TeacherSyllabusChapter.fromJson(Map<String, dynamic> json) =>
       TeacherSyllabusChapter(
-          id: _str(json['id']),
-          title: _str(json['title']),
-          status: _str(json['status']),
-          topics: _mappedList(json['topics'], TeacherSyllabusTopic.fromJson));
+        id: _str(json['id']),
+        title: _str(json['title']),
+        status: _str(json['status']),
+        topics: _mappedList(json['topics'], TeacherSyllabusTopic.fromJson),
+        position: (json['position'] as num?)?.toInt() ?? 0,
+      );
 }
 
 class TeacherSyllabus {
@@ -497,7 +539,13 @@ class TeacherWorkspace {
   final List<TeacherLeaveEntry> leaves;
   final List<TeacherStamp> stamps;
   final List<TeacherResultDefinition> resultDefinitions;
-  int get pendingUpdateCount => pendingUpdates.length;
+  int get pendingUpdateCount {
+    if (pendingUpdates.isNotEmpty) return pendingUpdates.length;
+    final unsubmittedToday =
+        todayClasses.where((c) => !c.dailyUpdateSubmitted).length;
+    if (unsubmittedToday > 0) return unsubmittedToday;
+    return 0;
+  }
   final bool checkedIn;
   final String? lastStampType;
   final DateTime? lastStampAt;

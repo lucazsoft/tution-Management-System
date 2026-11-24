@@ -19,6 +19,7 @@ import 'package:tms_mobile/features/auth/screens/device_accounts_screen.dart';
 import 'package:tms_mobile/features/auth/screens/mpin_settings_screen.dart';
 import 'package:tms_mobile/features/auth/screens/unsupported_mobile_role_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_home_screen.dart';
+import 'package:tms_mobile/features/teacher/screens/teacher_daily_updates_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_timetable_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_leave_screen.dart';
 import 'package:tms_mobile/features/teacher/screens/teacher_calendar_screen.dart';
@@ -340,6 +341,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
           path: '/teacher/results',
           builder: (_, __) => const TeacherResultsScreen()),
+      GoRoute(
+          path: '/teacher/daily-updates',
+          builder: (_, __) => const TeacherDailyUpdatesScreen()),
       GoRoute(
           path: '/teacher/messages',
           builder: (_, __) => const TeacherMessagesScreen()),
