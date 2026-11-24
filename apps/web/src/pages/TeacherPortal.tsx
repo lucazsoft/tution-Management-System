@@ -1410,7 +1410,7 @@ function DailyUpdate({
           />
         )}
       </section>
-      <section className="teacher-section">
+      <section className="teacher-section" style={{ paddingBottom: 96 }}>
         <header>
           <div>
             <h2>Pending class confirmations</h2>
@@ -1434,10 +1434,12 @@ function DailyUpdate({
                 </div>
                 <Status tone="warning">Update pending</Status>
               </div>
+              <div style={{ display: "grid", gap: 8, width: "100%" }}>
               <label htmlFor={`update-${item.sessionId}`}>
                 Class summary for attendance confirmation
               </label>
               <textarea
+                style={{ width: "100%", minHeight: 96, boxSizing: "border-box" }}
                 id={`update-${item.sessionId}`}
                 value={values[item.sessionId] || ""}
                 onChange={(event) =>
@@ -1456,6 +1458,7 @@ function DailyUpdate({
               >
                 Submit and confirm
               </button>
+              </div>
             </article>
           ))
         ) : (
@@ -3540,6 +3543,97 @@ function DetailedSalary({ data }: { data: TeacherDashboard }) {
   );
 }
 
+/** Per-session confirmation for past sessions. Submits the teacher's own summary
+ *  through the existing session-update API; nothing is auto-completed. */
+function PendingSessionConfirmations({
+  data,
+  reload,
+}: {
+  data: TeacherDashboard;
+  reload: () => Promise<void>;
+}) {
+  const { showToast } = useToast();
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const submit = async (id: string) => {
+    if (!values[id]?.trim())
+      return showToast("Enter what was covered.", "error");
+    setBusy(true);
+    try {
+      await api.teacher.submitSessionUpdate(id, values[id]);
+      showToast("Daily update submitted and session confirmed.", "success");
+      await reload();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Update failed.",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="teacher-view">
+      <section className="teacher-section">
+        <header>
+          <div>
+            <h2>Pending class confirmations</h2>
+            <p>
+              {data.pendingUpdates.length} update
+              {data.pendingUpdates.length === 1 ? "" : "s"} pending
+            </p>
+          </div>
+        </header>
+        {data.pendingUpdates.length ? (
+          data.pendingUpdates.map((item) => (
+            <article className="teacher-update-card" key={item.sessionId}>
+              <div>
+                <div>
+                  <span className="teacher-eyebrow">
+                    {new Date(item.date).toLocaleDateString()}
+                  </span>
+                  <h3>
+                    {item.className} · {item.courseName}
+                  </h3>
+                </div>
+                <Status tone="warning">Update pending</Status>
+              </div>
+              <label htmlFor={`update-${item.sessionId}`}>
+                Class summary for attendance confirmation
+              </label>
+              <textarea
+                id={`update-${item.sessionId}`}
+                value={values[item.sessionId] || ""}
+                onChange={(event) =>
+                  setValues((old) => ({
+                    ...old,
+                    [item.sessionId]: event.target.value,
+                  }))
+                }
+                placeholder="Summarize the completed session"
+              />
+              <button
+                type="button"
+                className="teacher-primary-cta"
+                disabled={busy}
+                onClick={() => void submit(item.sessionId)}
+              >
+                Submit and confirm
+              </button>
+            </article>
+          ))
+        ) : (
+          <Empty
+            iconName="task_alt"
+            title="All confirmations complete"
+            text="There are no pending class confirmations."
+          />
+        )}
+      </section>
+    </div>
+  );
+}
+
 // Kept temporarily for compatibility while the topic/result/slip workflows replace these views.
 void [DailyUpdate, Results, Salary];
 
@@ -3593,7 +3687,14 @@ export function TeacherPortal() {
     if (view === "attendance") return <Attendance data={data} reload={load} />;
     if (view === "syllabus") return <TopicSyllabus data={data} reload={load} />;
     if (view === "daily-update-log")
-      return <TopicDailyUpdate data={data} reload={load} />;
+      return (
+        <>
+          {data.pendingUpdates.length ? (
+            <PendingSessionConfirmations data={data} reload={load} />
+          ) : null}
+          <TopicDailyUpdate data={data} reload={load} />
+        </>
+      );
     if (view === "homework") return <Homework data={data} reload={load} />;
     if (view === "results")
       return <AdminCreatedResults data={data} reload={load} />;
