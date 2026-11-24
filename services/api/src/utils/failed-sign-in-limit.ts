@@ -21,6 +21,8 @@ export interface FailureStore {
 
 export class FailedSignInLimiter {
   private inFlight = new Map<string, number>();
+  /** Failures whose store write failed. They keep counting against the key until a later write succeeds. */
+  private unrecorded = new Map<string, number>();
 
   constructor(
     private store: FailureStore,
@@ -31,16 +33,17 @@ export class FailedSignInLimiter {
 
   /** Returns a release function when allowed, or the seconds to wait when refused. */
   async begin(key: string): Promise<{ ok: true; finish: (failed: boolean) => Promise<void> } | { ok: false; retryAfterSeconds: number }> {
+    await this.flushUnrecorded(key);
     const now = this.clock();
     const rec = await this.store.get(key);
     const failures = rec && now - rec.lastFailure <= this.windowMs ? rec.count : 0;
-    const pending = this.inFlight.get(key) ?? 0;
+    const pending = (this.inFlight.get(key) ?? 0) + (this.unrecorded.get(key) ?? 0);
     if (failures + pending >= this.max) {
       const base = rec ? rec.lastFailure : now;
       const retry = failures >= this.max ? Math.max(1, Math.ceil((base + this.windowMs - now) / 1000)) : 1;
       return { ok: false, retryAfterSeconds: retry };
     }
-    this.inFlight.set(key, pending + 1);
+    this.inFlight.set(key, (this.inFlight.get(key) ?? 0) + 1);
     let done = false;
     return {
       ok: true,
@@ -48,12 +51,29 @@ export class FailedSignInLimiter {
         if (done) return;
         done = true;
         try {
-          if (failed) await this.store.recordFailure(key, this.clock(), this.windowMs);
+          if (failed) {
+            try {
+              await this.store.recordFailure(key, this.clock(), this.windowMs);
+            } catch (error) {
+              this.unrecorded.set(key, (this.unrecorded.get(key) ?? 0) + 1);
+              throw error;
+            }
+          }
         } finally {
           const n = (this.inFlight.get(key) ?? 1) - 1;
           if (n <= 0) this.inFlight.delete(key); else this.inFlight.set(key, n);
         }
       },
     };
+  }
+
+  /** Retry failures that could not be saved earlier. If the store is still down this throws, so begin() fails closed. */
+  private async flushUnrecorded(key: string): Promise<void> {
+    let n = this.unrecorded.get(key) ?? 0;
+    while (n > 0) {
+      await this.store.recordFailure(key, this.clock(), this.windowMs);
+      n -= 1;
+      if (n > 0) this.unrecorded.set(key, n); else this.unrecorded.delete(key);
+    }
   }
 }

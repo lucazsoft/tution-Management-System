@@ -14,6 +14,7 @@ process.env.BETTER_AUTH_URL = 'https://api.example.test';
 process.env.WEB_ORIGIN = 'https://web.example.test';
 process.env.SMS_PROVIDER = 'DISABLED';
 process.env.PUSH_PROVIDER = 'DISABLED';
+process.env.NEPALPAY_WEBHOOK_SECRET = 'integration-test-webhook-secret-integration-test';
 
 async function main() {
   assert.ok(process.env.DATABASE_URL, 'DATABASE_URL is required');
@@ -55,6 +56,7 @@ async function main() {
     const blocked = await signIn('10.0.0.2', 'wrong-password-1');
     assert.equal(blocked.status, 429);
     assert.ok(Number(blocked.headers.get('retry-after')) > 0);
+    assert.ok(Number(blocked.headers.get('x-retry-after')) > 0, 'legacy X-Retry-After header is kept');
 
     // 3. While blocked, even the right password is refused (existing protection preserved).
     assert.equal((await signIn('10.0.0.2', password)).status, 429);
@@ -94,6 +96,40 @@ async function main() {
     const resetStatuses: number[] = [];
     for (let i = 0; i < 7; i++) resetStatuses.push((await reset()).status);
     assert.ok(resetStatuses.slice(5).every((s) => s === 429), `reset statuses ${resetStatuses.join(',')}`);
+    // 10. Auth that completes AFTER the client disconnected is still counted exactly once, and the reservation is held until then.
+    const slowApp = express();
+    slowApp.post('/api/auth/sign-in/email', limitFailedCredentialSignIn, (_req, res) => {
+      setTimeout(() => res.status(401).json({ message: 'bad' }), 300);
+    });
+    const slowServer = http.createServer(slowApp).listen(0);
+    const slowBase = `http://127.0.0.1:${(slowServer.address() as AddressInfo).port}`;
+    try {
+      const ctrl: AbortController[] = [];
+      const sent = Array.from({ length: 5 }, () => {
+        const c = new AbortController(); ctrl.push(c);
+        return fetch(`${slowBase}/api/auth/sign-in/email`, { method: 'POST', headers: { 'x-real-ip': '10.0.0.8', 'content-type': 'application/json' }, body: '{}', signal: c.signal }).catch(() => null);
+      });
+      await new Promise((r) => setTimeout(r, 100));
+      ctrl.forEach((c) => c.abort());
+      await Promise.all(sent);
+      // Auth has not finished yet (300 ms): reservations are still held, so a 6th attempt is refused now.
+      const during = await fetch(`${slowBase}/api/auth/sign-in/email`, { method: 'POST', headers: { 'x-real-ip': '10.0.0.8', 'content-type': 'application/json' }, body: '{}' });
+      assert.equal(during.status, 429, 'reservations held while auth completes after disconnect');
+      await new Promise((r) => setTimeout(r, 600));
+      const counted = (await prisma.rateLimit.findUnique({ where: { key: failedSignInKey('10.0.0.8') } }))?.count;
+      assert.equal(counted, 5, 'each late 401 counted exactly once (no double count, no miss)');
+    } finally { slowServer.close(); }
+
+    // 11. Client already gone when the counter read finishes: reservation is released, nothing counted, auth never starts.
+    for (let i = 0; i < 8; i++) {
+      let nextCalled = false;
+      const fakeReq: any = { method: 'POST', originalUrl: '/api/auth/sign-in/email', headers: { 'x-real-ip': '10.0.0.9' }, socket: {} };
+      const fakeRes: any = { destroyed: true, writableEnded: false, setHeader() {}, status() { return this; }, json() { return this; }, once() {}, end() {} };
+      await limitFailedCredentialSignIn(fakeReq, fakeRes, () => { nextCalled = true; });
+      assert.equal(nextCalled, false, 'auth must not start for a request whose client left');
+    }
+    assert.equal((await signIn('10.0.0.9', password)).status, 200, 'no leaked reservations: IP still usable after 8 vanished requests');
+    assert.equal(await prisma.rateLimit.count({ where: { key: failedSignInKey('10.0.0.9') } }), 0);
     console.log('PASS failed-only sign-in limit with real better-auth and Postgres');
   } finally {
     server.close();

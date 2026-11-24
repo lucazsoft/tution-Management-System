@@ -43,7 +43,13 @@ export async function limitFailedCredentialSignIn(req: Request, res: Response, n
     const attempt = await limiter.begin(failedSignInKey(clientIp(req)));
     if (!attempt.ok) {
       res.setHeader('Retry-After', String(attempt.retryAfterSeconds));
+      res.setHeader('X-Retry-After', String(attempt.retryAfterSeconds));
       res.status(429).json({ message: 'Too many failed sign-in attempts. Please wait and try again.' });
+      return;
+    }
+    // The client already left while the counter was being read: no password was checked, so just release.
+    if (res.destroyed || res.writableEnded) {
+      void attempt.finish(false).catch((error) => console.error('Unable to release sign-in reservation.', error));
       return;
     }
     let settled = false;
@@ -52,8 +58,14 @@ export async function limitFailedCredentialSignIn(req: Request, res: Response, n
       settled = true;
       void attempt.finish(res.statusCode === 401).catch((error) => console.error('Unable to record failed sign-in.', error));
     };
+    // Settle from the authentication result, not from the socket. A client that disconnects mid-check
+    // must still have its wrong password counted, and the reservation stays until the check ends.
+    const end = res.end;
+    res.end = function patchedEnd(this: Response, ...args: unknown[]) {
+      settle();
+      return (end as (...a: unknown[]) => Response).apply(this, args);
+    } as typeof res.end;
     res.once('finish', settle);
-    res.once('close', settle);
     next();
   } catch (error) {
     console.error('Failed sign-in limiter unavailable; refusing to skip it.', error);
