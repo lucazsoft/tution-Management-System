@@ -266,17 +266,30 @@ router.patch('/syllabus/:syllabusId', authMiddleware, async (req: TenantRequest,
     : [];
   if (!subject || !chapters.length) return res.status(400).json({ error: 'Subject and at least one chapter are required.' });
   try {
-    const syllabus = await prisma.syllabus.findFirst({
-      where: { id: req.params.syllabusId, createdBy: req.user!.id, class: { teacherId: req.user!.id, course: { tenantId: req.tenantId! } } },
-      include: { chapters: { include: { _count: { select: { dailyLogs: true } } } } },
-    });
-    if (!syllabus) return res.status(404).json({ error: 'Owned syllabus not found.' });
-    const existingIds = new Set(syllabus.chapters.map((chapter) => chapter.id));
-    if (chapters.some((chapter: { id?: string }) => chapter.id && !existingIds.has(chapter.id))) return res.status(422).json({ error: 'One or more chapters do not belong to this syllabus.' });
-    const retainedIds = new Set<string>(chapters.flatMap((chapter: { id?: string }) => chapter.id ? [chapter.id] : []));
-    const loggedRemoval = syllabus.chapters.find((chapter) => !retainedIds.has(chapter.id) && chapter._count.dailyLogs > 0);
-    if (loggedRemoval) return res.status(409).json({ error: `“${loggedRemoval.title}” has daily logs and cannot be removed. Rename it or keep it in the syllabus.` });
     const updated = await prisma.$transaction(async (tx) => {
+      const owned = await tx.syllabus.findFirst({ where: { id: req.params.syllabusId, createdBy: req.user!.id, class: { teacherId: req.user!.id, course: { tenantId: req.tenantId! } } }, select: { id: true } });
+      if (!owned) throw Object.assign(new Error('Owned syllabus not found.'), { httpStatus: 404 });
+      // Lock parent chapters and topics before reading history counts. FK inserts
+      // take KEY SHARE locks, so committed progress cannot race this deletion.
+      await tx.$queryRaw`SELECT id FROM "SyllabusChapter" WHERE "syllabusId" = ${req.params.syllabusId} ORDER BY id FOR UPDATE`;
+      await tx.$queryRaw`SELECT topic.id FROM "SyllabusTopic" topic JOIN "SyllabusChapter" chapter ON chapter.id = topic."chapterId" WHERE chapter."syllabusId" = ${req.params.syllabusId} ORDER BY topic.id FOR UPDATE OF topic`;
+    const syllabus = await tx.syllabus.findFirst({
+      where: { id: req.params.syllabusId, createdBy: req.user!.id, class: { teacherId: req.user!.id, course: { tenantId: req.tenantId! } } },
+      include: {
+        chapters: {
+          include: {
+            _count: { select: { dailyLogs: true } },
+            topics: { select: { _count: { select: { logs: true } } } },
+          },
+        },
+      },
+    });
+    if (!syllabus) throw Object.assign(new Error('Owned syllabus not found.'), { httpStatus: 404 });
+    const existingIds = new Set(syllabus.chapters.map((chapter) => chapter.id));
+    if (chapters.some((chapter: { id?: string }) => chapter.id && !existingIds.has(chapter.id))) throw Object.assign(new Error('One or more chapters do not belong to this syllabus.'), { httpStatus: 422 });
+    const retainedIds = new Set<string>(chapters.flatMap((chapter: { id?: string }) => chapter.id ? [chapter.id] : []));
+    const loggedRemoval = syllabus.chapters.find((chapter) => !retainedIds.has(chapter.id) && (chapter._count.dailyLogs > 0 || chapter.topics.some((topic) => topic._count.logs > 0)));
+    if (loggedRemoval) throw Object.assign(new Error(`“${loggedRemoval.title}” has progress history and cannot be removed. Rename it or keep it in the syllabus.`), { httpStatus: 409 });
       await tx.syllabus.update({ where: { id: syllabus.id }, data: { subject } });
       await tx.syllabusChapter.deleteMany({ where: { syllabusId: syllabus.id, id: { notIn: [...retainedIds] } } });
       for (let position = 0; position < chapters.length; position += 1) {
@@ -292,6 +305,8 @@ router.patch('/syllabus/:syllabusId', authMiddleware, async (req: TenantRequest,
     });
     return res.json({ message: 'Syllabus updated and shared with enrolled students.', syllabus: updated });
   } catch (error: any) {
+    if (error.httpStatus) return res.status(error.httpStatus).json({ error: error.message });
+    if (error.code === 'P2034' || error.code === 'P2003' || (error.code === 'P2010' && ['40P01', '40001'].includes(error.meta?.code))) return res.status(409).json({ error: 'The syllabus changed during this request. Refresh and try again.' });
     return res.status(error.code === 'P2002' ? 409 : 500).json({ error: error.code === 'P2002' ? 'A syllabus already exists for this class and subject.' : 'Failed to update syllabus.', details: error.message });
   }
 });
@@ -313,6 +328,7 @@ router.post('/syllabus/:syllabusId/log', authMiddleware, async (req: TenantReque
     ]);
     return res.json({ message: 'Daily syllabus progress shared with students.', log });
   } catch (error: any) {
+    if (['P2003', 'P2025', 'P2034'].includes(error.code)) return res.status(409).json({ error: 'The syllabus changed during this request. Refresh and try again.' });
     if (error.code === 'P2002') return res.status(409).json({ error: 'Today’s update is already published and cannot be changed. Create the next update on the next class day.' });
     return res.status(500).json({ error: 'Failed to update syllabus progress.', details: error.message });
   }
@@ -338,6 +354,7 @@ router.post('/syllabus/:syllabusId/topic-log', authMiddleware, async (req: Tenan
     });
     return res.json({ message: 'Topic progress saved and shared with students and Branch Admin.', ...saved });
   } catch (error: any) {
+    if (['P2003', 'P2025', 'P2034'].includes(error.code)) return res.status(409).json({ error: 'The syllabus changed during this request. Refresh and try again.' });
     if (error.code === 'P2002') return res.status(409).json({ error: 'Today’s update is already published and cannot be changed. Create the next update on the next class day.' });
     return res.status(500).json({ error: 'Failed to update topic progress.', details: error.message });
   }
@@ -361,10 +378,34 @@ router.patch('/syllabus/:syllabusId/topics/:topicId', authMiddleware, async (req
 });
 
 router.delete('/syllabus/:syllabusId/topics/:topicId', authMiddleware, async (req: TenantRequest, res: Response) => {
-  const topic = await prisma.syllabusTopic.findFirst({ where: { id: req.params.topicId, chapter: { syllabus: { id: req.params.syllabusId, createdBy: req.user!.id, class: { teacherId: req.user!.id, course: { tenantId: req.tenantId! } } } } }, include: { _count: { select: { logs: true } } } });
-  if (!topic) return res.status(404).json({ error: 'Owned syllabus topic not found.' });
-  if (topic._count.logs) return res.status(409).json({ error: 'A topic with progress history cannot be deleted. Rename it instead.' });
-  await prisma.syllabusTopic.delete({ where: { id: topic.id } }); return res.status(204).send();
+  try {
+    await prisma.$transaction(async (tx) => {
+      const owned = await tx.syllabusTopic.findFirst({ where: { id: req.params.topicId, chapter: { syllabus: { id: req.params.syllabusId, createdBy: req.user!.id, class: { teacherId: req.user!.id, course: { tenantId: req.tenantId! } } } } }, select: { id: true } });
+      if (!owned) throw Object.assign(new Error('Owned syllabus topic not found.'), { httpStatus: 404 });
+      await tx.$queryRaw`SELECT id FROM "SyllabusTopic" WHERE id = ${req.params.topicId} FOR UPDATE`;
+      const topic = await tx.syllabusTopic.findFirst({
+        where: {
+          id: req.params.topicId,
+          chapter: {
+            syllabus: {
+              id: req.params.syllabusId,
+              createdBy: req.user!.id,
+              class: { teacherId: req.user!.id, course: { tenantId: req.tenantId! } },
+            },
+          },
+        },
+        include: { _count: { select: { logs: true } } },
+      });
+      if (!topic) throw Object.assign(new Error('Owned syllabus topic not found.'), { httpStatus: 404 });
+      if (topic._count.logs) throw Object.assign(new Error('A topic with progress history cannot be deleted. Rename it instead.'), { httpStatus: 409 });
+      await tx.syllabusTopic.delete({ where: { id: topic.id } });
+    });
+    return res.status(204).send();
+  } catch (error: any) {
+    if (error.httpStatus) return res.status(error.httpStatus).json({ error: error.message });
+    if (error.code === 'P2034' || error.code === 'P2003' || (error.code === 'P2010' && ['40P01', '40001'].includes(error.meta?.code))) return res.status(409).json({ error: 'The syllabus changed during this request. Refresh and try again.' });
+    return res.status(500).json({ error: 'Failed to delete topic.' });
+  }
 });
 
 router.post('/results', authMiddleware, async (req: TenantRequest, res: Response) => {
