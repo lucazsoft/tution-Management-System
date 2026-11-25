@@ -3,6 +3,7 @@ import prisma from '../utils/db';
 import { normalizeSchedule } from '../utils/schedule';
 import { privateImageUrl } from '../services/object-storage';
 import { generateDailyTeacherSessions } from '../services/timetable-service';
+import { listPendingPastUpdates, mergePendingUpdates } from '../services/pending-updates';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware } from '../middleware/auth';
 import { UserPayload } from '@tms/types';
@@ -85,6 +86,7 @@ router.get('/workspace', authMiddleware, async (req: TenantRequest, res: Respons
         orderBy: { testDate: 'desc' },
       }),
     ]);
+    const pendingUpdates = await listPendingPastUpdates(user.id, req.tenantId!);
     const lastStamp = stamps[0] ?? null;
     const gradeRosters = new Map(await Promise.all(classes.map(async (klass) => [klass.id, await gradeBasedRoster(klass, req.tenantId!)] as const)));
     const checkedIn = Boolean(lastStamp && ['IN', 'RE_IN'].includes(lastStamp.stampType));
@@ -123,9 +125,9 @@ router.get('/workspace', authMiddleware, async (req: TenantRequest, res: Respons
         branch: session.class.branch, schedule: normalizeSchedule(session.class.schedule), status: session.status,
         dailyUpdateSubmitted: session.dailyUpdateSubmitted, checkInTime: session.checkInTime, checkOutTime: session.checkOutTime,
       })),
-      pendingUpdates: classes.flatMap((item) => item.sessions.filter((session) => !session.dailyUpdateSubmitted).map((session) => ({
+      pendingUpdates: mergePendingUpdates(pendingUpdates, classes.flatMap((item) => item.sessions.filter((session) => !session.dailyUpdateSubmitted).map((session) => ({
         sessionId: session.id, classId: item.id, className: item.name, courseName: item.course.name, date: session.date,
-      }))),
+      })))),
       classes: await Promise.all(classes.map(async (item) => ({
         id: item.id, name: item.name, subject: item.course.name, type: item.course.type, schedule: normalizeSchedule(item.schedule),
         branch: { id: item.branch.id, name: item.branch.name, address: item.branch.address, radiusMeters: item.branch.radiusMeters },

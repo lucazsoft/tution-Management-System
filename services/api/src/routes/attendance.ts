@@ -4,7 +4,8 @@ import { calculateDistanceInMeters } from '../utils/geo';
 import { TenantRequest } from '../middleware/tenant';
 import { authMiddleware, hasPermission } from '../middleware/auth';
 import { parseStrictKeys, readFiniteNumber, readTrimmedString } from '../utils/request-validation';
-import { nepalCalendarDate, nepalDayBounds } from '../services/timetable-service';
+import { nepalDayBounds } from '../services/timetable-service';
+import { pendingPastSessionWhere } from '../services/pending-updates';
 import { recordNotification } from '../services/notification-records';
 
 const router = Router();
@@ -170,12 +171,7 @@ router.post(
     // Mandatory Daily Gate / Update Check
     try {
       const pendingSession = await prisma.teacherSession.findFirst({
-        where: {
-          teacherId,
-          dailyUpdateSubmitted: false,
-          date: { lt: nepalCalendarDate() },
-          class: { course: { tenantId: req.tenantId! } },
-        },
+        where: pendingPastSessionWhere(teacherId, req.tenantId!),
       });
       if (pendingSession) {
         return res.status(403).json({
